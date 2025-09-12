@@ -1,4 +1,6 @@
+import React from 'react';
 import { NextRequest, NextResponse } from 'next/server';
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
         let quote = null;
         
         // Try getLastQuote method first
-        if (typeof alpaca.getLastQuote === 'function') {
+        if (typeof alpaca.z === 'function') {
           try {
             quote = await alpaca.getLastQuote(symbol);
             console.log(`Got quote for ${symbol} using getLastQuote`);

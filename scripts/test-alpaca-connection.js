@@ -3,8 +3,8 @@ import { AlpacaApi } from '@alpacahq/alpaca-trade-api'
 async function testAlpacaConnection() {
   try {
     const alpaca = new AlpacaApi({
-      key: process.env.ALPACA_API_KEY,
-      secret: process.env.ALPACA_SECRET_KEY,
+      key: process.env.ALPACA_API_KEY_ID,
+      secret: process.env.ALPACA_API_SECRET_KEY,
       paper: process.env.ALPACA_PAPER === 'true'
     })
 
@@ -41,8 +41,8 @@ async function testAlpacaConnection() {
     
     if (error.message.includes('Unauthorized')) {
       console.log('\n💡 Check your API keys in .env.local:')
-      console.log('   ALPACA_API_KEY=your_key_here')
-      console.log('   ALPACA_SECRET_KEY=your_secret_here')
+      console.log('   ALPACA_API_KEY_ID=your_key_here')
+      console.log('   ALPACA_API_SECRET_KEY=your_secret_here')
     }
     
     process.exit(1)

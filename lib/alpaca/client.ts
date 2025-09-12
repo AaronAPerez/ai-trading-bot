@@ -10,6 +10,10 @@ export interface AlpacaConfig {
 export class AlpacaClient {
   private client: Alpaca
   private config: AlpacaConfig
+  isDemoModeActive: any
+  getConfig: any
+  getConnectionStatus: any
+  getBarsV2: any
 
   constructor(config: AlpacaConfig) {
     this.config = config

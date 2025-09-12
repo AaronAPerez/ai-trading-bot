@@ -1,4 +1,4 @@
-const Alpaca = require('@alpacahq/alpaca-trade-api')
+import Alpaca from '@alpacahq/alpaca-trade-api'
 
 // Test different configurations
 const configs = [

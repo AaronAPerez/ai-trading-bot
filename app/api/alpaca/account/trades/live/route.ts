@@ -4,8 +4,8 @@ import { AlpacaClient } from '@/lib/alpaca/client'
 export async function GET(request: NextRequest) {
   try {
     const alpacaClient = new AlpacaClient({
-      key: process.env.ALPACA_API_KEY!,
-      secret: process.env.ALPACA_SECRET_KEY!,
+      key: process.env.ALPACA_API_KEY_ID!,
+      secret: process.env.ALPACA_API_SECRET_KEY!,
       paper: process.env.ALPACA_PAPER === 'true'
     })
 
