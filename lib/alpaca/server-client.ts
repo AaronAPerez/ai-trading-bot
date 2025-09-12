@@ -3,37 +3,52 @@ import Alpaca from '@alpacahq/alpaca-trade-api'
 export class AlpacaServerClient {
   private client: Alpaca
 
-  constructor() {
-    this.client = new Alpaca({
-      key: process.env.ALPACA_API_KEY!,
-      secret: process.env.ALPACA_SECRET_KEY!,
-      paper: process.env.ALPACA_PAPER === 'true',
-      usePolygon: false // Use Alpaca's own market data
-    })
+constructor() {
+  console.log('Alpaca Config Check:')
+  console.log('API Key:', process.env.ALPACA_API_KEY_ID ? `${process.env.ALPACA_API_SECRET_KEY.substring(0, 10)}...` : 'MISSING')
+  console.log('Secret Key:', process.env.ALPACA_API_SECRET_KEY ? 'Present' : 'MISSING')
+  console.log('Paper Mode:', process.env.ALPACA_PAPER)
+
+  if (!process.env.ALPACA_API_KEY_ID || !process.env.ALPACA_API_SECRET_KEY) {
+    throw new Error('Alpaca API keys are missing from environment variables')
   }
 
+  this.client = new Alpaca({
+    key: process.env.ALPACA_API_KEY_ID,
+    secret: process.env.ALPACA_API_SECRET_KEY,
+    paper: process.env.ALPACA_PAPER === 'true',
+    usePolygon: false,
+    baseUrl: process.env.ALPACA_API_BASE_URL || (process.env.ALPACA_PAPER === 'true' ? 'https://paper-api.alpaca.markets/v2' : 'https://api.alpaca.markets/v2')
+  })
+}
+
   // Account operations
-  async getAccount() {
-    try {
-      const account = await this.client.getAccount()
-      return {
-        accountType: process.env.ALPACA_PAPER === 'true' ? 'PAPER' : 'LIVE',
-        totalBalance: parseFloat(account.portfolio_value),
-        cashBalance: parseFloat(account.cash),
-        availableBuyingPower: parseFloat(account.buying_power),
-        dayTradingBuyingPower: parseFloat(account.daytrading_buying_power),
-        dayTradeCount: parseInt(account.daytrade_count),
-        patternDayTrader: account.pattern_day_trader,
-        tradingEnabled: !account.trading_blocked,
-        isConnected: true,
-        // Calculate additional metrics
-        investedAmount: parseFloat(account.portfolio_value) - parseFloat(account.cash)
-      }
-    } catch (error) {
-      console.error('Alpaca account error:', error)
-      throw new Error('Failed to fetch account from Alpaca')
+async getAccount() {
+  try {
+    const account = await this.client.getAccount()
+    return {
+      accountType: process.env.ALPACA_PAPER === 'true' ? 'PAPER' : 'LIVE',
+      totalBalance: parseFloat(account.portfolio_value),
+      cashBalance: parseFloat(account.cash),
+      availableBuyingPower: parseFloat(account.buying_power),
+      dayTradingBuyingPower: parseFloat(account.daytrading_buying_power),
+      dayTradeCount: parseInt(account.daytrade_count),
+      patternDayTrader: account.pattern_day_trader,
+      tradingEnabled: !account.trading_blocked,
+      isConnected: true,
+      investedAmount: parseFloat(account.portfolio_value) - parseFloat(account.cash)
     }
+  } catch (error) {
+    console.error('Alpaca account error:', error)
+    
+    // Check if it's an authentication error
+    if (error.message?.includes('401') || error.message?.includes('code: 401')) {
+      throw new Error('Authentication failed: Check your Alpaca API keys in .env.local')
+    }
+    
+    throw new Error(`Failed to fetch account from Alpaca: ${error.message}`)
   }
+}
 
   // Position operations
   async getPositions() {
@@ -51,7 +66,13 @@ export class AlpacaServerClient {
       }))
     } catch (error) {
       console.error('Alpaca positions error:', error)
-      throw new Error('Failed to fetch positions from Alpaca')
+      
+      // Check if it's an authentication error
+      if (error instanceof Error && (error.message?.includes('401') || error.message?.includes('code: 401'))) {
+        throw new Error('Authentication failed: Check your Alpaca API keys in .env.local')
+      }
+      
+      throw new Error(`Failed to fetch positions from Alpaca: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -77,7 +98,13 @@ export class AlpacaServerClient {
       return result
     } catch (error) {
       console.error('Alpaca quotes error:', error)
-      throw new Error('Failed to fetch quotes from Alpaca')
+      
+      // Check if it's an authentication error
+      if (error instanceof Error && (error.message?.includes('401') || error.message?.includes('code: 401'))) {
+        throw new Error('Authentication failed: Check your Alpaca API keys in .env.local')
+      }
+      
+      throw new Error(`Failed to fetch quotes from Alpaca: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
