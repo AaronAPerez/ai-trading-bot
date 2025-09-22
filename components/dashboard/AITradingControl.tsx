@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+
 import { Badge } from '@/components/ui/badge'
 import { AlertCircle, Play, Square, TrendingUp, DollarSign, Activity, Clock, Zap, Settings, BarChart3 } from 'lucide-react'
+import { Button } from '../ui/Button';
 
 interface AITradingSession {
   sessionId: string
@@ -158,7 +159,7 @@ export default function AITradingControl() {
   }
 
   const toggleAutoExecution = async () => {
-    if (!status.autoExecution) return
+    if (!status.autoExecution || !status.autoExecution.todayStats) return
 
     setExecutionLoading(true)
     try {
@@ -291,10 +292,10 @@ export default function AITradingControl() {
               <Button
                 onClick={toggleAutoExecution}
                 disabled={executionLoading}
-                variant={status.autoExecution.todayStats.executionEnabled ? "destructive" : "default"}
+                variant={status.autoExecution.todayStats?.executionEnabled ? "destructive" : "default"}
                 size="sm"
               >
-                {status.autoExecution.todayStats.executionEnabled ? 'Disable Auto-Trading' : 'Enable Auto-Trading'}
+                {status.autoExecution.todayStats?.executionEnabled ? 'Disable Auto-Trading' : 'Enable Auto-Trading'}
               </Button>
             </div>
           </CardHeader>
@@ -302,25 +303,25 @@ export default function AITradingControl() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {status.autoExecution.todayStats.tradesExecuted}
+                  {status.autoExecution.todayStats?.tradesExecuted || 0}
                 </div>
                 <div className="text-sm text-gray-500">Executed Today</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
-                  {status.autoExecution.todayStats.tradesRemaining}
+                  {status.autoExecution.todayStats?.tradesRemaining || 0}
                 </div>
                 <div className="text-sm text-gray-500">Remaining Today</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
-                  {(status.autoExecution.metrics.avgConfidence * 100).toFixed(1)}%
+                  {((status.autoExecution.metrics?.avgConfidence || 0) * 100).toFixed(1)}%
                 </div>
                 <div className="text-sm text-gray-500">Avg Confidence</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-orange-600">
-                  {status.autoExecution.metrics.avgExecutionTime.toFixed(0)}ms
+                  {(status.autoExecution.metrics?.avgExecutionTime || 0).toFixed(0)}ms
                 </div>
                 <div className="text-sm text-gray-500">Avg Execution</div>
               </div>
@@ -328,10 +329,10 @@ export default function AITradingControl() {
 
             {/* Execution Status Indicator */}
             <div className="mt-4 p-3 rounded-lg flex items-center gap-3"
-                 style={{backgroundColor: status.autoExecution.todayStats.executionEnabled ? '#dcfce7' : '#fef2f2'}}>
-              <div className={`w-3 h-3 rounded-full ${status.autoExecution.todayStats.executionEnabled ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className={status.autoExecution.todayStats.executionEnabled ? 'text-green-700' : 'text-red-700'}>
-                Auto-execution is {status.autoExecution.todayStats.executionEnabled ? 'ACTIVE' : 'DISABLED'}
+                 style={{backgroundColor: status.autoExecution.todayStats?.executionEnabled ? '#dcfce7' : '#fef2f2'}}>
+              <div className={`w-3 h-3 rounded-full ${status.autoExecution.todayStats?.executionEnabled ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className={status.autoExecution.todayStats?.executionEnabled ? 'text-green-700' : 'text-red-700'}>
+                Auto-execution is {status.autoExecution.todayStats?.executionEnabled ? 'ACTIVE' : 'DISABLED'}
               </span>
             </div>
           </CardContent>
@@ -483,7 +484,7 @@ export default function AITradingControl() {
       )}
 
       {/* Market Data Status */}
-      {status.marketData.length > 0 && (
+      {status.marketData && status.marketData.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

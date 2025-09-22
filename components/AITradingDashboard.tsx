@@ -16,10 +16,12 @@ import {
 
 // Import sub-components
 import { AccountOverview } from './dashboard/AccountOverview'
-import { LiveTrades } from './dashboard/LiveTrades' 
-import { AIRecommendations } from './dashboard/AIRecommendations'
+import { LiveTrades } from './dashboard/LiveTrades'
 import { BotConfiguration } from './dashboard/BotConfiguration'
 import { PerformanceAnalytics } from './dashboard/PerformanceAnalytics'
+import AITradingControl from './dashboard/AITradingControl'
+import AIRecommendationsPanel from './dashboard/AIRecommendationsPanel'
+import AILearningDashboard from './dashboard/AILearningDashboard'
 
 interface BotConfig {
   enabled: boolean
@@ -32,7 +34,7 @@ interface BotConfig {
 }
 
 export default function AITradingDashboard() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'live-trades' | 'ai-signals' | 'bot-config' | 'performance'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'live-trades' | 'ai-signals' | 'bot-config' | 'performance' | 'ai-engine' | 'ai-learning'>('ai-engine')
   const [alertMessage, setAlertMessage] = useState<string | null>(null)
   const [botConfig, setBotConfig] = useState<BotConfig>({
     enabled: false,
@@ -97,9 +99,11 @@ export default function AITradingDashboard() {
 //   }, [botConfig.enabled])
 
   const navigationTabs = [
+    { id: 'ai-engine', name: 'AI Engine Control', icon: RocketLaunchIcon },
+    { id: 'ai-signals', name: 'AI Recommendations', icon: CpuChipIcon },
+    { id: 'ai-learning', name: 'AI Learning', icon: TrophyIcon },
     { id: 'overview', name: 'Overview', icon: ChartBarIcon },
     { id: 'live-trades', name: 'Live Trades', icon: BoltIcon },
-    { id: 'ai-signals', name: 'AI Signals', icon: CpuChipIcon },
     { id: 'bot-config', name: 'Bot Config', icon: Cog6ToothIcon },
     { id: 'performance', name: 'Performance', icon: TrophyIcon }
   ]
@@ -206,8 +210,20 @@ export default function AITradingDashboard() {
           )} */}
 
           {/* Tab Content */}
+          {activeTab === 'ai-engine' && (
+            <AITradingControl />
+          )}
+
+          {activeTab === 'ai-signals' && (
+            <AIRecommendationsPanel />
+          )}
+
+          {activeTab === 'ai-learning' && (
+            <AILearningDashboard />
+          )}
+
           {activeTab === 'overview' && (
-            <AccountOverview 
+            <AccountOverview
               account={account}
               positions={positions}
               quotes={quotes}
@@ -217,7 +233,7 @@ export default function AITradingDashboard() {
           )}
 
           {activeTab === 'live-trades' && (
-            <LiveTrades 
+            <LiveTrades
               positions={positions}
               quotes={quotes}
               executeOrder={executeOrder}
@@ -225,17 +241,8 @@ export default function AITradingDashboard() {
             />
           )}
 
-          {activeTab === 'ai-signals' && (
-            <AIRecommendations 
-              quotes={quotes}
-              botConfig={botConfig}
-              executeOrder={executeOrder}
-              account={account}
-            />
-          )}
-
           {activeTab === 'bot-config' && (
-            <BotConfiguration 
+            <BotConfiguration
               botConfig={botConfig}
               setBotConfig={setBotConfig}
               account={account}
@@ -243,7 +250,7 @@ export default function AITradingDashboard() {
           )}
 
           {activeTab === 'performance' && (
-            <PerformanceAnalytics 
+            <PerformanceAnalytics
               account={account}
               positions={positions}
               botConfig={botConfig}

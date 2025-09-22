@@ -1,10 +1,14 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Brain, TrendingUp, TrendingDown, AlertTriangle, Clock, DollarSign } from 'lucide-react'
+import {
+  BrainIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
+  ExclamationTriangleIcon,
+  ClockIcon,
+  CurrencyDollarIcon
+} from '@heroicons/react/24/outline'
 
 interface AIRecommendation {
   symbol: string
@@ -168,34 +172,31 @@ export default function AIRecommendationsPanel() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="h-5 w-5 text-purple-500" />
-                AI Trading Recommendations
-              </CardTitle>
-              <CardDescription>
-                Real-time AI analysis with manual execution options
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={fetchRecommendations}
-                disabled={loading}
-                variant="outline"
-                size="sm"
-              >
-                Refresh Analysis
-              </Button>
-              <div className="text-xs text-gray-500">
-                Last updated: {lastUpdate.toLocaleTimeString()}
-              </div>
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <BrainIcon className="h-5 w-5 text-purple-500" />
+              AI Trading Recommendations
+            </h2>
+            <p className="text-gray-400 mt-1">
+              Real-time AI analysis with manual execution options
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchRecommendations}
+              disabled={loading}
+              className="px-3 py-1 border border-gray-600 rounded hover:bg-gray-700 disabled:opacity-50 text-sm"
+            >
+              Refresh Analysis
+            </button>
+            <div className="text-xs text-gray-500">
+              Last updated: {lastUpdate.toLocaleTimeString()}
             </div>
           </div>
-        </CardHeader>
-      </Card>
+        </div>
+      </div>
 
       {/* Recommendations List */}
       <div className="space-y-4">
