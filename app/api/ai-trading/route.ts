@@ -6,15 +6,45 @@ import { RealTimeAITradingEngine } from '@/lib/ai/RealTimeAITradingEngine'
 let aiTradingEngine: RealTimeAITradingEngine | null = null
 
 const DEFAULT_CONFIG = {
-  maxPositionsCount: 10,
+  maxPositionsCount: 15,
   riskPerTrade: 0.02, // 2% risk per trade
   minConfidenceThreshold: 0.65, // 65% minimum confidence
   rebalanceFrequency: 4, // Rebalance every 4 hours
-  watchlist: [
-    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'JPM',
-    'JNJ', 'V', 'PG', 'UNH', 'HD', 'DIS', 'MA', 'PYPL', 'ADBE', 'NFLX'
-  ],
-  paperTrading: process.env.NEXT_PUBLIC_TRADING_MODE === 'paper'
+  watchlistSize: 50, // Auto-generate 50 symbols
+  watchlistCriteria: {
+    includeETFs: true,
+    includeCrypto: true,
+    riskLevel: 'medium' as 'low' | 'medium' | 'high',
+    marketCap: ['mega', 'large'] as ('mega' | 'large' | 'mid' | 'small')[],
+    categories: ['growth_tech', 'fintech', 'clean_energy']
+  },
+  paperTrading: process.env.NEXT_PUBLIC_TRADING_MODE === 'paper',
+  autoExecution: {
+    autoExecuteEnabled: true,
+    confidenceThresholds: {
+      minimum: 0.65,      // 65% minimum to consider execution
+      conservative: 0.75, // 75% for conservative positions
+      aggressive: 0.85,   // 85% for aggressive positions
+      maximum: 0.95       // 95% for maximum position size
+    },
+    positionSizing: {
+      baseSize: 0.02,            // 2% base position size
+      maxSize: 0.08,             // 8% maximum position size
+      confidenceMultiplier: 2.0   // Confidence multiplier effect
+    },
+    riskControls: {
+      maxDailyTrades: 20,        // Max 20 trades per day
+      maxOpenPositions: 15,      // Max 15 open positions
+      maxDailyLoss: 0.05,        // 5% max daily loss
+      cooldownPeriod: 15         // 15 minutes between trades for same symbol
+    },
+    executionRules: {
+      marketHoursOnly: true,     // Only trade during market hours
+      avoidEarnings: false,      // Don't avoid earnings (requires earnings data)
+      volumeThreshold: 100000,   // Minimum 100K volume
+      spreadThreshold: 0.02      // Maximum 2% spread
+    }
+  }
 }
 
 function getAlpacaClient() {
@@ -90,8 +120,41 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           running: aiTradingEngine.isEngineRunning(),
           session: aiTradingEngine.getCurrentSession(),
-          marketData: aiTradingEngine.getMarketDataStatus()
+          marketData: aiTradingEngine.getMarketDataStatus(),
+          watchlist: aiTradingEngine.getWatchlistInfo(),
+          autoExecution: {
+            metrics: aiTradingEngine.getAutoExecutionMetrics(),
+            todayStats: aiTradingEngine.getTodayExecutionStats(),
+            recentExecutions: aiTradingEngine.getRecentExecutions(5)
+          },
+          learning: {
+            insights: aiTradingEngine.getLearningInsights(),
+            accuracyTrend: aiTradingEngine.getAccuracyTrend(30),
+            tradeHistoryCount: aiTradingEngine.getTradeHistory().length
+          }
         })
+
+      case 'update_watchlist':
+        if (!aiTradingEngine) {
+          return NextResponse.json(
+            { error: 'AI Trading Engine not initialized' },
+            { status: 400 }
+          )
+        }
+
+        try {
+          await aiTradingEngine.updateWatchlist(body.watchlistConfig || {})
+          return NextResponse.json({
+            success: true,
+            message: 'Watchlist updated successfully',
+            watchlist: aiTradingEngine.getWatchlistInfo()
+          })
+        } catch (error) {
+          return NextResponse.json(
+            { error: 'Failed to update watchlist', details: error.message },
+            { status: 500 }
+          )
+        }
 
       case 'update_config':
         if (!aiTradingEngine) {
@@ -101,16 +164,65 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Note: Config updates would require stopping and restarting the engine
+        // Note: Full config updates require stopping and restarting the engine
         return NextResponse.json({
           success: true,
-          message: 'Configuration update requires restart',
+          message: 'Full configuration update requires restart',
           currentConfig: DEFAULT_CONFIG
         })
 
+      case 'execution_control':
+        if (!aiTradingEngine) {
+          return NextResponse.json(
+            { error: 'AI Trading Engine not initialized' },
+            { status: 400 }
+          )
+        }
+
+        const { executionAction, executionConfig } = body
+
+        switch (executionAction) {
+          case 'enable':
+            aiTradingEngine.enableAutoExecution()
+            return NextResponse.json({
+              success: true,
+              message: 'Auto-execution enabled',
+              todayStats: aiTradingEngine.getTodayExecutionStats()
+            })
+
+          case 'disable':
+            aiTradingEngine.disableAutoExecution()
+            return NextResponse.json({
+              success: true,
+              message: 'Auto-execution disabled',
+              todayStats: aiTradingEngine.getTodayExecutionStats()
+            })
+
+          case 'update_config':
+            if (executionConfig) {
+              aiTradingEngine.updateExecutionConfig(executionConfig)
+              return NextResponse.json({
+                success: true,
+                message: 'Execution configuration updated',
+                todayStats: aiTradingEngine.getTodayExecutionStats()
+              })
+            } else {
+              return NextResponse.json(
+                { error: 'Execution config required' },
+                { status: 400 }
+              )
+            }
+
+          default:
+            return NextResponse.json(
+              { error: 'Invalid execution action. Use: enable, disable, update_config' },
+              { status: 400 }
+            )
+        }
+
       default:
         return NextResponse.json(
-          { error: 'Invalid action. Use: start, stop, status, or update_config' },
+          { error: 'Invalid action. Use: start, stop, status, update_watchlist, update_config, or execution_control' },
           { status: 400 }
         )
     }

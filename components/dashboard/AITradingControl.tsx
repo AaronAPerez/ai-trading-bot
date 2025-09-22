@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { AlertCircle, Play, Square, TrendingUp, DollarSign, Activity, Clock } from 'lucide-react'
+import { AlertCircle, Play, Square, TrendingUp, DollarSign, Activity, Clock, Zap, Settings, BarChart3 } from 'lucide-react'
 
 interface AITradingSession {
   sessionId: string
@@ -17,6 +17,22 @@ interface AITradingSession {
   successfulPredictions: number
 }
 
+interface AutoExecutionMetrics {
+  totalExecutions: number
+  successfulExecutions: number
+  avgExecutionTime: number
+  avgSlippage: number
+  avgConfidence: number
+  profitableExecutions: number
+}
+
+interface TodayExecutionStats {
+  tradesExecuted: number
+  tradesRemaining: number
+  dailyPnL: number
+  executionEnabled: boolean
+}
+
 interface AITradingStatus {
   running: boolean
   session: AITradingSession | null
@@ -25,6 +41,11 @@ interface AITradingStatus {
     dataPoints: number
     lastUpdate: string
   }>
+  autoExecution?: {
+    metrics: AutoExecutionMetrics
+    todayStats: TodayExecutionStats
+    recentExecutions: any[]
+  }
 }
 
 interface PerformanceMetrics {
@@ -45,6 +66,7 @@ export default function AITradingControl() {
   const [performance, setPerformance] = useState<PerformanceMetrics | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [executionLoading, setExecutionLoading] = useState(false)
 
   // Fetch status every 30 seconds
   useEffect(() => {
@@ -135,6 +157,62 @@ export default function AITradingControl() {
     }
   }
 
+  const toggleAutoExecution = async () => {
+    if (!status.autoExecution) return
+
+    setExecutionLoading(true)
+    try {
+      const action = status.autoExecution.todayStats.executionEnabled ? 'disable' : 'enable'
+
+      const response = await fetch('/api/ai-trading', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'execution_control',
+          executionAction: action
+        })
+      })
+
+      if (response.ok) {
+        await fetchStatus()
+      } else {
+        throw new Error('Failed to toggle auto-execution')
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setExecutionLoading(false)
+    }
+  }
+
+  const executeManualTrade = async (symbol: string, action: 'BUY' | 'SELL', confidence: number) => {
+    setExecutionLoading(true)
+    try {
+      // In a real implementation, this would call a manual execution endpoint
+      const response = await fetch('/api/manual-trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol,
+          action,
+          quantity: 10, // Default quantity for manual trades
+          orderType: 'MARKET'
+        })
+      })
+
+      if (response.ok) {
+        await fetchStatus()
+        alert(`Manual ${action} order submitted for ${symbol}`)
+      } else {
+        throw new Error('Manual trade failed')
+      }
+    } catch (err) {
+      alert(`Manual trade failed: ${err.message}`)
+    } finally {
+      setExecutionLoading(false)
+    }
+  }
+
   const formatDuration = (minutes: number): string => {
     const hours = Math.floor(minutes / 60)
     const mins = minutes % 60
@@ -200,6 +278,102 @@ export default function AITradingControl() {
           </CardContent>
         )}
       </Card>
+
+      {/* Auto-Execution Status */}
+      {status.autoExecution && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-yellow-500" />
+                Auto-Execution Status
+              </CardTitle>
+              <Button
+                onClick={toggleAutoExecution}
+                disabled={executionLoading}
+                variant={status.autoExecution.todayStats.executionEnabled ? "destructive" : "default"}
+                size="sm"
+              >
+                {status.autoExecution.todayStats.executionEnabled ? 'Disable Auto-Trading' : 'Enable Auto-Trading'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {status.autoExecution.todayStats.tradesExecuted}
+                </div>
+                <div className="text-sm text-gray-500">Executed Today</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {status.autoExecution.todayStats.tradesRemaining}
+                </div>
+                <div className="text-sm text-gray-500">Remaining Today</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">
+                  {(status.autoExecution.metrics.avgConfidence * 100).toFixed(1)}%
+                </div>
+                <div className="text-sm text-gray-500">Avg Confidence</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-orange-600">
+                  {status.autoExecution.metrics.avgExecutionTime.toFixed(0)}ms
+                </div>
+                <div className="text-sm text-gray-500">Avg Execution</div>
+              </div>
+            </div>
+
+            {/* Execution Status Indicator */}
+            <div className="mt-4 p-3 rounded-lg flex items-center gap-3"
+                 style={{backgroundColor: status.autoExecution.todayStats.executionEnabled ? '#dcfce7' : '#fef2f2'}}>
+              <div className={`w-3 h-3 rounded-full ${status.autoExecution.todayStats.executionEnabled ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className={status.autoExecution.todayStats.executionEnabled ? 'text-green-700' : 'text-red-700'}>
+                Auto-execution is {status.autoExecution.todayStats.executionEnabled ? 'ACTIVE' : 'DISABLED'}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Auto-Executions */}
+      {status.autoExecution?.recentExecutions && status.autoExecution.recentExecutions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-green-500" />
+              Recent Auto-Executions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {status.autoExecution.recentExecutions.map((execution, index) => (
+                <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Badge variant={execution.action === 'BUY' ? 'default' : 'destructive'}>
+                      {execution.action}
+                    </Badge>
+                    <span className="font-semibold">{execution.symbol}</span>
+                    <span className="text-sm text-gray-500">
+                      {execution.quantity} @ ${execution.price.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-green-600">
+                      {(execution.confidence * 100).toFixed(1)}% confidence
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(execution.timestamp).toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Session Information */}
       {status.session && (

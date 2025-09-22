@@ -1,7 +1,9 @@
 import { AlpacaClient } from '@/lib/alpaca/client'
+import { AlpacaSymbolManager } from '@/lib/symbols/AlpacaSymbolManager'
 import { MLPredictionEngine } from './MLPredictionEngine'
 import { AdvancedRiskManager } from './AdvancedRiskManager'
 import { PortfolioOptimizer } from './PortfolioOptimizer'
+import { AutoTradeExecutor, ExecutionConfig } from './AutoTradeExecutor'
 import { MarketData, TradeSignal, Portfolio, Position, TradeOrder } from '@/types/trading'
 
 interface AITradingConfig {
@@ -9,8 +11,17 @@ interface AITradingConfig {
   riskPerTrade: number
   minConfidenceThreshold: number
   rebalanceFrequency: number // hours
-  watchlist: string[]
+  watchlist?: string[] // Optional - will use symbol manager if not provided
+  watchlistSize?: number // Size for auto-generated watchlist
+  watchlistCriteria?: {
+    includeETFs?: boolean
+    includeCrypto?: boolean
+    riskLevel?: 'low' | 'medium' | 'high'
+    marketCap?: ('mega' | 'large' | 'mid' | 'small')[]
+    categories?: string[]
+  }
   paperTrading: boolean
+  autoExecution?: ExecutionConfig // Auto-execution configuration
 }
 
 interface TradingSession {
@@ -39,11 +50,14 @@ interface AITradingDecision {
 
 export class RealTimeAITradingEngine {
   private alpacaClient: AlpacaClient
+  private symbolManager: AlpacaSymbolManager
   private mlEngine: MLPredictionEngine
   private riskManager: AdvancedRiskManager
   private portfolioOptimizer: PortfolioOptimizer
+  private autoTradeExecutor: AutoTradeExecutor
 
   private config: AITradingConfig
+  private activeWatchlist: string[] = []
   private isRunning = false
   private currentSession: TradingSession | null = null
   private marketDataCache = new Map<string, MarketData[]>()
@@ -53,10 +67,45 @@ export class RealTimeAITradingEngine {
 
   constructor(alpacaClient: AlpacaClient, config: AITradingConfig) {
     this.alpacaClient = alpacaClient
+    this.symbolManager = new AlpacaSymbolManager(alpacaClient)
     this.mlEngine = new MLPredictionEngine()
     this.riskManager = new AdvancedRiskManager()
     this.portfolioOptimizer = new PortfolioOptimizer()
+
+    // Initialize auto trade executor with default config if not provided
+    const executionConfig = config.autoExecution || this.getDefaultExecutionConfig()
+    this.autoTradeExecutor = new AutoTradeExecutor(alpacaClient, executionConfig)
+
     this.config = config
+  }
+
+  private getDefaultExecutionConfig(): ExecutionConfig {
+    return {
+      autoExecuteEnabled: true,
+      confidenceThresholds: {
+        minimum: 0.65,      // 65% minimum to consider execution
+        conservative: 0.75, // 75% for conservative positions
+        aggressive: 0.85,   // 85% for aggressive positions
+        maximum: 0.95       // 95% for maximum position size
+      },
+      positionSizing: {
+        baseSize: 0.02,            // 2% base position size
+        maxSize: 0.08,             // 8% maximum position size
+        confidenceMultiplier: 2.0   // Confidence multiplier effect
+      },
+      riskControls: {
+        maxDailyTrades: 20,        // Max 20 trades per day
+        maxOpenPositions: 15,      // Max 15 open positions
+        maxDailyLoss: 0.05,        // 5% max daily loss
+        cooldownPeriod: 15         // 15 minutes between trades for same symbol
+      },
+      executionRules: {
+        marketHoursOnly: true,     // Only trade during market hours
+        avoidEarnings: false,      // Don't avoid earnings (requires earnings data)
+        volumeThreshold: 100000,   // Minimum 100K volume
+        spreadThreshold: 0.02      // Maximum 2% spread
+      }
+    }
   }
 
   async startAITrading(): Promise<void> {
@@ -83,6 +132,9 @@ export class RealTimeAITradingEngine {
       // Verify Alpaca connection
       await this.verifyConnection()
 
+      // Initialize watchlist
+      await this.initializeWatchlist()
+
       // Load initial market data
       await this.loadInitialMarketData()
 
@@ -94,6 +146,9 @@ export class RealTimeAITradingEngine {
 
       // Start portfolio monitoring
       this.startPortfolioMonitoring()
+
+      // Start AI learning cycle
+      this.startLearningCycle()
 
       console.log('✅ AI Trading Engine started successfully')
 
@@ -138,10 +193,37 @@ export class RealTimeAITradingEngine {
     }
   }
 
+  private async initializeWatchlist(): Promise<void> {
+    console.log('📋 Initializing trading watchlist...')
+
+    if (this.config.watchlist && this.config.watchlist.length > 0) {
+      // Use provided watchlist
+      this.activeWatchlist = [...this.config.watchlist]
+      console.log(`✅ Using provided watchlist: ${this.activeWatchlist.length} symbols`)
+    } else {
+      // Generate optimal watchlist using symbol manager
+      const criteria = {
+        size: this.config.watchlistSize || 50,
+        includeETFs: this.config.watchlistCriteria?.includeETFs ?? true,
+        includeCrypto: this.config.watchlistCriteria?.includeCrypto ?? true,
+        riskLevel: this.config.watchlistCriteria?.riskLevel || 'medium'
+      }
+
+      this.activeWatchlist = await this.symbolManager.generateOptimalWatchlist(criteria)
+      console.log(`✅ Generated optimal watchlist: ${this.activeWatchlist.length} symbols`)
+      console.log(`   Risk Level: ${criteria.riskLevel}`)
+      console.log(`   ETFs: ${criteria.includeETFs ? 'Yes' : 'No'}`)
+      console.log(`   Crypto: ${criteria.includeCrypto ? 'Yes' : 'No'}`)
+    }
+
+    // Log sample of watchlist
+    console.log(`📊 Sample symbols: ${this.activeWatchlist.slice(0, 10).join(', ')}...`)
+  }
+
   private async loadInitialMarketData(): Promise<void> {
     console.log('📈 Loading initial market data...')
 
-    for (const symbol of this.config.watchlist) {
+    for (const symbol of this.activeWatchlist) {
       try {
         // Get 100 bars of historical data (about 2-3 weeks of daily data)
         const marketData = await this.fetchMarketData(symbol, '1Day', 100)
@@ -234,7 +316,7 @@ export class RealTimeAITradingEngine {
     // Generate AI trading decisions for all watchlist symbols
     const decisions: AITradingDecision[] = []
 
-    for (const symbol of this.config.watchlist) {
+    for (const symbol of this.activeWatchlist) {
       try {
         const decision = await this.generateAITradingDecision(symbol, portfolio)
         if (decision) {
@@ -248,30 +330,62 @@ export class RealTimeAITradingEngine {
     // Sort decisions by AI score (best opportunities first)
     decisions.sort((a, b) => b.aiScore - a.aiScore)
 
-    // Execute top decisions within risk limits
+    // Execute top decisions using AutoTradeExecutor
+    let evaluatedTrades = 0
     let executedTrades = 0
-    for (const decision of decisions) {
-      if (executedTrades >= 3) break // Limit to 3 trades per cycle
 
-      if (decision.confidence >= this.config.minConfidenceThreshold) {
-        try {
-          await this.executeAIDecision(decision, portfolio)
+    for (const decision of decisions) {
+      if (evaluatedTrades >= 5) break // Evaluate top 5 opportunities per cycle
+
+      try {
+        // Create signal for the decision
+        const signal: TradeSignal = {
+          action: decision.action,
+          confidence: decision.confidence,
+          reason: decision.reasoning.join('; '),
+          timestamp: new Date(),
+          riskScore: decision.riskScore,
+          strategy: 'AI_ML_ENGINE'
+        }
+
+        // Let AutoTradeExecutor evaluate and potentially execute
+        const executionDecision = await this.autoTradeExecutor.evaluateAndExecute(
+          signal,
+          decision.marketData,
+          portfolio,
+          decision.aiScore
+        )
+
+        evaluatedTrades++
+
+        if (executionDecision.shouldExecute) {
           executedTrades++
+          console.log(`🤖 AI AUTO-EXECUTION: ${decision.symbol} - ${executionDecision.reason}`)
 
           if (this.currentSession) {
             this.currentSession.tradesExecuted++
             this.currentSession.aiPredictions++
           }
-        } catch (error) {
-          console.error(`Failed to execute trade for ${decision.symbol}:`, error.message)
+        } else {
+          console.log(`⏸️ AI DECISION HELD: ${decision.symbol} - ${executionDecision.reason}`)
         }
+
+        if (this.currentSession) {
+          this.currentSession.aiPredictions++
+        }
+
+      } catch (error) {
+        console.error(`Auto-execution evaluation failed for ${decision.symbol}:`, error.message)
       }
     }
 
     // Check if portfolio rebalancing is needed
     await this.checkAndRebalancePortfolio(portfolio)
 
-    console.log(`✅ AI cycle complete - ${executedTrades} trades executed`)
+    console.log(`✅ AI cycle complete - ${evaluatedTrades} decisions evaluated, ${executedTrades} trades executed`)
+
+    // Update daily P&L tracking
+    this.autoTradeExecutor.updateDailyPnL(portfolio.dayPnL)
   }
 
   private async generateAITradingDecision(symbol: string, portfolio: Portfolio): Promise<AITradingDecision | null> {
@@ -326,93 +440,80 @@ export class RealTimeAITradingEngine {
     }
   }
 
-  private async executeAIDecision(decision: AITradingDecision, portfolio: Portfolio): Promise<void> {
-    if (decision.action === 'HOLD') return
+  // Auto-execution monitoring and control methods
+  getAutoExecutionMetrics() {
+    return this.autoTradeExecutor.getExecutionMetrics()
+  }
 
-    console.log(`🎯 Executing AI decision: ${decision.action} ${decision.symbol} (Confidence: ${(decision.confidence * 100).toFixed(1)}%, AI Score: ${decision.aiScore.toFixed(2)})`)
+  getRecentExecutions(limit = 10) {
+    return this.autoTradeExecutor.getRecentExecutions(limit)
+  }
 
-    const currentPrice = decision.marketData[decision.marketData.length - 1].close
-    const positionValue = portfolio.totalValue * decision.positionSize
-    const quantity = Math.floor(positionValue / currentPrice)
-
-    if (quantity < 1) {
-      console.log(`❌ Position too small for ${decision.symbol}: ${quantity} shares`)
-      return
-    }
-
-    const order: TradeOrder = {
-      symbol: decision.symbol,
-      side: decision.action,
-      quantity,
-      orderType: 'MARKET',
-      timeInForce: 'DAY',
-      clientOrderId: `ai_${decision.symbol}_${Date.now()}`,
-      source: 'AI_ENGINE',
-      strategy: 'ML_PREDICTION',
-      notes: `AI Score: ${decision.aiScore.toFixed(2)}, Confidence: ${(decision.confidence * 100).toFixed(1)}%`
-    }
-
+  // AI Learning Integration
+  async performLearningCycle(): Promise<void> {
     try {
-      const result = await this.alpacaClient.createOrder(order)
+      // Check for completed trades and track exits
+      await this.autoTradeExecutor.checkAndTrackTradeExits()
 
-      console.log(`✅ Order executed: ${result.id} - ${decision.action} ${quantity} ${decision.symbol} @ $${currentPrice.toFixed(2)}`)
+      // Adapt configuration based on learning
+      const configChanged = await this.autoTradeExecutor.adaptConfigurationBasedOnLearning()
 
-      // Log AI decision reasoning
-      console.log(`📝 AI Reasoning:`)
-      decision.reasoning.forEach(reason => console.log(`   • ${reason}`))
-
-      // Schedule stop loss and take profit orders if the main order fills
-      if (result.status === 'FILLED' || result.status === 'PARTIALLY_FILLED') {
-        await this.setStopLossAndTakeProfit(decision, quantity)
+      if (configChanged) {
+        console.log(`🧠 AI Learning: Configuration automatically adapted for improved performance`)
       }
-
     } catch (error) {
-      console.error(`❌ Order failed for ${decision.symbol}:`, error.message)
-      throw error
+      console.error('AI Learning cycle error:', error.message)
     }
   }
 
-  private async setStopLossAndTakeProfit(decision: AITradingDecision, quantity: number): Promise<void> {
-    try {
-      // Stop Loss Order
-      const stopLossOrder: TradeOrder = {
-        symbol: decision.symbol,
-        side: decision.action === 'BUY' ? 'SELL' : 'BUY',
-        quantity,
-        orderType: 'STOP',
-        stopPrice: decision.stopLoss,
-        timeInForce: 'GTC',
-        clientOrderId: `sl_${decision.symbol}_${Date.now()}`,
-        source: 'AI_ENGINE',
-        strategy: 'RISK_MANAGEMENT'
+  getLearningInsights() {
+    return this.autoTradeExecutor.getLearningInsights()
+  }
+
+  getTradeHistory() {
+    return this.autoTradeExecutor.getTradeHistory()
+  }
+
+  getAccuracyTrend(days: number = 30) {
+    return this.autoTradeExecutor.getAccuracyTrend(days)
+  }
+
+  getTodayExecutionStats() {
+    return this.autoTradeExecutor.getTodayStats()
+  }
+
+  // Start AI Learning Cycle
+  private startLearningCycle(): void {
+    // Run learning cycle every 5 minutes
+    const learningInterval = setInterval(async () => {
+      if (!this.isRunning) {
+        clearInterval(learningInterval)
+        return
       }
 
-      await this.alpacaClient.createOrder(stopLossOrder)
-      console.log(`🛡️ Stop loss set at $${decision.stopLoss.toFixed(2)} for ${decision.symbol}`)
+      await this.performLearningCycle()
+    }, 5 * 60 * 1000) // 5 minutes
 
-      // Take Profit Order
-      const takeProfitOrder: TradeOrder = {
-        symbol: decision.symbol,
-        side: decision.action === 'BUY' ? 'SELL' : 'BUY',
-        quantity,
-        orderType: 'LIMIT',
-        price: decision.takeProfit,
-        timeInForce: 'GTC',
-        clientOrderId: `tp_${decision.symbol}_${Date.now()}`,
-        source: 'AI_ENGINE',
-        strategy: 'PROFIT_TAKING'
-      }
+    console.log('🧠 AI Learning cycle started - will run every 5 minutes')
+  }
 
-      await this.alpacaClient.createOrder(takeProfitOrder)
-      console.log(`🎯 Take profit set at $${decision.takeProfit.toFixed(2)} for ${decision.symbol}`)
+  enableAutoExecution() {
+    this.autoTradeExecutor.enableExecution()
+    console.log('🟢 Auto-execution ENABLED')
+  }
 
-    } catch (error) {
-      console.error(`Failed to set stop loss/take profit for ${decision.symbol}:`, error.message)
-    }
+  disableAutoExecution() {
+    this.autoTradeExecutor.disableExecution()
+    console.log('🔴 Auto-execution DISABLED')
+  }
+
+  updateExecutionConfig(newConfig: Partial<ExecutionConfig>) {
+    this.autoTradeExecutor.updateConfig(newConfig)
+    console.log('⚙️ Auto-execution configuration updated')
   }
 
   private async updateMarketData(): Promise<void> {
-    for (const symbol of this.config.watchlist) {
+    for (const symbol of this.activeWatchlist) {
       try {
         // Get latest bar
         const latestBars = await this.fetchMarketData(symbol, '1Min', 1)
@@ -676,5 +777,43 @@ export class RealTimeAITradingEngine {
       dataPoints: data.length,
       lastUpdate: data.length > 0 ? data[data.length - 1].timestamp : new Date(0)
     }))
+  }
+
+  getActiveWatchlist(): string[] {
+    return [...this.activeWatchlist]
+  }
+
+  getWatchlistInfo(): {
+    symbols: string[]
+    totalSymbols: number
+    source: 'provided' | 'generated'
+    criteria?: any
+  } {
+    return {
+      symbols: this.activeWatchlist,
+      totalSymbols: this.activeWatchlist.length,
+      source: this.config.watchlist ? 'provided' : 'generated',
+      criteria: this.config.watchlistCriteria
+    }
+  }
+
+  async updateWatchlist(newConfig: {
+    watchlist?: string[]
+    watchlistSize?: number
+    watchlistCriteria?: any
+  }): Promise<void> {
+    // Update config
+    if (newConfig.watchlist) this.config.watchlist = newConfig.watchlist
+    if (newConfig.watchlistSize) this.config.watchlistSize = newConfig.watchlistSize
+    if (newConfig.watchlistCriteria) this.config.watchlistCriteria = newConfig.watchlistCriteria
+
+    // Re-initialize watchlist
+    await this.initializeWatchlist()
+
+    // Clear old market data and reload
+    this.marketDataCache.clear()
+    await this.loadInitialMarketData()
+
+    console.log('✅ Watchlist updated successfully')
   }
 }
