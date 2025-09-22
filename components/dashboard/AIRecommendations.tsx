@@ -5,9 +5,7 @@ import {
   CpuChipIcon,
   SparklesIcon,
   ExclamationTriangleIcon,
-  CheckCircleIcon,
   ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
   PlayIcon
 } from '@heroicons/react/24/outline'
 

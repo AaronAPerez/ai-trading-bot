@@ -1,14 +1,9 @@
 'use client'
 
+import { TrendingUp, TrendingDown, AlertTriangle, BrainIcon, Badge, Clock, Brain } from 'lucide-react'
 import React, { useState, useEffect } from 'react'
-import {
-  BrainIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
-  ExclamationTriangleIcon,
-  ClockIcon,
-  CurrencyDollarIcon
-} from '@heroicons/react/24/outline'
+import { Button } from '../ui/Button'
+import { Card, CardHeader, CardContent } from '../ui/card'
 
 interface AIRecommendation {
   symbol: string

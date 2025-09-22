@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { Badge } from '@/components/ui/badge'
-import { AlertCircle, Play, Square, TrendingUp, DollarSign, Activity, Clock, Zap, Settings, BarChart3 } from 'lucide-react'
+import { AlertCircle, Play, Square, TrendingUp, Activity, Clock, Zap, BarChart3 } from 'lucide-react'
 import { Button } from '../ui/Button';
 
 interface AITradingSession {
