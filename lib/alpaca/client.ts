@@ -10,10 +10,6 @@ export interface AlpacaConfig {
 export class AlpacaClient {
   private client: Alpaca
   private config: AlpacaConfig
-  isDemoModeActive: any
-  getConfig: any
-  getConnectionStatus: any
-  getBarsV2: any
 
   constructor(config: AlpacaConfig) {
     this.config = config
@@ -67,18 +63,51 @@ export class AlpacaClient {
     }
   }
 
+  // Historical data methods
+  async getBarsV2(symbol: string, options: {
+    timeframe: string
+    limit?: number
+    start?: Date
+    end?: Date
+    adjustment?: string
+  }) {
+    try {
+      const bars = await this.client.getBarsV2(symbol, {
+        timeframe: options.timeframe,
+        limit: options.limit || 100,
+        start: options.start,
+        end: options.end,
+        adjustment: options.adjustment || 'raw'
+      })
+      return bars
+    } catch (error) {
+      console.error('Alpaca bars fetch error:', error)
+      throw new Error(`Failed to fetch bars for ${symbol}`)
+    }
+  }
+
   // Order methods
   async createOrder(orderData: {
     symbol: string
     qty: number
     side: 'buy' | 'sell'
-    type: 'market' | 'limit'
-    time_in_force: 'day' | 'gtc'
+    type?: 'market' | 'limit' | 'stop'
+    time_in_force?: 'day' | 'gtc'
     limit_price?: number
     stop_price?: number
+    client_order_id?: string
   }) {
     try {
-      const order = await this.client.createOrder(orderData)
+      const order = await this.client.createOrder({
+        symbol: orderData.symbol,
+        qty: orderData.qty,
+        side: orderData.side,
+        type: orderData.type || 'market',
+        time_in_force: orderData.time_in_force || 'day',
+        limit_price: orderData.limit_price,
+        stop_price: orderData.stop_price,
+        client_order_id: orderData.client_order_id
+      })
       return {
         id: order.id,
         symbol: order.symbol,

@@ -194,7 +194,7 @@ export default function AITradingDashboard() {
         {/* Main Content */}
         <main className="flex-1 p-6">
           {/* Error Display */}
-          {(marketError || tradingError) && (
+          {/* {(marketError || tradingError) && (
             <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4 mb-6">
               <div className="flex items-center gap-2 text-red-400">
                 <span className="font-medium">Connection Error</span>
@@ -203,7 +203,7 @@ export default function AITradingDashboard() {
                 {marketError || tradingError}
               </p>
             </div>
-          )}
+          )} */}
 
           {/* Tab Content */}
           {activeTab === 'overview' && (

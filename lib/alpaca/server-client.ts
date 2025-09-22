@@ -5,20 +5,19 @@ export class AlpacaServerClient {
 
 constructor() {
   console.log('Alpaca Config Check:')
-  console.log('API Key:', process.env.ALPACA_API_KEY_ID ? `${process.env.ALPACA_API_SECRET_KEY.substring(0, 10)}...` : 'MISSING')
-  console.log('Secret Key:', process.env.ALPACA_API_SECRET_KEY ? 'Present' : 'MISSING')
-  console.log('Paper Mode:', process.env.ALPACA_PAPER)
+  console.log('API Key:', process.env.APCA_API_KEY_ID ? `${process.env.APCA_API_KEY_ID.substring(0, 10)}...` : 'MISSING')
+  console.log('Secret Key:', process.env.APCA_API_SECRET_KEY ? 'Present' : 'MISSING')
+  console.log('Paper Mode:', process.env.NEXT_PUBLIC_TRADING_MODE)
 
-  if (!process.env.ALPACA_API_KEY_ID || !process.env.ALPACA_API_SECRET_KEY) {
+  if (!process.env.APCA_API_KEY_ID || !process.env.APCA_API_SECRET_KEY) {
     throw new Error('Alpaca API keys are missing from environment variables')
   }
 
   this.client = new Alpaca({
-    key: process.env.ALPACA_API_KEY_ID,
-    secret: process.env.ALPACA_API_SECRET_KEY,
-    paper: process.env.ALPACA_PAPER === 'true',
-    usePolygon: false,
-    baseUrl: process.env.ALPACA_API_BASE_URL || (process.env.ALPACA_PAPER === 'true' ? 'https://paper-api.alpaca.markets/v2' : 'https://api.alpaca.markets/v2')
+    key: process.env.APCA_API_KEY_ID,
+    secret: process.env.APCA_API_SECRET_KEY,
+    paper: process.env.NEXT_PUBLIC_TRADING_MODE === 'paper',
+    usePolygon: false
   })
 }
 
@@ -27,7 +26,7 @@ async getAccount() {
   try {
     const account = await this.client.getAccount()
     return {
-      accountType: process.env.ALPACA_PAPER === 'true' ? 'PAPER' : 'LIVE',
+      accountType: process.env.NEXT_PUBLIC_TRADING_MODE === 'paper' ? 'PAPER' : 'LIVE',
       totalBalance: parseFloat(account.portfolio_value),
       cashBalance: parseFloat(account.cash),
       availableBuyingPower: parseFloat(account.buying_power),

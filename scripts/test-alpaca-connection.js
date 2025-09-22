@@ -1,11 +1,11 @@
-import { AlpacaApi } from '@alpacahq/alpaca-trade-api'
+import Alpaca from '@alpacahq/alpaca-trade-api'
 
 async function testAlpacaConnection() {
   try {
-    const alpaca = new AlpacaApi({
-      key: process.env.ALPACA_API_KEY_ID,
-      secret: process.env.ALPACA_API_SECRET_KEY,
-      paper: process.env.ALPACA_PAPER === 'true'
+    const alpaca = new Alpaca({
+      key: process.env.APCA_API_KEY_ID,
+      secret: process.env.APCA_API_SECRET_KEY,
+      paper: process.env.NEXT_PUBLIC_TRADING_MODE === 'paper'
     })
 
     console.log('🔄 Testing Alpaca connection...')
@@ -13,7 +13,7 @@ async function testAlpacaConnection() {
     // Test account access
     const account = await alpaca.getAccount()
     console.log('✅ Account connection successful')
-    console.log(`   Account Type: ${process.env.ALPACA_PAPER === 'true' ? 'PAPER' : 'LIVE'}`)
+    console.log(`   Account Type: ${process.env.NEXT_PUBLIC_TRADING_MODE === 'paper' ? 'PAPER' : 'LIVE'}`)
     console.log(`   Balance: ${parseFloat(account.portfolio_value).toLocaleString()}`)
     console.log(`   Cash: ${parseFloat(account.cash).toLocaleString()}`)
     console.log(`   Day Trades: ${account.daytrade_count}/3`)
@@ -41,8 +41,8 @@ async function testAlpacaConnection() {
     
     if (error.message.includes('Unauthorized')) {
       console.log('\n💡 Check your API keys in .env.local:')
-      console.log('   ALPACA_API_KEY_ID=your_key_here')
-      console.log('   ALPACA_API_SECRET_KEY=your_secret_here')
+      console.log('   APCA_API_KEY_ID=your_key_here')
+      console.log('   APCA_API_SECRET_KEY=your_secret_here')
     }
     
     process.exit(1)
