@@ -6,8 +6,6 @@ import { useAlpacaTrading } from '@/hooks/useAlpacaTrading'
 import {
   ArrowTrendingUpIcon,
   ChartBarIcon,
-  PlayIcon,
-  PauseIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
   Bars3Icon,
@@ -17,19 +15,15 @@ import {
   AcademicCapIcon,
   BoltIcon,
   CpuChipIcon,
-  DocumentTextIcon,
   CalculatorIcon,
   RocketLaunchIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline'
 
 // Import sub-components
-import { AccountOverview } from './AccountOverview'
 import { LiveTrades } from './LiveTrades'
-import { BotConfiguration } from './BotConfiguration'
 import { PerformanceAnalytics } from './PerformanceAnalytics'
 import AITradingControl from './AITradingControl'
-import AIRecommendationsPanel from './AIRecommendationsPanel'
 import AILearningDashboard from './AILearningDashboard'
 import { MarketClock } from './MarketClock'
 
