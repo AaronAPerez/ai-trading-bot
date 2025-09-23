@@ -35,8 +35,9 @@ export function AccountOverview({ account, positions, quotes, botConfig, isLoadi
     )
   }
 
-  const totalPnL = positions.reduce((sum, pos) => sum + pos.unrealizedPnL, 0)
-  const totalReturn = account.totalBalance > 0 ? (totalPnL / account.totalBalance) * 100 : 0
+  const totalPnL = positions.reduce((sum, pos) => sum + (pos.unrealizedPnL || pos.unrealized_pl || 0), 0)
+  const accountBalance = account.totalBalance || account.portfolio_value || account.equity || 0
+  const totalReturn = accountBalance > 0 ? (totalPnL / accountBalance) * 100 : 0
 
   return (
     <div className="space-y-6">
@@ -49,13 +50,13 @@ export function AccountOverview({ account, positions, quotes, botConfig, isLoadi
               <span className="text-sm font-medium text-cyan-300">Total Balance</span>
             </div>
             <span className={`text-xs px-2 py-1 rounded ${
-              account.accountType === 'LIVE' ? 'bg-red-600' : 'bg-cyan-600'
+              (account.accountType || account.account_type || 'PAPER') === 'LIVE' ? 'bg-red-600' : 'bg-cyan-600'
             }`}>
-              {account.accountType}
+              {account.accountType || account.account_type || 'PAPER'}
             </span>
           </div>
           <div className="text-2xl font-bold text-white">
-            ${account.totalBalance.toLocaleString()}
+            ${(account.totalBalance || account.portfolio_value || account.equity || 0).toLocaleString()}
           </div>
           <div className={`text-sm ${totalReturn >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {totalReturn >= 0 ? '+' : ''}{totalReturn.toFixed(2)}% Total Return
@@ -68,10 +69,10 @@ export function AccountOverview({ account, positions, quotes, botConfig, isLoadi
             <span className="text-sm font-medium text-emerald-300">Available Cash</span>
           </div>
           <div className="text-2xl font-bold text-white">
-            ${account.cashBalance.toLocaleString()}
+            ${(account.cashBalance || account.cash || 0).toLocaleString()}
           </div>
           <div className="text-sm text-gray-400">
-            Buying Power: ${account.availableBuyingPower.toLocaleString()}
+            Buying Power: ${(account.availableBuyingPower || account.buying_power || account.dayTradingBuyingPower || 0).toLocaleString()}
           </div>
         </div>
 
@@ -120,25 +121,25 @@ export function AccountOverview({ account, positions, quotes, botConfig, isLoadi
                     <div>
                       <div className="font-semibold text-lg">{position.symbol}</div>
                       <div className="text-sm text-gray-400">
-                        {position.quantity} shares @ ${position.avgBuyPrice.toFixed(2)}
+                        {position.quantity || position.qty || 0} shares @ ${(position.avgBuyPrice || position.avg_entry_price || 0).toFixed(2)}
                       </div>
                     </div>
                     <div className={`px-2 py-1 rounded text-xs font-bold ${
-                      position.side === 'long' ? 'bg-emerald-600' : 'bg-red-600'
+                      (position.side || 'long') === 'long' ? 'bg-emerald-600' : 'bg-red-600'
                     }`}>
-                      {position.side.toUpperCase()}
+                      {(position.side || 'long').toUpperCase()}
                     </div>
                   </div>
                   
                   <div className="text-right">
                     <div className="text-lg font-semibold">
-                      ${position.currentPrice.toFixed(2)}
+                      ${(position.currentPrice || position.market_value || 0).toFixed(2)}
                     </div>
                     <div className={`text-sm font-medium ${
-                      position.unrealizedPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      (position.unrealizedPnL || position.unrealized_pl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
                     }`}>
-                      {position.unrealizedPnL >= 0 ? '+' : ''}${position.unrealizedPnL.toFixed(2)}
-                      ({position.unrealizedPnLPercent.toFixed(1)}%)
+                      {(position.unrealizedPnL || position.unrealized_pl || 0) >= 0 ? '+' : ''}${(position.unrealizedPnL || position.unrealized_pl || 0).toFixed(2)}
+                      ({(position.unrealizedPnLPercent || position.unrealized_plpc || 0).toFixed(1)}%)
                     </div>
                   </div>
                 </div>
@@ -157,10 +158,10 @@ export function AccountOverview({ account, positions, quotes, botConfig, isLoadi
             <div key={symbol} className="bg-gray-700 rounded-lg p-4">
               <div className="font-semibold mb-2">{symbol}</div>
               <div className="text-lg font-bold">
-                ${quote.midPrice.toFixed(2)}
+                ${(quote.midPrice || quote.price || quote.last_price || 0).toFixed(2)}
               </div>
               <div className="text-xs text-gray-400">
-                Spread: ${quote.spread.toFixed(3)}
+                Spread: ${(quote.spread || quote.bid_ask_spread || 0).toFixed(3)}
               </div>
             </div>
           ))}

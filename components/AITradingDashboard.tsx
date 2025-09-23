@@ -7,8 +7,6 @@ import {
   ChartBarIcon,
   CpuChipIcon,
   RocketLaunchIcon,
-  PlayIcon,
-  PauseIcon,
   Cog6ToothIcon,
   BoltIcon,
   TrophyIcon
@@ -56,47 +54,6 @@ export default function AITradingDashboard() {
     fetchPositions()
   }, [fetchAccount, fetchPositions])
 
-  const toggleBot = useCallback(async () => {
-  try {
-    // For development - just toggle local state without API call
-    setBotConfig(prev => ({ ...prev, enabled: !prev.enabled }))
-    
-    const newStatus = !botConfig.enabled
-    setAlertMessage(`AI Trading Bot ${newStatus ? 'started' : 'stopped'}`)
-    
-    // Clear alert after 3 seconds
-    setTimeout(() => setAlertMessage(null), 3000)
-    
-    console.log(`Bot ${newStatus ? 'enabled' : 'disabled'}`)
-  } catch (error) {
-    console.error('Bot toggle error:', error)
-    // Revert state on error
-    setBotConfig(prev => ({ ...prev, enabled: !prev.enabled }))
-    setAlertMessage('Failed to toggle bot')
-    setTimeout(() => setAlertMessage(null), 3000)
-  }
-}, [botConfig.enabled])
-
-//   const toggleBot = useCallback(async () => {
-//     try {
-//       setBotConfig(prev => ({ ...prev, enabled: !prev.enabled }))
-      
-//       // In production, this would call your AI service API
-//       const response = await fetch('/api/bot/toggle', {
-//         method: 'POST',
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify({ enabled: !botConfig.enabled })
-//       })
-      
-//       if (!response.ok) {
-//         throw new Error('Failed to toggle bot')
-//       }
-//     } catch (error) {
-//       console.error('Bot toggle error:', error)
-//       // Revert state on error
-//       setBotConfig(prev => ({ ...prev, enabled: !prev.enabled }))
-//     }
-//   }, [botConfig.enabled])
 
   const navigationTabs = [
     { id: 'ai-engine', name: 'AI Engine Control', icon: RocketLaunchIcon },
@@ -135,18 +92,6 @@ export default function AITradingDashboard() {
               </div>
             </div>
 
-            <button
-              onClick={toggleBot}
-              disabled={!account?.isConnected}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                botConfig.enabled 
-                  ? 'bg-red-600 hover:bg-red-700 text-white' 
-                  : 'bg-cyan-600 hover:bg-cyan-700 text-white'
-              }`}
-            >
-              {botConfig.enabled ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
-              {botConfig.enabled ? 'Stop Bot' : 'Start Bot'}
-            </button>
           </div>
         </div>
       </header>

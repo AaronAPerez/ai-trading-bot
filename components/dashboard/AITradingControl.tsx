@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { Badge } from '@/components/ui/badge'
-import { AlertCircle, Play, Square, TrendingUp, Activity, Clock, Zap, BarChart3 } from 'lucide-react'
+import { AlertCircle, Play, Square, TrendingUp, Activity, Clock, Zap, BarChart3, Loader2 } from 'lucide-react'
 import { Button } from '../ui/Button';
 
 interface AITradingSession {
@@ -111,6 +111,9 @@ export default function AITradingControl() {
     setLoading(true)
     setError(null)
 
+    // Show immediate feedback that button was clicked
+    console.log('🚀 Starting AI Trading Engine - Loading all 12,010 symbols...')
+
     try {
       const response = await fetch('/api/ai-trading', {
         method: 'POST',
@@ -124,8 +127,10 @@ export default function AITradingControl() {
         throw new Error(data.error || 'Failed to start AI trading')
       }
 
+      console.log('✅ AI Trading Engine started successfully!')
       await fetchStatus()
     } catch (err) {
+      console.error('❌ Failed to start AI Trading:', err.message)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -261,9 +266,14 @@ export default function AITradingControl() {
                   onClick={handleStart}
                   disabled={loading}
                   size="sm"
+                  className={loading ? "cursor-not-allowed" : ""}
                 >
-                  <Play className="h-4 w-4 mr-1" />
-                  Start AI Trading
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4 mr-1" />
+                  )}
+                  {loading ? "Starting AI Engine..." : "Start AI Trading"}
                 </Button>
               )}
             </div>

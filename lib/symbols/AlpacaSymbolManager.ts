@@ -43,6 +43,9 @@ export class AlpacaSymbolManager {
   private symbolCategories: Map<string, SymbolCategory> = new Map()
   private lastUpdate: Date = new Date(0)
   private updateInterval = 24 * 60 * 60 * 1000 // 24 hours
+  private allSymbolsCache: string[] = []
+  private lastSymbolFetch: Date = new Date(0)
+  private symbolCacheInterval = 12 * 60 * 60 * 1000 // 12 hours - cache symbols longer
 
   constructor(alpacaClient: AlpacaClient) {
     this.alpacaClient = alpacaClient
@@ -365,6 +368,102 @@ export class AlpacaSymbolManager {
 
   getLastUpdateTime(): Date {
     return this.lastUpdate
+  }
+
+  // NEW: Get ALL available symbols from Alpaca (thousands of symbols)
+  async getAllAvailableSymbols(options: {
+    includeETFs?: boolean
+    includeCrypto?: boolean
+    limit?: number
+  } = {}): Promise<string[]> {
+    // Check cache first to avoid unnecessary API calls
+    const needsRefresh = (Date.now() - this.lastSymbolFetch.getTime()) > this.symbolCacheInterval || this.allSymbolsCache.length === 0
+
+    if (!needsRefresh && this.allSymbolsCache.length > 0) {
+      console.log(`📋 Using cached symbols (${this.allSymbolsCache.length} symbols) - last fetched ${Math.round((Date.now() - this.lastSymbolFetch.getTime()) / (60 * 1000))} minutes ago`)
+      return options.limit ? this.allSymbolsCache.slice(0, options.limit) : this.allSymbolsCache
+    }
+
+    try {
+      console.log('🔍 Fetching ALL available symbols from Alpaca API...')
+
+      let allSymbols: string[] = []
+
+      // Fetch US equities
+      const equityResponse = await fetch('https://paper-api.alpaca.markets/v2/assets?status=active&asset_class=us_equity', {
+        headers: {
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!
+        }
+      })
+
+      if (equityResponse.ok) {
+        const equities = await equityResponse.json()
+        const equitySymbols = equities
+          .filter((asset: any) => asset.tradable && asset.status === 'active')
+          .map((asset: any) => asset.symbol)
+
+        allSymbols = allSymbols.concat(equitySymbols)
+        console.log(`📈 Found ${equitySymbols.length} tradable US equity symbols`)
+      }
+
+      // Fetch crypto if requested
+      if (options.includeCrypto) {
+        try {
+          const cryptoResponse = await fetch('https://paper-api.alpaca.markets/v2/assets?status=active&asset_class=crypto', {
+            headers: {
+              'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+              'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!
+            }
+          })
+
+          if (cryptoResponse.ok) {
+            const cryptos = await cryptoResponse.json()
+            const cryptoSymbols = cryptos
+              .filter((asset: any) => asset.tradable && asset.status === 'active')
+              .map((asset: any) => asset.symbol)
+
+            allSymbols = allSymbols.concat(cryptoSymbols)
+            console.log(`₿ Found ${cryptoSymbols.length} tradable crypto symbols`)
+          }
+        } catch (error) {
+          console.log('⚠️ Crypto fetch failed, continuing without crypto symbols')
+        }
+      }
+
+      // Remove duplicates and sort
+      const uniqueSymbols = [...new Set(allSymbols)].sort()
+
+      // Cache the results
+      this.allSymbolsCache = uniqueSymbols
+      this.lastSymbolFetch = new Date()
+
+      // Apply limit if specified
+      const finalSymbols = options.limit ? uniqueSymbols.slice(0, options.limit) : uniqueSymbols
+
+      console.log(`🎯 Total available symbols: ${finalSymbols.length} (cached for 12 hours)`)
+      return finalSymbols
+
+    } catch (error) {
+      console.error('❌ Failed to fetch all symbols:', error.message)
+
+      // Use cached symbols if available, even if stale
+      if (this.allSymbolsCache.length > 0) {
+        console.log('📦 Using stale cached symbols due to API error...')
+        return options.limit ? this.allSymbolsCache.slice(0, options.limit) : this.allSymbolsCache
+      }
+
+      console.log('📦 Falling back to comprehensive symbol list...')
+      // Return our comprehensive fallback list
+      const fallbackAssets = this.getComprehensiveSymbolList()
+      const fallbackSymbols = fallbackAssets.map(asset => asset.symbol)
+
+      // Cache the fallback
+      this.allSymbolsCache = fallbackSymbols
+      this.lastSymbolFetch = new Date()
+
+      return options.limit ? fallbackSymbols.slice(0, options.limit) : fallbackSymbols
+    }
   }
 
   // Generate optimal watchlist based on various criteria

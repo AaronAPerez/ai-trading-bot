@@ -8,9 +8,9 @@ let aiTradingEngine: RealTimeAITradingEngine | null = null
 const DEFAULT_CONFIG = {
   maxPositionsCount: 15,
   riskPerTrade: 0.02, // 2% risk per trade
-  minConfidenceThreshold: 0.65, // 65% minimum confidence
+  minConfidenceThreshold: 0.75, // 75% minimum confidence
   rebalanceFrequency: 4, // Rebalance every 4 hours
-  watchlistSize: 50, // Auto-generate 50 symbols
+  watchlistSize: -1, // -1 = ALL available symbols, or set to specific number to limit
   watchlistCriteria: {
     includeETFs: true,
     includeCrypto: true,
@@ -22,8 +22,8 @@ const DEFAULT_CONFIG = {
   autoExecution: {
     autoExecuteEnabled: true,
     confidenceThresholds: {
-      minimum: 0.65,      // 65% minimum to consider execution
-      conservative: 0.75, // 75% for conservative positions
+      minimum: 0.75,      // 75% minimum to consider execution
+      conservative: 0.80, // 80% for conservative positions
       aggressive: 0.85,   // 85% for aggressive positions
       maximum: 0.95       // 95% for maximum position size
     },
@@ -33,7 +33,7 @@ const DEFAULT_CONFIG = {
       confidenceMultiplier: 2.0   // Confidence multiplier effect
     },
     riskControls: {
-      maxDailyTrades: 20,        // Max 20 trades per day
+      maxDailyTrades: 50,        // Max 50 trades per day
       maxOpenPositions: 15,      // Max 15 open positions
       maxDailyLoss: 0.05,        // 5% max daily loss
       cooldownPeriod: 15         // 15 minutes between trades for same symbol
@@ -46,30 +46,57 @@ const DEFAULT_CONFIG = {
     }
   }
 }
-
+ 
 function getAlpacaClient() {
+  console.log('🔗 Creating Alpaca client...')
+
   const config = {
     key: process.env.APCA_API_KEY_ID!,
     secret: process.env.APCA_API_SECRET_KEY!,
     paper: process.env.NEXT_PUBLIC_TRADING_MODE === 'paper'
   }
 
+  console.log('📋 Alpaca config:', {
+    keyPresent: !!config.key,
+    secretPresent: !!config.secret,
+    keyStart: config.key ? config.key.substring(0, 4) + '...' : 'MISSING',
+    paperMode: config.paper
+  })
+
   if (!config.key || !config.secret) {
-    throw new Error('Alpaca API credentials not configured')
+    console.error('❌ Missing Alpaca API credentials')
+    throw new Error('Alpaca API credentials not configured - check APCA_API_KEY_ID and APCA_API_SECRET_KEY in .env.local')
   }
 
-  return new AlpacaClient(config)
+  try {
+    const client = new AlpacaClient(config)
+    console.log('✅ Alpaca client created successfully')
+    return client
+  } catch (error) {
+    console.error('❌ Failed to create Alpaca client:', error)
+    throw new Error(`Failed to create Alpaca client: ${error.message}`)
+  }
 }
 
 // POST /api/ai-trading - Start AI trading
 export async function POST(request: NextRequest) {
+  console.log('🚀 AI Trading API POST request received')
+
   try {
+    // Parse request body
+    console.log('📖 Parsing request body...')
     const body = await request.json()
     const action = body.action
 
+    console.log('🎯 Action requested:', action)
+    console.log('📋 Request body:', JSON.stringify(body, null, 2))
+
     switch (action) {
       case 'start':
+        console.log('🔄 Starting AI Trading Engine...')
+
         if (aiTradingEngine?.isEngineRunning()) {
+          console.log('⚠️ AI Trading Engine is already running')
           return NextResponse.json(
             { error: 'AI Trading Engine is already running' },
             { status: 400 }
@@ -77,18 +104,49 @@ export async function POST(request: NextRequest) {
         }
 
         // Create new AI trading engine instance
+        console.log('🏗️ Creating Alpaca client...')
         const alpacaClient = getAlpacaClient()
+
+        console.log('⚙️ Merging configuration...')
         const config = { ...DEFAULT_CONFIG, ...body.config }
+        console.log('📊 Final config:', {
+          autoExecuteEnabled: config.autoExecution?.autoExecuteEnabled,
+          paperTrading: config.paperTrading,
+          watchlistSize: config.watchlistSize,
+          minConfidenceThreshold: config.minConfidenceThreshold
+        })
 
-        aiTradingEngine = new RealTimeAITradingEngine(alpacaClient, config)
+        console.log('🧠 Creating RealTimeAITradingEngine...')
+        try {
+          aiTradingEngine = new RealTimeAITradingEngine(alpacaClient, config)
+          console.log('✅ AI Trading Engine instance created')
+        } catch (engineError) {
+          console.error('❌ Failed to create AI Trading Engine:', engineError)
+          throw new Error(`Failed to create AI Trading Engine: ${engineError.message}`)
+        }
 
-        await aiTradingEngine.startAITrading()
+        console.log('🎬 Starting AI Trading Engine...')
+        try {
+          await aiTradingEngine.startAITrading()
+          console.log('🎉 AI Trading Engine started successfully!')
+        } catch (startError) {
+          console.error('❌ Failed to start AI Trading Engine:', startError)
+          throw new Error(`Failed to start AI Trading Engine: ${startError.message}`)
+        }
+
+        const session = aiTradingEngine.getCurrentSession()
+        console.log('📈 Current session:', session)
 
         return NextResponse.json({
           success: true,
           message: 'AI Trading Engine started successfully',
-          session: aiTradingEngine.getCurrentSession(),
-          config
+          session: session,
+          config: {
+            autoExecuteEnabled: config.autoExecution?.autoExecuteEnabled,
+            paperTrading: config.paperTrading,
+            watchlistSize: config.watchlistSize,
+            minConfidenceThreshold: config.minConfidenceThreshold
+          }
         })
 
       case 'stop':
@@ -220,19 +278,85 @@ export async function POST(request: NextRequest) {
             )
         }
 
+      case 'test':
+        console.log('🧪 Testing AI Trading API...')
+
+        // Test basic functionality
+        try {
+          const testClient = getAlpacaClient()
+          console.log('✅ Alpaca client test passed')
+
+          return NextResponse.json({
+            success: true,
+            message: 'AI Trading API is working',
+            environment: {
+              hasApiKey: !!process.env.APCA_API_KEY_ID,
+              hasApiSecret: !!process.env.APCA_API_SECRET_KEY,
+              tradingMode: process.env.NEXT_PUBLIC_TRADING_MODE,
+              keyStart: process.env.APCA_API_KEY_ID?.substring(0, 4) + '...',
+            },
+            timestamp: new Date().toISOString()
+          })
+        } catch (testError) {
+          console.error('❌ Test failed:', testError)
+          return NextResponse.json({
+            success: false,
+            error: 'Test failed',
+            details: testError.message,
+            timestamp: new Date().toISOString()
+          }, { status: 500 })
+        }
+
       default:
+        console.log('❓ Invalid action received:', action)
         return NextResponse.json(
-          { error: 'Invalid action. Use: start, stop, status, update_watchlist, update_config, or execution_control' },
+          { error: 'Invalid action. Use: start, stop, status, update_watchlist, update_config, execution_control, or test' },
           { status: 400 }
         )
     }
 
   } catch (error) {
-    console.error('AI Trading API error:', error)
+    console.error('❌ AI Trading API Error:', error)
+    console.error('❌ Error stack:', error.stack)
+    console.error('❌ Error name:', error.name)
+    console.error('❌ Error message:', error.message)
+
+    // Enhanced error reporting
+    let errorMessage = 'AI Trading operation failed'
+    let errorDetails = error.message || 'Unknown error'
+
+    // Check for specific error types
+    if (error.message?.includes('Alpaca')) {
+      errorMessage = 'Alpaca API connection failed'
+      errorDetails = 'Check your API keys and network connection'
+    } else if (error.message?.includes('credentials')) {
+      errorMessage = 'Authentication failed'
+      errorDetails = 'Invalid or missing Alpaca API credentials'
+    } else if (error.message?.includes('RealTimeAITradingEngine')) {
+      errorMessage = 'AI Trading Engine initialization failed'
+      errorDetails = 'Failed to create or start the AI trading system'
+    } else if (error.message?.includes('import') || error.message?.includes('module')) {
+      errorMessage = 'Module loading error'
+      errorDetails = 'Failed to load required AI trading modules'
+    }
+
+    console.error('🚨 Sending error response:', {
+      errorMessage,
+      errorDetails,
+      originalError: error.message
+    })
+
     return NextResponse.json(
       {
-        error: 'AI Trading operation failed',
-        details: error.message
+        error: errorMessage,
+        details: errorDetails,
+        originalError: error.message,
+        timestamp: new Date().toISOString(),
+        environment: {
+          hasApiKey: !!process.env.APCA_API_KEY_ID,
+          hasApiSecret: !!process.env.APCA_API_SECRET_KEY,
+          tradingMode: process.env.NEXT_PUBLIC_TRADING_MODE
+        }
       },
       { status: 500 }
     )

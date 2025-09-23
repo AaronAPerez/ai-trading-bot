@@ -1,5 +1,4 @@
-import { AlpacaClient } from '@/lib/alpaca/client'
-import { TradeSignal, Portfolio, TradeOrder, MarketData } from '@/types/trading'
+import { TradeSignal, Portfolio, MarketData } from '@/types/trading'
 import { AILearningSystem, TradeOutcome } from './AILearningSystem'
 
 export interface ExecutionConfig {
@@ -66,7 +65,6 @@ interface ExecutionMetrics {
 }
 
 export class AutoTradeExecutor {
-  private alpacaClient: AlpacaClient
   private config: ExecutionConfig
   private executionHistory: TradeExecution[] = []
   private lastTradeTime = new Map<string, Date>()
@@ -76,8 +74,7 @@ export class AutoTradeExecutor {
   private learningSystem: AILearningSystem
   private openTrades = new Map<string, { tradeId: string, entryPrice: number, entryTime: Date, symbol: string, action: 'BUY' | 'SELL' }>()
 
-  constructor(alpacaClient: AlpacaClient, config: ExecutionConfig) {
-    this.alpacaClient = alpacaClient
+  constructor(config: ExecutionConfig) {
     this.config = config
     this.learningSystem = new AILearningSystem()
     this.resetDailyCounters()
@@ -320,32 +317,52 @@ export class AutoTradeExecutor {
 
     const startTime = Date.now()
 
-    // Create and execute order
-    const order: TradeOrder = {
+    // Create order payload for direct API call
+    const orderPayload = {
       symbol,
-      side: signal.action,
-      quantity,
-      orderType: 'MARKET', // Use market orders for immediate execution
-      timeInForce: 'DAY',
-      clientOrderId: `ai_auto_${symbol}_${Date.now()}`,
-      source: 'AI_AUTO_EXECUTOR',
-      strategy: 'ML_CONFIDENCE_BASED',
-      notes: `Auto-execution: ${decision.reason}`
+      qty: quantity,
+      side: signal.action.toLowerCase(), // buy/sell
+      type: 'market', // Use market orders for immediate execution
+      time_in_force: 'day',
+      client_order_id: `ai_auto_${symbol}_${Date.now()}`
     }
 
-    const result = await this.alpacaClient.createOrder(order)
+    console.log(`🚀 Executing order via direct API:`, orderPayload)
+
+    // Direct fetch to our orders API endpoint
+    const response = await fetch('/api/alpaca/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(orderPayload)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(`Order execution failed: ${errorData.error || response.statusText}`)
+    }
+
+    const result = await response.json()
     const executionTime = Date.now() - startTime
 
+    if (!result.success) {
+      throw new Error(`Order execution failed: ${result.error || 'Unknown error'}`)
+    }
+
+    const order = result.order
+
     // Calculate slippage (if order filled)
-    const slippage = result.filledPrice ? Math.abs(result.filledPrice - currentPrice) / currentPrice : 0
+    const filledPrice = order.filledPrice || order.filled_avg_price || currentPrice
+    const slippage = Math.abs(filledPrice - currentPrice) / currentPrice
 
     // Create execution record
     const execution: TradeExecution = {
       symbol,
       action: signal.action,
       quantity,
-      price: result.filledPrice || currentPrice,
-      orderId: result.id,
+      price: filledPrice,
+      orderId: order.orderId || order.id,
       timestamp: new Date(),
       confidence: signal.confidence,
       aiScore: 0, // Will be updated by caller
@@ -360,11 +377,11 @@ export class AutoTradeExecutor {
     this.dailyTradeCount++
 
     // Set stop loss and take profit
-    if (result.status === 'FILLED' || result.status === 'PARTIALLY_FILLED') {
+    if (order.status === 'filled' || order.status === 'partially_filled') {
       await this.setAutomatedStopLossAndTakeProfit(execution, signal, marketData)
     }
 
-    console.log(`✅ AUTO-EXECUTED: ${signal.action} ${quantity} ${symbol} @ $${(result.filledPrice || currentPrice).toFixed(2)}`)
+    console.log(`✅ AUTO-EXECUTED: ${signal.action} ${quantity} ${symbol} @ $${filledPrice.toFixed(2)}`)
     console.log(`   Execution Time: ${executionTime}ms, Slippage: ${(slippage * 100).toFixed(3)}%`)
 
     return execution
@@ -393,27 +410,37 @@ export class AutoTradeExecutor {
 
     try {
       // Stop Loss Order
-      await this.alpacaClient.createOrder({
+      const stopLossPayload = {
         symbol: execution.symbol,
-        side: execution.action === 'BUY' ? 'SELL' : 'BUY',
-        quantity: execution.quantity,
-        orderType: 'STOP',
-        stopPrice: stopLoss,
-        timeInForce: 'GTC',
-        clientOrderId: `ai_sl_${execution.symbol}_${Date.now()}`,
-        source: 'AI_AUTO_EXECUTOR'
+        qty: execution.quantity,
+        side: execution.action === 'BUY' ? 'sell' : 'buy',
+        type: 'stop',
+        stop_price: stopLoss,
+        time_in_force: 'gtc',
+        client_order_id: `ai_sl_${execution.symbol}_${Date.now()}`
+      }
+
+      const stopLossResponse = await fetch('/api/alpaca/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stopLossPayload)
       })
 
       // Take Profit Order
-      await this.alpacaClient.createOrder({
+      const takeProfitPayload = {
         symbol: execution.symbol,
-        side: execution.action === 'BUY' ? 'SELL' : 'BUY',
-        quantity: execution.quantity,
-        orderType: 'LIMIT',
-        price: takeProfit,
-        timeInForce: 'GTC',
-        clientOrderId: `ai_tp_${execution.symbol}_${Date.now()}`,
-        source: 'AI_AUTO_EXECUTOR'
+        qty: execution.quantity,
+        side: execution.action === 'BUY' ? 'sell' : 'buy',
+        type: 'limit',
+        limit_price: takeProfit,
+        time_in_force: 'gtc',
+        client_order_id: `ai_tp_${execution.symbol}_${Date.now()}`
+      }
+
+      const takeProfitResponse = await fetch('/api/alpaca/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(takeProfitPayload)
       })
 
       console.log(`🛡️ Auto stop-loss: $${stopLoss.toFixed(2)}, take-profit: $${takeProfit.toFixed(2)}`)
@@ -542,11 +569,20 @@ export class AutoTradeExecutor {
     // Check for completed trades to track exits
     for (const [orderId, tradeInfo] of this.openTrades.entries()) {
       try {
-        const order = await this.alpacaClient.getOrder(orderId)
+        // Fetch orders from our direct API to check status
+        const response = await fetch('/api/alpaca/orders')
+        if (!response.ok) continue
 
-        if (order.status === 'FILLED' || order.status === 'CANCELED') {
+        const ordersData = await response.json()
+        if (!ordersData.success) continue
+
+        // Find our specific order
+        const order = ordersData.orders.find((o: any) => o.orderId === orderId || o.id === orderId)
+        if (!order) continue
+
+        if (order.status === 'filled' || order.status === 'canceled' || order.status === 'FILLED' || order.status === 'CANCELED') {
           // Calculate PnL
-          const exitPrice = order.filledPrice || order.averageFillPrice
+          const exitPrice = order.filledPrice || order.filled_avg_price || order.averageFillPrice
           const entryPrice = tradeInfo.entryPrice
 
           let realizedPnL = 0

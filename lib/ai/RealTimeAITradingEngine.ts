@@ -74,7 +74,7 @@ export class RealTimeAITradingEngine {
 
     // Initialize auto trade executor with default config if not provided
     const executionConfig = config.autoExecution || this.getDefaultExecutionConfig()
-    this.autoTradeExecutor = new AutoTradeExecutor(alpacaClient, executionConfig)
+    this.autoTradeExecutor = new AutoTradeExecutor(executionConfig)
 
     this.config = config
   }
@@ -201,19 +201,37 @@ export class RealTimeAITradingEngine {
       this.activeWatchlist = [...this.config.watchlist]
       console.log(`✅ Using provided watchlist: ${this.activeWatchlist.length} symbols`)
     } else {
-      // Generate optimal watchlist using symbol manager
-      const criteria = {
-        size: this.config.watchlistSize || 50,
-        includeETFs: this.config.watchlistCriteria?.includeETFs ?? true,
-        includeCrypto: this.config.watchlistCriteria?.includeCrypto ?? true,
-        riskLevel: this.config.watchlistCriteria?.riskLevel || 'medium'
-      }
+      // Check if user wants ALL symbols or limited watchlist
+      const watchlistSize = this.config.watchlistSize || 50
 
-      this.activeWatchlist = await this.symbolManager.generateOptimalWatchlist(criteria)
-      console.log(`✅ Generated optimal watchlist: ${this.activeWatchlist.length} symbols`)
-      console.log(`   Risk Level: ${criteria.riskLevel}`)
-      console.log(`   ETFs: ${criteria.includeETFs ? 'Yes' : 'No'}`)
-      console.log(`   Crypto: ${criteria.includeCrypto ? 'Yes' : 'No'}`)
+      if (watchlistSize === -1 || watchlistSize > 1000) {
+        // Get ALL available symbols from Alpaca
+        console.log('🌐 Fetching ALL available symbols for analysis...')
+        const options = {
+          includeETFs: this.config.watchlistCriteria?.includeETFs ?? true,
+          includeCrypto: this.config.watchlistCriteria?.includeCrypto ?? true
+        }
+
+        this.activeWatchlist = await this.symbolManager.getAllAvailableSymbols(options)
+        console.log(`✅ Loaded ALL available symbols: ${this.activeWatchlist.length} symbols`)
+        console.log(`   ETFs: ${options.includeETFs ? 'Included' : 'Excluded'}`)
+        console.log(`   Crypto: ${options.includeCrypto ? 'Included' : 'Excluded'}`)
+        console.log(`🎯 AI will analyze the ENTIRE market!`)
+      } else {
+        // Generate optimal limited watchlist
+        const criteria = {
+          size: watchlistSize,
+          includeETFs: this.config.watchlistCriteria?.includeETFs ?? true,
+          includeCrypto: this.config.watchlistCriteria?.includeCrypto ?? true,
+          riskLevel: this.config.watchlistCriteria?.riskLevel || 'medium'
+        }
+
+        this.activeWatchlist = await this.symbolManager.generateOptimalWatchlist(criteria)
+        console.log(`✅ Generated optimal watchlist: ${this.activeWatchlist.length} symbols`)
+        console.log(`   Risk Level: ${criteria.riskLevel}`)
+        console.log(`   ETFs: ${criteria.includeETFs ? 'Yes' : 'No'}`)
+        console.log(`   Crypto: ${criteria.includeCrypto ? 'Yes' : 'No'}`)
+      }
     }
 
     // Log sample of watchlist
@@ -221,22 +239,64 @@ export class RealTimeAITradingEngine {
   }
 
   private async loadInitialMarketData(): Promise<void> {
-    console.log('📈 Loading initial market data...')
+    console.log(`📈 Loading initial market data for ${this.activeWatchlist.length} symbols...`)
 
-    for (const symbol of this.activeWatchlist) {
-      try {
-        // Get 100 bars of historical data (about 2-3 weeks of daily data)
-        const marketData = await this.fetchMarketData(symbol, '1Day', 100)
-        this.marketDataCache.set(symbol, marketData)
+    // For large watchlists, load data for top symbols only initially
+    const initialLoadLimit = this.activeWatchlist.length > 100 ? 100 : this.activeWatchlist.length
+    const symbolsToLoad = this.activeWatchlist.slice(0, initialLoadLimit)
 
-        console.log(`✓ Loaded ${marketData.length} data points for ${symbol}`)
+    if (initialLoadLimit < this.activeWatchlist.length) {
+      console.log(`🎯 Loading initial data for top ${initialLoadLimit} symbols (${this.activeWatchlist.length - initialLoadLimit} remaining will load on-demand)`)
+    }
 
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 100))
+    // Process in batches to avoid overwhelming the API
+    const batchSize = 10
+    let loadedCount = 0
+    let errorCount = 0
 
-      } catch (error) {
-        console.error(`Failed to load data for ${symbol}:`, error.message)
+    for (let i = 0; i < symbolsToLoad.length; i += batchSize) {
+      const batch = symbolsToLoad.slice(i, i + batchSize)
+      const batchNumber = Math.floor(i / batchSize) + 1
+      const totalBatches = Math.ceil(symbolsToLoad.length / batchSize)
+
+      console.log(`📦 Loading batch ${batchNumber}/${totalBatches} (${batch.length} symbols)`)
+
+      // Process batch in parallel with rate limiting
+      const batchPromises = batch.map(async (symbol, index) => {
+        try {
+          // Staggered delay within batch
+          await new Promise(resolve => setTimeout(resolve, index * 200))
+
+          // Get 100 bars of historical data (about 2-3 weeks of daily data)
+          const marketData = await this.fetchMarketData(symbol, '1Day', 100)
+          this.marketDataCache.set(symbol, marketData)
+
+          loadedCount++
+          if (loadedCount % 10 === 0 || loadedCount === symbolsToLoad.length) {
+            console.log(`✓ Loaded data for ${loadedCount}/${symbolsToLoad.length} symbols`)
+          }
+
+        } catch (error) {
+          errorCount++
+          // Only log first few errors to avoid spam
+          if (errorCount <= 3) {
+            console.error(`Failed to load data for ${symbol}:`, error.message)
+          }
+        }
+      })
+
+      await Promise.all(batchPromises)
+
+      // Delay between batches
+      if (i + batchSize < symbolsToLoad.length) {
+        await new Promise(resolve => setTimeout(resolve, 2000)) // 2 second delay between batches
       }
+    }
+
+    console.log(`✅ Initial market data loading complete: ${loadedCount} loaded, ${errorCount} errors`)
+
+    if (this.activeWatchlist.length > initialLoadLimit) {
+      console.log(`⏳ Remaining ${this.activeWatchlist.length - initialLoadLimit} symbols will load on-demand during trading`)
     }
   }
 
@@ -282,12 +342,13 @@ export class RealTimeAITradingEngine {
   }
 
   private startMarketDataUpdates(): void {
-    // Update market data every 1 minute during market hours
+    // Update market data every 5 minutes (reduced frequency for large watchlists)
     const dataInterval = setInterval(async () => {
-      if (!this.isRunning || !this.isMarketOpen()) return
+      if (!this.isRunning) return
 
+      // updateMarketData now handles market hours check internally
       await this.updateMarketData()
-    }, 60 * 1000) // 1 minute
+    }, 5 * 60 * 1000) // 5 minutes (reduced from 1 minute)
 
     this.tradingIntervals.set('data', dataInterval)
   }
@@ -513,26 +574,67 @@ export class RealTimeAITradingEngine {
   }
 
   private async updateMarketData(): Promise<void> {
-    for (const symbol of this.activeWatchlist) {
-      try {
-        // Get latest bar
-        const latestBars = await this.fetchMarketData(symbol, '1Min', 1)
+    // Skip if market is closed
+    if (!this.isMarketOpen()) {
+      console.log('📊 Skipping market data update - market is closed')
+      return
+    }
 
-        if (latestBars.length > 0) {
-          const cachedData = this.marketDataCache.get(symbol) || []
+    console.log(`📊 Updating market data for ${this.activeWatchlist.length} symbols...`)
 
-          // Add new data and keep last 200 points
-          cachedData.push(...latestBars)
-          if (cachedData.length > 200) {
-            cachedData.splice(0, cachedData.length - 200)
+    // Process symbols in smaller batches to avoid overwhelming the API
+    const batchSize = 10
+    const totalBatches = Math.ceil(this.activeWatchlist.length / batchSize)
+    let updatedCount = 0
+    let errorCount = 0
+
+    for (let i = 0; i < this.activeWatchlist.length; i += batchSize) {
+      const batch = this.activeWatchlist.slice(i, i + batchSize)
+      const batchNumber = Math.floor(i / batchSize) + 1
+
+      console.log(`📦 Processing batch ${batchNumber}/${totalBatches} (${batch.length} symbols)`)
+
+      // Process batch with delay to avoid rate limiting
+      const batchPromises = batch.map(async (symbol, index) => {
+        try {
+          // Small staggered delay within batch
+          await new Promise(resolve => setTimeout(resolve, index * 50))
+
+          // Get latest bar
+          const latestBars = await this.fetchMarketData(symbol, '1Min', 1)
+
+          if (latestBars.length > 0) {
+            const cachedData = this.marketDataCache.get(symbol) || []
+
+            // Add new data and keep last 200 points
+            cachedData.push(...latestBars)
+            if (cachedData.length > 200) {
+              cachedData.splice(0, cachedData.length - 200)
+            }
+
+            this.marketDataCache.set(symbol, cachedData)
+            updatedCount++
           }
-
-          this.marketDataCache.set(symbol, cachedData)
+        } catch (error) {
+          errorCount++
+          // Only log first few errors to avoid spam
+          if (errorCount <= 5) {
+            console.error(`Error updating ${symbol}:`, error.message)
+          } else if (errorCount === 6) {
+            console.error(`... and ${this.activeWatchlist.length - i - index} more errors (suppressed)`)
+          }
         }
-      } catch (error) {
-        console.error(`Failed to update data for ${symbol}:`, error.message)
+      })
+
+      await Promise.all(batchPromises)
+
+      // Delay between batches to avoid rate limiting
+      if (i + batchSize < this.activeWatchlist.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second between batches
       }
     }
+
+    console.log(`✅ Market data update complete: ${updatedCount} updated, ${errorCount} errors`)
   }
 
   private async getCurrentPortfolio(): Promise<Portfolio> {
@@ -724,12 +826,26 @@ export class RealTimeAITradingEngine {
 
   // Utility methods
   private isMarketOpen(): boolean {
+    // Get current time in Eastern Time (market timezone)
     const now = new Date()
-    const hour = now.getHours()
-    const day = now.getDay()
+    const etTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}))
+    const hour = etTime.getHours()
+    const minute = etTime.getMinutes()
+    const day = etTime.getDay()
 
     // US market hours: 9:30 AM - 4:00 PM ET, Monday-Friday
-    return day >= 1 && day <= 5 && hour >= 9 && hour < 16
+    const isWeekday = day >= 1 && day <= 5
+    const isAfterOpen = hour > 9 || (hour === 9 && minute >= 30)
+    const isBeforeClose = hour < 16
+
+    const isOpen = isWeekday && isAfterOpen && isBeforeClose
+
+    if (!isOpen) {
+      const timeStr = etTime.toLocaleTimeString('en-US', { timeZone: 'America/New_York' })
+      console.log(`⏰ Market is closed (ET: ${timeStr}). Skipping market data updates.`)
+    }
+
+    return isOpen
   }
 
   private calculateAIScore(prediction: any, volatility: number, momentum: number, riskReward: number): number {
