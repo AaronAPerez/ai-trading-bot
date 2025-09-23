@@ -316,26 +316,37 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
+    // Narrow error type to access properties safely
+    let err = error as Error
+    // Fallback for non-Error objects
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+      err = error as { message: string; stack?: string; name?: string }
+    } else if (typeof error === 'string') {
+      err = { message: error, name: 'Error' } as Error
+    } else {
+      err = { message: 'Unknown error', name: 'Error' } as Error
+    }
+
     console.error('❌ AI Trading API Error:', error)
-    console.error('❌ Error stack:', error.stack)
-    console.error('❌ Error name:', error.name)
-    console.error('❌ Error message:', error.message)
+    console.error('❌ Error stack:', (err as any).stack)
+    console.error('❌ Error name:', (err as any).name)
+    console.error('❌ Error message:', (err as any).message)
 
     // Enhanced error reporting
     let errorMessage = 'AI Trading operation failed'
-    let errorDetails = error.message || 'Unknown error'
+    let errorDetails = (err as any).message || 'Unknown error'
 
     // Check for specific error types
-    if (error.message?.includes('Alpaca')) {
+    if ((err as any).message?.includes('Alpaca')) {
       errorMessage = 'Alpaca API connection failed'
       errorDetails = 'Check your API keys and network connection'
-    } else if (error.message?.includes('credentials')) {
+    } else if ((err as any).message?.includes('credentials')) {
       errorMessage = 'Authentication failed'
       errorDetails = 'Invalid or missing Alpaca API credentials'
-    } else if (error.message?.includes('RealTimeAITradingEngine')) {
+    } else if ((err as any).message?.includes('RealTimeAITradingEngine')) {
       errorMessage = 'AI Trading Engine initialization failed'
       errorDetails = 'Failed to create or start the AI trading system'
-    } else if (error.message?.includes('import') || error.message?.includes('module')) {
+    } else if ((err as any).message?.includes('import') || (err as any).message?.includes('module')) {
       errorMessage = 'Module loading error'
       errorDetails = 'Failed to load required AI trading modules'
     }
@@ -343,14 +354,14 @@ export async function POST(request: NextRequest) {
     console.error('🚨 Sending error response:', {
       errorMessage,
       errorDetails,
-      originalError: error.message
+      originalError: (err as any).message
     })
 
     return NextResponse.json(
       {
         error: errorMessage,
         details: errorDetails,
-        originalError: error.message,
+        originalError: (err as any).message,
         timestamp: new Date().toISOString(),
         environment: {
           hasApiKey: !!process.env.APCA_API_KEY_ID,
