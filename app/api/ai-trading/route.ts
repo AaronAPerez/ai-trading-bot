@@ -118,7 +118,14 @@ export async function POST(request: NextRequest) {
 
         console.log('🧠 Creating RealTimeAITradingEngine...')
         try {
-          aiTradingEngine = new RealTimeAITradingEngine(alpacaClient, config)
+          // Add timeout for AI engine creation
+          const createEnginePromise = Promise.resolve(new RealTimeAITradingEngine(alpacaClient, config))
+          aiTradingEngine = await Promise.race([
+            createEnginePromise,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('AI Trading Engine creation timeout')), 10000)
+            )
+          ]) as RealTimeAITradingEngine
           console.log('✅ AI Trading Engine instance created')
         } catch (engineError) {
           console.error('❌ Failed to create AI Trading Engine:', engineError)
@@ -127,7 +134,13 @@ export async function POST(request: NextRequest) {
 
         console.log('🎬 Starting AI Trading Engine...')
         try {
-          await aiTradingEngine.startAITrading()
+          // Add timeout for AI engine startup
+          await Promise.race([
+            aiTradingEngine.startAITrading(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('AI Trading Engine startup timeout')), 15000)
+            )
+          ])
           console.log('🎉 AI Trading Engine started successfully!')
         } catch (startError) {
           console.error('❌ Failed to start AI Trading Engine:', startError)
@@ -281,10 +294,15 @@ export async function POST(request: NextRequest) {
       case 'test':
         console.log('🧪 Testing AI Trading API...')
 
-        // Test basic functionality
+        // Test basic functionality without creating AI engine
         try {
+          console.log('🔍 Testing Alpaca client creation...')
           const testClient = getAlpacaClient()
-          console.log('✅ Alpaca client test passed')
+          console.log('✅ Alpaca client created successfully')
+
+          console.log('🔍 Testing Alpaca connection...')
+          const account = await testClient.getAccount()
+          console.log('✅ Alpaca connection test passed')
 
           return NextResponse.json({
             success: true,
@@ -294,6 +312,11 @@ export async function POST(request: NextRequest) {
               hasApiSecret: !!process.env.APCA_API_SECRET_KEY,
               tradingMode: process.env.NEXT_PUBLIC_TRADING_MODE,
               keyStart: process.env.APCA_API_KEY_ID?.substring(0, 4) + '...',
+            },
+            alpacaTest: {
+              connected: true,
+              accountType: account.accountType,
+              balance: account.totalBalance
             },
             timestamp: new Date().toISOString()
           })

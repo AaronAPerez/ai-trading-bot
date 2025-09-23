@@ -619,12 +619,50 @@ export default function AITradingDashboard() {
     }
   }, [enhancedAccount, executeOrder])
 
-  const toggleBot = useCallback(() => {
-    setBotConfig(prev => ({ ...prev, enabled: !prev.enabled }))
-    const newStatus = !botConfig.enabled
-    setAlertMessage(`AI Trading Bot ${newStatus ? 'enabled' : 'disabled'} with Alpaca integration`)
-    setTimeout(() => setAlertMessage(null), 3000)
-  }, [botConfig.enabled])
+  const toggleBot = useCallback(async () => {
+    try {
+      const newStatus = !botConfig.enabled
+      const action = newStatus ? 'start' : 'stop'
+
+      setAlertMessage(`${newStatus ? 'Starting' : 'Stopping'} AI Trading Bot...`)
+
+      const response = await fetch('/api/ai-trading', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action,
+          config: {
+            minConfidenceThreshold: botConfig.minimumConfidence / 100,
+            autoExecution: {
+              autoExecuteEnabled: true,
+              confidenceThresholds: {
+                minimum: 0.75,
+                conservative: 0.80,
+                aggressive: 0.85,
+                maximum: 0.95
+              }
+            }
+          }
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setBotConfig(prev => ({ ...prev, enabled: newStatus }))
+        setAlertMessage(`AI Trading Bot ${newStatus ? 'started' : 'stopped'} successfully`)
+      } else {
+        throw new Error(result.details || result.error || 'Unknown error')
+      }
+    } catch (error) {
+      console.error('Failed to toggle AI Trading Bot:', error)
+      setAlertMessage(`Failed to ${botConfig.enabled ? 'stop' : 'start'} AI Trading Bot: ${error.message}`)
+    }
+
+    setTimeout(() => setAlertMessage(null), 5000)
+  }, [botConfig.enabled, botConfig.minimumConfidence])
 
   const refreshAIData = useCallback(() => {
     refreshData() // Refresh real market data first

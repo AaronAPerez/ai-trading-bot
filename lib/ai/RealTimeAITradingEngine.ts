@@ -303,21 +303,47 @@ export class RealTimeAITradingEngine {
   private async fetchMarketData(symbol: string, timeframe: string, limit: number): Promise<MarketData[]> {
     try {
       // Use Alpaca's getBarsV2 method for historical data
-      const barsData = await this.alpacaClient.getBarsV2(symbol, {
+      const barsResponse = await this.alpacaClient.getBarsV2(symbol, {
         timeframe,
         limit,
         adjustment: 'raw'
       })
 
+      console.log(`📊 Raw bars response for ${symbol}:`, JSON.stringify(barsResponse, null, 2).substring(0, 500))
+
+      // Handle different response formats from Alpaca API
+      let barsData: any[] = []
+
+      if (Array.isArray(barsResponse)) {
+        barsData = barsResponse
+      } else if (barsResponse && Array.isArray(barsResponse.bars)) {
+        barsData = barsResponse.bars
+      } else if (barsResponse && barsResponse[symbol] && Array.isArray(barsResponse[symbol])) {
+        barsData = barsResponse[symbol]
+      } else if (barsResponse && typeof barsResponse === 'object') {
+        // Check if it's an iterable object
+        try {
+          barsData = Array.from(barsResponse)
+        } catch {
+          console.warn(`⚠️ Unexpected bars response format for ${symbol}:`, typeof barsResponse)
+          return []
+        }
+      }
+
+      if (!Array.isArray(barsData) || barsData.length === 0) {
+        console.warn(`⚠️ No valid bars data for ${symbol}`)
+        return []
+      }
+
       return barsData.map((bar: any) => ({
         symbol,
-        timestamp: new Date(bar.t),
+        timestamp: new Date(bar.t || bar.timestamp),
         timeframe,
-        open: bar.o,
-        high: bar.h,
-        low: bar.l,
-        close: bar.c,
-        volume: bar.v,
+        open: bar.o || bar.open || 0,
+        high: bar.h || bar.high || 0,
+        low: bar.l || bar.low || 0,
+        close: bar.c || bar.close || 0,
+        volume: bar.v || bar.volume || 0,
         source: 'alpaca'
       }))
     } catch (error) {

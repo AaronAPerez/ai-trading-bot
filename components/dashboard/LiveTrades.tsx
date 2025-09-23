@@ -3,8 +3,6 @@
 import React, { useState } from 'react'
 import { 
   BoltIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
   XMarkIcon 
 } from '@heroicons/react/24/outline'
 
