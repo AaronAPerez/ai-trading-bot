@@ -10,10 +10,28 @@ const DEFAULT_CONFIG = {
   riskPerTrade: 0.02, // 2% risk per trade
   minConfidenceThreshold: 0.75, // 75% minimum confidence
   rebalanceFrequency: 4, // Rebalance every 4 hours
-  watchlistSize: -1, // -1 = ALL available symbols, or set to specific number to limit
+  watchlistSize: 50, // Limit to 50 most popular symbols for better performance
+  watchlist: [
+    // Major Tech Stocks
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'NFLX',
+    // Blue Chip Stocks
+    'JPM', 'JNJ', 'V', 'PG', 'UNH', 'MA', 'HD', 'BAC', 'DIS', 'ADBE',
+    // Popular Growth Stocks
+    'CRM', 'UBER', 'LYFT', 'SNAP', 'TWTR', 'ZOOM', 'ROKU', 'SQ', 'PYPL', 'SHOP',
+    // Financial & Banking
+    'GS', 'WFC', 'C', 'MS', 'AXP',
+    // Popular ETFs
+    'SPY', 'QQQ', 'IWM', 'GLD', 'TLT',
+    // Energy & Utilities
+    'XOM', 'CVX', 'COP', 'SLB',
+    // Healthcare & Pharma
+    'PFE', 'ABBV', 'TMO', 'ABT', 'LLY',
+    // Consumer & Retail
+    'KO', 'PEP', 'WMT', 'COST', 'NKE'
+  ], // Predefined watchlist of actively traded symbols
   watchlistCriteria: {
-    includeETFs: true,
-    includeCrypto: true,
+    includeETFs: false, // Disable auto-fetch to use predefined list
+    includeCrypto: false, // Disable crypto for paper trading compatibility
     riskLevel: 'medium' as 'low' | 'medium' | 'high',
     marketCap: ['mega', 'large'] as ('mega' | 'large' | 'mid' | 'small')[],
     categories: ['growth_tech', 'fintech', 'clean_energy']
@@ -134,11 +152,11 @@ export async function POST(request: NextRequest) {
 
         console.log('🎬 Starting AI Trading Engine...')
         try {
-          // Add timeout for AI engine startup
+          // Add timeout for AI engine startup (increased timeout for market data loading)
           await Promise.race([
             aiTradingEngine.startAITrading(),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('AI Trading Engine startup timeout')), 15000)
+              setTimeout(() => reject(new Error('AI Trading Engine startup timeout')), 30000)
             )
           ])
           console.log('🎉 AI Trading Engine started successfully!')
