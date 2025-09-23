@@ -1,5 +1,5 @@
 import React from "react";
-import AITradingDashboard from "@/components/AITradingDashboard";
+import AITradingDashboard from "@/components/dashboard/AITradingDashboard";
 
 
 export default function Home() {
