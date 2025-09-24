@@ -25,7 +25,9 @@ import { LiveTrades } from './LiveTrades'
 import { PerformanceAnalytics } from './PerformanceAnalytics'
 import AITradingControl from './AITradingControl'
 import AILearningDashboard from './AILearningDashboard'
+import AIBotActivityMonitor from './AIBotActivityMonitor'
 import { MarketClock } from './MarketClock'
+import { BotIcon, Brain, BrainCircuit, DollarSignIcon } from 'lucide-react'
 
 // Enhanced interfaces for better AI integration
 interface EnhancedAccount {
@@ -196,8 +198,8 @@ function AIRecommendationCard({ recommendation, onExecute }: {
               {recommendation.safetyChecks.passedRiskCheck ? 'SAFE' : 'RISKY'}
             </span>
             <div className="flex items-center gap-1">
-              <CpuChipIcon className="w-4 h-4 text-purple-400" />
-              <span className="text-xs text-purple-400">AI Enhanced</span>
+              <CpuChipIcon className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs text-indigo-400">AI Enhanced</span>
             </div>
           </div>
 
@@ -231,9 +233,9 @@ function AIRecommendationCard({ recommendation, onExecute }: {
             <p className="text-sm text-gray-300 mb-3 leading-relaxed">{recommendation.reasoning}</p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-              <div className="bg-purple-900/20 border border-purple-500/30 rounded p-3">
-                <div className="text-xs text-purple-400 mb-1">AI Insights</div>
-                <div className="text-xs text-purple-200 space-y-1">
+              <div className="bg-indigo-900/20 border border-indigo-500/30 rounded p-3">
+                <div className="text-xs text-indigo-400 mb-1">AI Insights</div>
+                <div className="text-xs text-indigo-200 space-y-1">
                   <div>Market: {recommendation.aiInsights.marketSentiment}</div>
                   <div>Pattern: {recommendation.aiInsights.technicalPattern}</div>
                   <div>News: {recommendation.aiInsights.newsImpact}</div>
@@ -290,7 +292,7 @@ function AIRecommendationCard({ recommendation, onExecute }: {
           <div className="text-xs text-center text-gray-400">
             Expires: {isClient ? recommendation.expiresAt.toLocaleTimeString() : '--:--:-- --'}
           </div>
-          <div className="text-xs text-center text-purple-400">
+          <div className="text-xs text-center text-indigo-400">
             Strategy: {recommendation.strategyBasis}
           </div>
         </div>
@@ -744,10 +746,10 @@ export default function AITradingDashboard() {
 
       {/* Alert System */}
       {alertMessage && (
-        <div className="fixed top-4 left-4 right-4 sm:right-4 sm:left-auto sm:max-w-md z-50 bg-gray-800 border border-purple-500 rounded-lg p-4 shadow-lg">
+        <div className="fixed top-4 left-4 right-4 sm:right-4 sm:left-auto sm:max-w-md z-50 bg-gray-800 border border-indigo-500 rounded-lg p-4 shadow-lg">
           <div className="flex items-center gap-2">
-            <CpuChipIcon className="w-5 h-5 text-purple-400" />
-            <p className="text-purple-300">{alertMessage}</p>
+            <CpuChipIcon className="w-5 h-5 text-indigo-400" />
+            <p className="text-indigo-300">{alertMessage}</p>
           </div>
         </div>
       )}
@@ -765,13 +767,13 @@ export default function AITradingDashboard() {
                 {isMobileMenuOpen ? <XMarkIcon className="w-6 h-6" /> : <Bars3Icon className="w-6 h-6" />}
               </button>
               <h1 className="text-lg font-bold flex items-center gap-2">
-                <CpuChipIcon className="w-5 h-5 text-purple-400" />
+                <CpuChipIcon className="w-5 h-5 text-indigo-400" />
                 AI Trading
               </h1>
             </div>
 
             <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${botConfig.enabled ? 'bg-purple-400 animate-pulse' : 'bg-gray-400'}`}></div>
+              <div className={`w-2 h-2 rounded-full ${botConfig.enabled ? 'bg-indigo-400 animate-pulse' : 'bg-gray-400'}`}></div>
               <span className="text-xs text-gray-400">{aiStats.aiTrades} AI trades</span>
             </div>
           </div>
@@ -786,7 +788,7 @@ export default function AITradingDashboard() {
           {/* Enhanced Sidebar Header */}
           <div className="p-6 border-b border-gray-700">
             <h1 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <CpuChipIcon className="w-6 h-6 text-purple-400" />
+              <CpuChipIcon className="w-6 h-6 text-indigo-400" />
               AI Trading Platform
             </h1>
 
@@ -804,10 +806,10 @@ export default function AITradingDashboard() {
             )}
 
             {/* Enhanced Balance Display with AI Insights */}
-            <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-lg p-4 mb-4">
+            <div className="bg-gradient-to-r from-indigo-900/30 to-blue-900/30 border border-indigo-500/30 rounded-lg p-4 mb-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-purple-300">AI-Enhanced Balance</span>
-                <span className="text-xs text-purple-400">{enhancedAccount?.accountType || 'N/A'}</span>
+                <span className="text-sm text-indigo-300">Total Balance</span>
+                <span className="text-xs text-indigo-400">{enhancedAccount?.accountType || 'N/A'}</span>
               </div>
               <div className="text-2xl font-bold text-white mb-1">
                 {enhancedAccount ? formatCurrency(enhancedAccount.totalBalance) : '$0.00'}
@@ -816,39 +818,39 @@ export default function AITradingDashboard() {
                 {enhancedAccount?.totalPnL ? formatCurrency(enhancedAccount.totalPnL) : '$0.00'}
                 ({enhancedAccount?.totalReturn ? formatPercent(enhancedAccount.totalReturn * 100) : '0.00%'})
               </div>
-              <div className="text-xs text-purple-300 mt-2">
+              {/* <div className="text-xs text-indigo-300 mt-2">
                 {aiStats.totalRecommendations} AI signals generated
-              </div>
+              </div> */}
             </div>
 
             {/* AI Bot Status */}
-            <div className={`bg-gray-700 rounded-lg p-4 mb-4 border-l-4 ${
-              botConfig.enabled ? 'border-purple-500' : 'border-gray-600'
+            {/* <div className={`bg-gray-700 rounded-lg p-4 mb-4 border-l-4 ${
+              botConfig.enabled ? 'border-indigo-500' : 'border-gray-600'
             }`}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-300">AI Bot Status</span>
                 <div className={`w-2 h-2 rounded-full ${
-                  botConfig.enabled ? 'bg-purple-400 animate-pulse' : 'bg-gray-400'
+                  botConfig.enabled ? 'bg-indigo-400 animate-pulse' : 'bg-gray-400'
                 }`}></div>
               </div>
-              <div className={`font-semibold ${botConfig.enabled ? 'text-purple-400' : 'text-gray-400'}`}>
+              <div className={`font-semibold ${botConfig.enabled ? 'text-indigo-400' : 'text-gray-400'}`}>
                 {botConfig.enabled ? `Active (${botConfig.mode})` : 'Inactive'}
               </div>
               {botConfig.enabled && (
-                <div className="text-xs text-purple-300 mt-1">
+                <div className="text-xs text-indigo-300 mt-1">
                   Min Confidence: {botConfig.minimumConfidence}%
                 </div>
               )}
-            </div>
+            </div> */}
 
             {/* Market Clock */}
-            <MarketClock variant="sidebar" showDetails={false} />
+            <MarketClock variant="sidebar" showDetails={true} />
 
             {/* Enhanced Quick AI Stats */}
-            <div className="grid grid-cols-2 gap-2 mt-4">
+            {/* <div className="grid grid-cols-2 gap-2 mt-4">
               <div className="bg-gray-700 rounded p-2">
                 <div className="text-xs text-gray-400">AI Recommendations</div>
-                <div className="font-semibold text-purple-400">{aiStats.totalRecommendations}</div>
+                <div className="font-semibold text-indigo-400">{aiStats.totalRecommendations}</div>
               </div>
               <div className="bg-gray-700 rounded p-2">
                 <div className="text-xs text-gray-400">High Confidence</div>
@@ -862,7 +864,7 @@ export default function AITradingDashboard() {
                 <div className="text-xs text-gray-400">Positions</div>
                 <div className="font-semibold text-white">{positions.length}</div>
               </div>
-            </div>
+            </div> */}
           </div>
 
           {/* Navigation Menu */}
@@ -876,7 +878,7 @@ export default function AITradingDashboard() {
                 }}
                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors ${
                   activeTab === tab.id
-                    ? 'bg-purple-600 text-white'
+                    ? 'bg-indigo-600 text-white'
                     : 'text-gray-300 hover:text-white hover:bg-gray-700'
                 }`}
               >
@@ -923,22 +925,22 @@ export default function AITradingDashboard() {
         <main className="flex-1 flex flex-col overflow-hidden">
 
           {/* Enhanced Desktop Header */}
-          <header className="hidden lg:block bg-gray-800 border-b border-gray-700 p-6">
+          <header className="hidden lg:block bg-gray-800 border-b border-gray-700 px-6 py-4">
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-                  <CpuChipIcon className="w-8 h-8 text-purple-400" />
+                {/* <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+                  <CpuChipIcon className="w-8 h-8 text-indigo-400" />
                   AI-Powered Trading Dashboard
-                </h1>
+                </h1> */}
                 <div className="flex items-center gap-4 text-sm text-gray-400">
-                  <MarketClock variant="header" showDetails={false} />
+                  {/* <MarketClock variant="header" showDetails={false} /> */}
                   <span>•</span>
                   <span>Last AI Update: {isClient ? lastUpdate.toLocaleTimeString() : '--:--:-- --'}</span>
-                  <span>•</span>
-                  <span className={dataSource === 'alpaca' ? 'text-green-400' : dataSource === 'hybrid' ? 'text-blue-400' : 'text-yellow-400'}>
+                  {/* <span>•</span> */}
+                  {/* <span className={dataSource === 'alpaca' ? 'text-green-400' : dataSource === 'hybrid' ? 'text-blue-400' : 'text-yellow-400'}>
                     Data: {dataSource === 'alpaca' ? 'Alpaca' : dataSource === 'hybrid' ? 'Alpaca + Fallback' : 'Fallback APIs'}
                     {dataSource !== 'alpaca' && '⚠️'}
-                  </span>
+                  </span> */}
                 </div>
               </div>
 
@@ -946,23 +948,23 @@ export default function AITradingDashboard() {
               <div className="flex items-center gap-3">
                 <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border ${
                   botConfig.enabled
-                    ? 'bg-purple-900/30 text-purple-300 border-purple-500/30'
+                    ? 'bg-indigo-900/30 text-indigo-300 border-indigo-500/30'
                     : 'bg-gray-900/30 text-gray-400 border-gray-500/30'
                 }`}>
                   <CpuChipIcon className="w-4 h-4" />
                   AI Bot: {botConfig.enabled ? botConfig.mode : 'OFF'}
                 </div>
 
-                <div className="bg-gray-700 rounded-lg px-3 py-2 text-sm">
+                {/* <div className="bg-gray-700 rounded-lg px-3 py-2 text-sm">
                   <span className="text-gray-400">AI Signals: </span>
-                  <span className="text-purple-400 font-medium">{aiStats.totalRecommendations}</span>
-                </div>
+                  <span className="text-indigo-400 font-medium">{aiStats.totalRecommendations}</span>
+                </div> */}
 
 
                 <button
                   onClick={refreshAIData}
                   disabled={marketLoading}
-                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium transition-colors"
                 >
                   <ArrowPathIcon className={`w-4 h-4 ${marketLoading ? 'animate-spin' : ''}`} />
                   {marketLoading ? 'Refreshing...' : 'Refresh AI'}
@@ -973,11 +975,11 @@ export default function AITradingDashboard() {
                   disabled={!enhancedAccount?.isConnected}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     botConfig.enabled
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                       : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                   }`}
                 >
-                  <BoltIcon className="w-4 h-4" />
+                  <BotIcon className="w-5 h-5" />
                   {botConfig.enabled ? 'Disable Bot' : 'Enable Bot'}
                 </button>
               </div>
@@ -985,11 +987,11 @@ export default function AITradingDashboard() {
           </header>
 
           {/* Performance Summary Bar */}
-          <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border-b border-purple-500/30 px-6 py-3">
+          {/* <div className="bg-gradient-to-r from-indigo-900/20 to-blue-900/20 border-b border-indigo-500/30 px-6 py-3">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center text-sm">
               <div>
-                <div className="text-xs text-purple-300">AI Signals</div>
-                <div className="font-semibold text-purple-400">{aiStats.totalRecommendations}</div>
+                <div className="text-xs text-indigo-300">AI Signals</div>
+                <div className="font-semibold text-indigo-400">{aiStats.totalRecommendations}</div>
               </div>
               <div>
                 <div className="text-xs text-green-300">High Confidence</div>
@@ -1004,13 +1006,13 @@ export default function AITradingDashboard() {
                 <div className="font-semibold text-gray-400">{marketStatus}</div>
               </div>
               <div>
-                <div className="text-xs text-purple-300">Connection</div>
+                <div className="text-xs text-indigo-300">Connection</div>
                 <div className={`font-semibold ${enhancedAccount?.isConnected ? 'text-green-400' : 'text-red-400'}`}>
                   {enhancedAccount?.isConnected ? 'Connected' : 'Disconnected'}
                 </div>
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* Error Display */}
           {(marketError || tradingError) && (
@@ -1027,15 +1029,81 @@ export default function AITradingDashboard() {
 
           {/* Scrollable Content Area */}
           <div className="flex-1 overflow-y-auto">
-            <div className="p-4 lg:p-6 space-y-6 pb-20 lg:pb-6">
+            <div className="p-4 lg:p-2 space-y-6 pb-20 lg:pb-6">
 
               {/* Overview Tab */}
               {activeTab === 'overview' && (
                 <div className="space-y-6">
-                  {/* AI Performance Overview */}
-                  <section className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-500/30 rounded-lg p-6">
+                  {/* 🚨 SPOTLIGHT: AI TRADING FLOOR - Wall Street Experience */}
+                  <section className="relative bg-gradient-to-br from-green-900/30 via-blue-900/30 to-purple-900/30 border-2 border-green-500/50 rounded-xl shadow-2xl overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-green-400/5 via-blue-400/5 to-purple-400/5"></div>
+                    <div className="relative">
+                      {/* Wall Street Trading Floor Header */}
+                      <div className="bg-gradient-to-r from-green-800/50 to-blue-800/50 p-6 border-b border-green-500/30">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            {/* <div className="relative">
+                              <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-xl border-2 border-green-400/30">
+                                <DollarSignIcon className="w-8 h-8 text-white" />
+                              </div>
+                              {botConfig.enabled && (
+                                <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-400 rounded-full animate-pulse border-2 border-gray-900 shadow-lg"></div>
+                              )}
+                            </div> */}
+                            <div>
+                              <h2 className="text-3xl font-bold text-white flex items-center gap-3">
+                                🏢 AI TRADING FLOOR
+                                <span className={`px-4 py-2 rounded-full text-sm font-bold shadow-lg ${
+                                  botConfig.enabled
+                                    ? 'bg-green-500/20 text-green-300 border border-green-400/50 shadow-green-400/20'
+                                    : 'bg-red-500/20 text-red-300 border border-red-400/50 shadow-red-400/20'
+                                }`}>
+                                  {botConfig.enabled ? '🔴 LIVE TRADING' : '⏸️ MARKET CLOSED'}
+                                </span>
+                              </h2>
+                              <p className="text-green-200 text-sm mt-4 flex items-center gap-2">
+                                📊 Real-time Wall Street Operations •
+                                <span className="text-blue-300 font-semibold">{botConfig.mode} Mode</span> •
+                                <span className="text-purple-300">Min {botConfig.minimumConfidence}% Confidence</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Live Market Ticker - Wall Street Style */}
+                          <div className="text-right">
+                            <div className="text-4xl font-bold text-green-400 mb-1">
+                              {enhancedAccount ? formatCurrency(enhancedAccount.totalBalance) : '$100,000'}
+                            </div>
+                            <div className="text-md text-green-200 font-medium">Portfolio Value</div>
+                            <div className="flex items-center gap-3 mt-2 justify-end">
+                              <div className={`w-3 h-3 rounded-full ${botConfig.enabled ? 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50' : 'bg-red-400'}`}></div>
+                              <span className="text-xs text-gray-300 font-medium">{marketStatus} Market</span>
+                              {/* <div className="bg-blue-500/20 px-3 py-1 rounded-full border border-blue-400/30">
+                                <span className="text-blue-300 text-xs font-bold">ALPACA API</span>
+                              </div> */}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AI Bot Activity Monitor - Integrated into Trading Floor */}
+                      <div className="p-0 bg-gradient-to-br from-gray-900/50 to-gray-800/50">
+                        <AIBotActivityMonitor
+                          botEnabled={botConfig.enabled}
+                          mode={botConfig.mode}
+                          minimumConfidence={botConfig.minimumConfidence}
+                        />
+                      </div>
+
+                      {/* Wall Street Floor Ambiance */}
+                      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 via-blue-400 to-purple-400 opacity-30"></div>
+                    </div>
+                  </section>
+
+                  {/* AI Performance Overview - Secondary Position */}
+                  <section className="bg-gradient-to-r from-indigo-900/20 to-blue-900/20 border border-indigo-500/30 rounded-lg p-6">
                     <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                      <SparklesIcon className="w-5 h-5 text-purple-400" />
+                      <SparklesIcon className="w-5 h-5 text-indigo-400" />
                       AI-Enhanced Portfolio Overview
                     </h2>
 
@@ -1045,7 +1113,7 @@ export default function AITradingDashboard() {
                       <MarketClock variant="card" showDetails={true} />
 
                       <div className="bg-gray-800 rounded-lg p-4">
-                        <h4 className="text-sm font-medium text-purple-300 mb-3">Real-time Account Status</h4>
+                        <h4 className="text-sm font-medium text-indigo-300 mb-3">Real-time Account Status</h4>
                         <div className="space-y-3">
                           <div className="flex justify-between">
                             <span className="text-gray-400">Total Balance:</span>
@@ -1075,11 +1143,11 @@ export default function AITradingDashboard() {
                       </div>
 
                       <div className="bg-gray-800 rounded-lg p-4">
-                        <h4 className="text-sm font-medium text-purple-300 mb-3">AI vs Manual Performance</h4>
+                        <h4 className="text-sm font-medium text-indigo-300 mb-3">AI vs Manual Performance</h4>
                         <div className="space-y-3">
                           <div className="flex justify-between">
                             <span className="text-gray-400">AI Recommendations:</span>
-                            <span className="text-purple-400 font-medium">{aiStats.totalRecommendations}</span>
+                            <span className="text-indigo-400 font-medium">{aiStats.totalRecommendations}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-400">High Confidence:</span>
@@ -1106,6 +1174,7 @@ export default function AITradingDashboard() {
                     </div>
                   </section>
 
+
                   {/* Current AI Recommendations Preview */}
                   <section className="bg-gray-800 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-6">
@@ -1115,7 +1184,7 @@ export default function AITradingDashboard() {
                       </h3>
                       <button
                         onClick={() => setActiveTab('ai-recommendations')}
-                        className="text-purple-400 hover:text-purple-300 text-sm font-medium flex items-center gap-1"
+                        className="text-indigo-400 hover:text-indigo-300 text-sm font-medium flex items-center gap-1"
                       >
                         View All <ArrowTrendingUpIcon className="w-4 h-4" />
                       </button>
@@ -1123,7 +1192,7 @@ export default function AITradingDashboard() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {aiRecommendations.slice(0, 6).map(rec => (
-                        <div key={rec.id} className="bg-gray-700 rounded-lg p-4 border-l-4 border-purple-500">
+                        <div key={rec.id} className="bg-gray-700 rounded-lg p-4 border-l-4 border-indigo-500">
                           <div className="flex justify-between items-center mb-2">
                             <span className="font-semibold text-white">{rec.symbol}</span>
                             <div className="flex items-center gap-1">
@@ -1134,11 +1203,11 @@ export default function AITradingDashboard() {
                               }`}>
                                 {rec.action}
                               </span>
-                              <CpuChipIcon className="w-3 h-3 text-purple-400" />
+                              <CpuChipIcon className="w-3 h-3 text-indigo-400" />
                             </div>
                           </div>
                           <div className="text-sm text-gray-300 mb-1">
-                            AI Confidence: <span className="text-purple-400 font-medium">{rec.confidence}%</span>
+                            AI Confidence: <span className="text-indigo-400 font-medium">{rec.confidence}%</span>
                           </div>
                           <div className="text-sm text-gray-300 mb-1">
                             Target: <span className="text-white">${rec.targetPrice.toFixed(2)}</span>
@@ -1158,7 +1227,7 @@ export default function AITradingDashboard() {
                         <button
                           onClick={refreshAIData}
                           disabled={marketLoading}
-                          className="mt-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm"
+                          className="mt-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm"
                         >
                           {marketLoading ? 'Refreshing...' : 'Refresh AI Analysis'}
                         </button>
@@ -1174,7 +1243,7 @@ export default function AITradingDashboard() {
                   <section className="bg-gray-800 rounded-lg p-6">
                     <div className="flex justify-between items-center mb-6">
                       <h2 className="text-xl font-semibold flex items-center gap-2">
-                        <CpuChipIcon className="w-6 h-6 text-purple-400" />
+                        <CpuChipIcon className="w-6 h-6 text-indigo-400" />
                         AI-Powered Trading Recommendations
                       </h2>
                       <div className="flex items-center gap-4 text-sm text-gray-400">
@@ -1204,7 +1273,7 @@ export default function AITradingDashboard() {
                         <button
                           onClick={refreshAIData}
                           disabled={marketLoading || !enhancedAccount?.isConnected}
-                          className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium"
+                          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium"
                         >
                           {marketLoading ? 'Generating...' : 'Generate New AI Recommendations'}
                         </button>
@@ -1221,7 +1290,7 @@ export default function AITradingDashboard() {
                   <div className="bg-gray-800 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-6">
                       <h2 className="text-xl font-semibold flex items-center gap-2">
-                        <CpuChipIcon className="w-6 h-6 text-purple-400" />
+                        <CpuChipIcon className="w-6 h-6 text-indigo-400" />
                         AI Trading Bot Configuration
                         {!enhancedAccount?.isConnected && (
                           <span className="text-xs bg-red-600 text-white px-2 py-1 rounded">
@@ -1264,7 +1333,7 @@ export default function AITradingDashboard() {
                             onChange={(e) => setBotConfig(prev => ({ ...prev, enabled: e.target.checked }))}
                             className="sr-only peer"
                           />
-                          <div className="w-14 h-7 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
+                          <div className="w-14 h-7 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600"></div>
                         </label>
                       </div>
                     </div>
@@ -1312,7 +1381,7 @@ export default function AITradingDashboard() {
                             value={botConfig.aiModel}
                             disabled={!enhancedAccount?.isConnected}
                             onChange={(e) => setBotConfig(prev => ({ ...prev, aiModel: e.target.value as 'GPT_ENHANCED' | 'NEURAL_NETWORK' | 'ENSEMBLE' }))}
-                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <option value="GPT_ENHANCED">GPT Enhanced Model</option>
                             <option value="NEURAL_NETWORK">Neural Network</option>
@@ -1478,9 +1547,9 @@ export default function AITradingDashboard() {
                     </h2>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-6">
-                        <h4 className="font-semibold text-purple-400 mb-4">Understanding AI Recommendations</h4>
-                        <div className="space-y-3 text-sm text-purple-200">
+                      <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-lg p-6">
+                        <h4 className="font-semibold text-indigo-400 mb-4">Understanding AI Recommendations</h4>
+                        <div className="space-y-3 text-sm text-indigo-200">
                           <p>AI trading recommendations use machine learning models trained on vast amounts of market data integrated with real-time Alpaca feeds.</p>
                           <ul className="space-y-2">
                             <li>• Confidence scores indicate the AI's certainty in predictions</li>
