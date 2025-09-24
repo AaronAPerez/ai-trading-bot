@@ -709,16 +709,15 @@ export default function AITradingDashboard() {
     return value >= 0 ? 'text-green-400' : 'text-red-400'
   }
 
-  // Navigation tabs
+  // Navigation tabs - Portfolio Overview as main Wall Street inspired spotlight
   const navigationTabs = [
-    { id: 'overview', name: 'Overview', icon: ChartBarIcon },
-    { id: 'ai-recommendations', name: 'AI Recommendations', icon: CpuChipIcon },
-    { id: 'bot-config', name: 'AI Bot Config', icon: CpuChipIcon },
-    { id: 'live-trades', name: 'Live Trades', icon: BoltIcon },
-    { id: 'performance', name: 'Performance Analytics', icon: CalculatorIcon },
-    { id: 'ai-engine', name: 'AI Engine Control', icon: RocketLaunchIcon },
-    { id: 'ai-learning', name: 'AI Learning', icon: AcademicCapIcon },
-    // { id: 'education', name: 'AI Education', icon: LightBulbIcon }
+    { id: 'overview', name: 'Portfolio Overview', icon: ChartBarIcon },
+    { id: 'ai-engine', name: 'AI Live Trading', icon: RocketLaunchIcon },
+    { id: 'ai-recommendations', name: 'AI Recommendations', icon: SparklesIcon },
+    { id: 'live-trades', name: 'Active Positions', icon: BoltIcon },
+    { id: 'performance', name: 'Performance', icon: CalculatorIcon },
+    { id: 'bot-config', name: 'Bot Settings', icon: CpuChipIcon },
+    { id: 'ai-learning', name: 'AI Learning', icon: AcademicCapIcon }
   ]
 
   // Calculate AI statistics
@@ -846,25 +845,43 @@ export default function AITradingDashboard() {
             {/* Market Clock */}
             <MarketClock variant="sidebar" showDetails={true} />
 
-            {/* Enhanced Quick AI Stats */}
-            {/* <div className="grid grid-cols-2 gap-2 mt-4">
-              <div className="bg-gray-700 rounded p-2">
-                <div className="text-xs text-gray-400">AI Recommendations</div>
-                <div className="font-semibold text-indigo-400">{aiStats.totalRecommendations}</div>
+            {/* Live AI Recommendations from Alpaca API */}
+            <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-500/30 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-purple-300 flex items-center gap-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  Live AI Signals
+                </span>
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
               </div>
-              <div className="bg-gray-700 rounded p-2">
-                <div className="text-xs text-gray-400">High Confidence</div>
-                <div className="font-semibold text-green-400">{aiStats.highConfidenceCount}</div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-xs text-gray-400">Active Signals</div>
+                  <div className="font-semibold text-purple-400">{aiStats.totalRecommendations}</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-xs text-gray-400">High Confidence</div>
+                  <div className="font-semibold text-green-400">{aiStats.highConfidenceCount}</div>
+                </div>
               </div>
-              <div className="bg-gray-700 rounded p-2">
-                <div className="text-xs text-gray-400">AI Win Rate</div>
-                <div className="font-semibold text-blue-400">{aiStats.aiWinRate.toFixed(1)}%</div>
-              </div>
-              <div className="bg-gray-700 rounded p-2">
-                <div className="text-xs text-gray-400">Positions</div>
-                <div className="font-semibold text-white">{positions.length}</div>
-              </div>
-            </div> */}
+
+              {/* Top Recommendation */}
+              {aiRecommendations.length > 0 && (
+                <div className="mt-3 p-2 bg-gray-700/30 rounded border-l-2 border-green-400">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="text-sm font-medium text-white">{aiRecommendations[0].symbol}</div>
+                      <div className="text-xs text-green-400">{aiRecommendations[0].action} Signal</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-green-400">{aiRecommendations[0].confidence.toFixed(0)}%</div>
+                      <div className="text-xs text-gray-400">{formatCurrency(aiRecommendations[0].currentPrice)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Navigation Menu */}
@@ -927,20 +944,33 @@ export default function AITradingDashboard() {
           {/* Enhanced Desktop Header */}
           <header className="hidden lg:block bg-gray-800 border-b border-gray-700 px-6 py-4">
             <div className="flex justify-between items-center">
-              <div>
-                {/* <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-                  <CpuChipIcon className="w-8 h-8 text-indigo-400" />
-                  AI-Powered Trading Dashboard
-                </h1> */}
+              <div className="flex items-center gap-4">
+                {/* High-Confidence AI Alert */}
+                {aiStats.highConfidenceCount > 0 && (
+                  <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-lg px-4 py-2 flex items-center gap-3">
+                    <SparklesIcon className="w-5 h-5 text-green-400 animate-pulse" />
+                    <div>
+                      <div className="text-sm font-medium text-green-300">
+                        {aiStats.highConfidenceCount} High-Confidence Signal{aiStats.highConfidenceCount > 1 ? 's' : ''}
+                      </div>
+                      <div className="text-xs text-green-400">
+                        Top: {aiRecommendations[0]?.symbol} {aiRecommendations[0]?.action} @ {aiRecommendations[0]?.confidence.toFixed(0)}%
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Stats Summary */}
                 <div className="flex items-center gap-4 text-sm text-gray-400">
-                  {/* <MarketClock variant="header" showDetails={false} /> */}
+                  <MarketClock variant="header" showDetails={false} />
                   <span>•</span>
-                  <span>Last AI Update: {isClient ? lastUpdate.toLocaleTimeString() : '--:--:-- --'}</span>
-                  {/* <span>•</span> */}
-                  {/* <span className={dataSource === 'alpaca' ? 'text-green-400' : dataSource === 'hybrid' ? 'text-blue-400' : 'text-yellow-400'}>
-                    Data: {dataSource === 'alpaca' ? 'Alpaca' : dataSource === 'hybrid' ? 'Alpaca + Fallback' : 'Fallback APIs'}
-                    {dataSource !== 'alpaca' && '⚠️'}
-                  </span> */}
+                  <span className="text-purple-400">{aiStats.totalRecommendations} AI Signals Active</span>
+                  <span>•</span>
+                  <span>Avg Confidence: {aiStats.avgConfidence.toFixed(0)}%</span>
+                  <span>•</span>
+                  <span className={dataSource === 'alpaca' ? 'text-green-400' : 'text-yellow-400'}>
+                    {dataSource === 'alpaca' ? 'Live Alpaca Data' : 'Fallback Data'}
+                  </span>
                 </div>
               </div>
 

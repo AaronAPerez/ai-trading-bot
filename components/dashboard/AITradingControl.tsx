@@ -111,10 +111,22 @@ export default function AITradingControl() {
     setLoading(true)
     setError(null)
 
-    // Show immediate feedback that button was clicked
-    console.log('🚀 Starting AI Trading Engine - Loading all 12,010 symbols...')
+    console.log('🚀 Starting AI Trading Engine with Live Execution...')
 
     try {
+      // 1. Start the AI bot activity monitoring
+      const botActivityResponse = await fetch('/api/ai-bot-activity?action=start-simulation')
+      if (!botActivityResponse.ok) {
+        throw new Error('Failed to start AI bot activity monitoring')
+      }
+
+      // 2. Enable live trading execution
+      const executionResponse = await fetch('/api/ai-bot-activity?action=enable-execution')
+      if (!executionResponse.ok) {
+        throw new Error('Failed to enable live trading execution')
+      }
+
+      // 3. Start the main AI trading engine
       const response = await fetch('/api/ai-trading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,7 +139,7 @@ export default function AITradingControl() {
         throw new Error(data.error || 'Failed to start AI trading')
       }
 
-      console.log('✅ AI Trading Engine started successfully!')
+      console.log('✅ AI Trading Engine with Live Execution started successfully!')
       await fetchStatus()
     } catch (err) {
       console.error('❌ Failed to start AI Trading:', err.message)
@@ -142,6 +154,7 @@ export default function AITradingControl() {
     setError(null)
 
     try {
+      // 1. Stop the AI trading engine
       const response = await fetch('/api/ai-trading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -152,6 +165,18 @@ export default function AITradingControl() {
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to stop AI trading')
+      }
+
+      // 2. Disable live trading execution
+      const executionResponse = await fetch('/api/ai-bot-activity?action=disable-execution')
+      if (!executionResponse.ok) {
+        console.warn('Failed to disable live trading execution')
+      }
+
+      // 3. Stop bot activity monitoring
+      const botActivityResponse = await fetch('/api/ai-bot-activity?action=stop-simulation')
+      if (!botActivityResponse.ok) {
+        console.warn('Failed to stop AI bot activity monitoring')
       }
 
       await fetchStatus()
@@ -259,7 +284,7 @@ export default function AITradingControl() {
                   size="sm"
                 >
                   <Square className="h-4 w-4 mr-1" />
-                  Stop AI Trading
+                  Stop Live AI Trading
                 </Button>
               ) : (
                 <Button
@@ -273,7 +298,7 @@ export default function AITradingControl() {
                   ) : (
                     <Play className="h-4 w-4 mr-1" />
                   )}
-                  {loading ? "Starting AI Engine..." : "Start AI Trading"}
+                  {loading ? "Starting Live AI Trading..." : "Start Live AI Trading"}
                 </Button>
               )}
             </div>
@@ -290,24 +315,17 @@ export default function AITradingControl() {
         )}
       </Card>
 
-      {/* Auto-Execution Status */}
-      {status.autoExecution && (
+      {/* Live Trading Status - Integrated with AI Engine */}
+      {status.running && status.autoExecution && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-yellow-500" />
-                Auto-Execution Status
-              </CardTitle>
-              <Button
-                onClick={toggleAutoExecution}
-                disabled={executionLoading}
-                variant={status.autoExecution.todayStats?.executionEnabled ? "destructive" : "default"}
-                size="sm"
-              >
-                {status.autoExecution.todayStats?.executionEnabled ? 'Disable Auto-Trading' : 'Enable Auto-Trading'}
-              </Button>
-            </div>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-green-500" />
+              Live Trading Status
+              <Badge variant="default" className="bg-green-500">
+                ACTIVE
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -337,12 +355,11 @@ export default function AITradingControl() {
               </div>
             </div>
 
-            {/* Execution Status Indicator */}
-            <div className="mt-4 p-3 rounded-lg flex items-center gap-3"
-                 style={{backgroundColor: status.autoExecution.todayStats?.executionEnabled ? '#dcfce7' : '#fef2f2'}}>
-              <div className={`w-3 h-3 rounded-full ${status.autoExecution.todayStats?.executionEnabled ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className={status.autoExecution.todayStats?.executionEnabled ? 'text-green-700' : 'text-red-700'}>
-                Auto-execution is {status.autoExecution.todayStats?.executionEnabled ? 'ACTIVE' : 'DISABLED'}
+            {/* Live Trading Status Indicator */}
+            <div className="mt-4 p-3 rounded-lg flex items-center gap-3 bg-green-50">
+              <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+              <span className="text-green-700 font-medium">
+                🚀 Live AI Trading Active - Orders will execute automatically for high-confidence signals
               </span>
             </div>
           </CardContent>
