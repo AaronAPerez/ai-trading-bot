@@ -716,7 +716,7 @@ export default function AITradingDashboard() {
     { id: 'performance', name: 'Performance Analytics', icon: CalculatorIcon },
     { id: 'ai-engine', name: 'AI Engine Control', icon: RocketLaunchIcon },
     { id: 'ai-learning', name: 'AI Learning', icon: AcademicCapIcon },
-    { id: 'education', name: 'AI Education', icon: LightBulbIcon }
+    // { id: 'education', name: 'AI Education', icon: LightBulbIcon }
   ]
 
   // Calculate AI statistics
