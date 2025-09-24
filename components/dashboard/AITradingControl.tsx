@@ -69,12 +69,26 @@ export default function AITradingControl() {
   const [error, setError] = useState<string | null>(null)
   const [executionLoading, setExecutionLoading] = useState(false)
 
-  // Fetch status every 30 seconds
+  // Fetch status immediately and every 30 seconds
   useEffect(() => {
     fetchStatus()
     const interval = setInterval(fetchStatus, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // Update status based on fetch results and persist state
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('ai-engine-status', JSON.stringify({
+          running: status.running,
+          timestamp: Date.now()
+        }))
+      } catch (e) {
+        console.error('Failed to save AI engine status:', e)
+      }
+    }
+  }, [status.running])
 
   // Fetch performance metrics when engine is running
   useEffect(() => {

@@ -160,70 +160,140 @@ function AIRecommendationCard({ recommendation, onExecute }: {
   const getConfidenceColor = (confidence: number): string => {
     if (confidence >= 85) return 'text-green-400'
     if (confidence >= 75) return 'text-blue-400'
+    if (confidence >= 65) return 'text-purple-400'
     return 'text-yellow-400'
+  }
+
+  const getConfidenceBgGlow = (confidence: number): string => {
+    if (confidence >= 85) return 'shadow-green-400/20 border-green-400/30'
+    if (confidence >= 75) return 'shadow-blue-400/20 border-blue-400/30'
+    if (confidence >= 65) return 'shadow-purple-400/20 border-purple-400/30'
+    return 'shadow-yellow-400/20 border-yellow-400/30'
   }
 
   const getPriorityColor = (priority: string): string => {
     switch (priority) {
-      case 'HIGH': return 'bg-red-600 text-white'
-      case 'MEDIUM': return 'bg-yellow-600 text-white'
-      case 'LOW': return 'bg-green-600 text-white'
-      default: return 'bg-gray-600 text-white'
+      case 'HIGH': return 'bg-red-600/80 text-white border-red-400/50 shadow-red-400/30'
+      case 'MEDIUM': return 'bg-yellow-600/80 text-white border-yellow-400/50 shadow-yellow-400/30'
+      case 'LOW': return 'bg-green-600/80 text-white border-green-400/50 shadow-green-400/30'
+      default: return 'bg-gray-600/80 text-white border-gray-400/50'
     }
   }
 
+  const isHighConfidence = recommendation.confidence >= 85
+  const isCrypto = recommendation.symbol.includes('USD')
+
   return (
-    <div className={`border rounded-lg p-6 transition-all hover:shadow-lg ${
-      recommendation.action === 'BUY' ? 'border-green-500/30 bg-green-900/10' :
-      recommendation.action === 'SELL' ? 'border-red-500/30 bg-red-900/10' :
-      'border-yellow-500/30 bg-yellow-900/10'
-    }`}>
+    <div className={`ai-recommendation-card border rounded-xl p-6 transition-all duration-300 hover:shadow-xl backdrop-blur-sm ${
+      recommendation.action === 'BUY'
+        ? 'border-green-500/30 bg-gradient-to-br from-green-900/20 to-green-800/10 hover:from-green-900/30 hover:to-green-800/20'
+        : recommendation.action === 'SELL'
+        ? 'border-red-500/30 bg-gradient-to-br from-red-900/20 to-red-800/10 hover:from-red-900/30 hover:to-red-800/20'
+        : 'border-yellow-500/30 bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 hover:from-yellow-900/30 hover:to-yellow-800/20'
+    } ${getConfidenceBgGlow(recommendation.confidence)} ${isHighConfidence ? 'animate-pulse-glow' : ''}`}>
       <div className="flex justify-between items-start mb-4">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-3 flex-wrap">
-            <div className={`px-3 py-1 rounded font-bold text-sm ${
-              recommendation.action === 'BUY' ? 'bg-green-600 text-white' :
-              recommendation.action === 'SELL' ? 'bg-red-600 text-white' :
-              'bg-yellow-600 text-white'
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
+            {/* Action Badge with Enhanced Styling */}
+            <div className={`relative px-4 py-2 rounded-lg font-bold text-sm shadow-lg border backdrop-blur-sm ${
+              recommendation.action === 'BUY'
+                ? 'bg-green-600/90 text-white border-green-400/50 shadow-green-400/30'
+                : recommendation.action === 'SELL'
+                ? 'bg-red-600/90 text-white border-red-400/50 shadow-red-400/30'
+                : 'bg-yellow-600/90 text-white border-yellow-400/50 shadow-yellow-400/30'
             }`}>
-              {recommendation.action}
+              {recommendation.action === 'BUY' ? '🔥 BUY' : recommendation.action === 'SELL' ? '📉 SELL' : '⏸️ HOLD'}
+              {isHighConfidence && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse border border-gray-800"></div>
+              )}
             </div>
-            <span className="font-semibold text-white text-xl">{recommendation.symbol}</span>
-            <span className={`px-2 py-1 rounded text-xs font-bold ${getPriorityColor(recommendation.priority)}`}>
-              {recommendation.priority}
+
+            {/* Symbol with Asset Type Indicator */}
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white text-2xl tracking-wider">{recommendation.symbol}</span>
+              {isCrypto && (
+                <div className="px-2 py-1 bg-orange-500/20 text-orange-300 rounded-full text-xs font-bold border border-orange-400/30">
+                  ₿ CRYPTO
+                </div>
+              )}
+            </div>
+
+            {/* Priority Badge */}
+            <span className={`px-3 py-1 rounded-full text-xs font-bold border shadow-lg ${getPriorityColor(recommendation.priority)}`}>
+              {recommendation.priority === 'HIGH' ? '🔴 HIGH' : recommendation.priority === 'MEDIUM' ? '🟡 MEDIUM' : '🟢 LOW'} PRIORITY
             </span>
-            <span className={`px-2 py-1 rounded text-xs font-bold ${
-              recommendation.safetyChecks.passedRiskCheck ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+
+            {/* Safety Check Badge */}
+            <span className={`px-3 py-1 rounded-full text-xs font-bold border shadow-lg ${
+              recommendation.safetyChecks.passedRiskCheck
+                ? 'bg-green-600/80 text-white border-green-400/50 shadow-green-400/30'
+                : 'bg-red-600/80 text-white border-red-400/50 shadow-red-400/30'
             }`}>
-              {recommendation.safetyChecks.passedRiskCheck ? 'SAFE' : 'RISKY'}
+              {recommendation.safetyChecks.passedRiskCheck ? '✅ VERIFIED' : '⚠️ RISKY'}
             </span>
-            <div className="flex items-center gap-1">
-              <CpuChipIcon className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs text-indigo-400">AI Enhanced</span>
+
+            {/* AI Enhancement Badge */}
+            <div className="flex items-center gap-2 px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-bold border border-indigo-400/30">
+              <CpuChipIcon className="w-4 h-4 animate-pulse" />
+              <span>AI POWERED</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-            <div className="bg-gray-700/50 rounded p-3">
-              <div className="text-xs text-gray-400 mb-1">Current Price</div>
-              <div className="font-semibold text-white">${recommendation.currentPrice.toFixed(2)}</div>
+          {/* Enhanced Data Grid - Mobile Responsive */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+            <div className="bg-gradient-to-br from-gray-700/60 to-gray-800/40 rounded-lg p-4 border border-gray-600/50 hover:border-blue-400/50 transition-all">
+              <div className="text-xs text-gray-400 mb-2 flex items-center gap-1">
+                💰 Current Price
+              </div>
+              <div className="font-bold text-white text-lg font-mono">${recommendation.currentPrice.toFixed(2)}</div>
             </div>
-            <div className="bg-gray-700/50 rounded p-3">
-              <div className="text-xs text-gray-400 mb-1">AI Target</div>
-              <div className="font-semibold text-white">${recommendation.targetPrice.toFixed(2)}</div>
+
+            <div className="bg-gradient-to-br from-blue-700/60 to-blue-800/40 rounded-lg p-4 border border-blue-600/50 hover:border-blue-400/70 transition-all">
+              <div className="text-xs text-blue-300 mb-2 flex items-center gap-1">
+                🎯 AI Target
+              </div>
+              <div className="font-bold text-white text-lg font-mono">${recommendation.targetPrice.toFixed(2)}</div>
+              <div className="text-xs text-blue-200">
+                {((recommendation.targetPrice - recommendation.currentPrice) / recommendation.currentPrice * 100).toFixed(1)}% potential
+              </div>
             </div>
-            <div className="bg-gray-700/50 rounded p-3">
-              <div className="text-xs text-gray-400 mb-1">Stop Loss</div>
-              <div className="font-semibold text-red-400">${recommendation.stopLoss.toFixed(2)}</div>
+
+            <div className="bg-gradient-to-br from-red-700/60 to-red-800/40 rounded-lg p-4 border border-red-600/50 hover:border-red-400/70 transition-all">
+              <div className="text-xs text-red-300 mb-2 flex items-center gap-1">
+                🛡️ Stop Loss
+              </div>
+              <div className="font-bold text-red-400 text-lg font-mono">${recommendation.stopLoss.toFixed(2)}</div>
+              <div className="text-xs text-red-200">
+                {((recommendation.currentPrice - recommendation.stopLoss) / recommendation.currentPrice * 100).toFixed(1)}% protection
+              </div>
             </div>
-            <div className="bg-gray-700/50 rounded p-3">
-              <div className="text-xs text-gray-400 mb-1">Max Safe Amount</div>
-              <div className="font-semibold text-green-400">${recommendation.maxSafeAmount.toLocaleString()}</div>
+
+            <div className="bg-gradient-to-br from-green-700/60 to-green-800/40 rounded-lg p-4 border border-green-600/50 hover:border-green-400/70 transition-all">
+              <div className="text-xs text-green-300 mb-2 flex items-center gap-1">
+                💵 Max Safe Amount
+              </div>
+              <div className="font-bold text-green-400 text-lg font-mono">${recommendation.maxSafeAmount.toLocaleString()}</div>
+              <div className="text-xs text-green-200">
+                {Math.floor(recommendation.maxSafeAmount / recommendation.currentPrice)} shares
+              </div>
             </div>
-            <div className="bg-gray-700/50 rounded p-3">
-              <div className="text-xs text-gray-400 mb-1">AI Confidence</div>
-              <div className={`font-semibold ${getConfidenceColor(recommendation.confidence)}`}>
+
+            <div className={`bg-gradient-to-br rounded-lg p-4 border transition-all ${
+              isHighConfidence
+                ? 'from-green-700/60 to-emerald-800/40 border-green-500/50 hover:border-green-400/70 animate-pulse-glow'
+                : recommendation.confidence >= 75
+                ? 'from-blue-700/60 to-blue-800/40 border-blue-600/50 hover:border-blue-400/70'
+                : 'from-yellow-700/60 to-yellow-800/40 border-yellow-600/50 hover:border-yellow-400/70'
+            }`}>
+              <div className="text-xs text-gray-300 mb-2 flex items-center gap-1">
+                🤖 AI Confidence
+                {isHighConfidence && <span className="animate-bounce">⭐</span>}
+              </div>
+              <div className={`font-bold text-xl font-mono ${getConfidenceColor(recommendation.confidence)}`}>
                 {recommendation.confidence}%
+              </div>
+              <div className="text-xs text-gray-300">
+                {recommendation.confidence >= 85 ? 'Very High' : recommendation.confidence >= 75 ? 'High' : recommendation.confidence >= 65 ? 'Moderate' : 'Low'} Certainty
               </div>
             </div>
           </div>
@@ -475,53 +545,80 @@ export default function AITradingDashboard() {
   }, [])
   const [isLiveMode, setIsLiveMode] = useState(false)
 
-  const [botConfig, setBotConfig] = useState<BotConfig>({
-    enabled: false,
-    mode: 'BALANCED',
-    aiModel: 'ENSEMBLE',
-    maxPositionSize: 8,
-    maxDailyTrades: 50,
-    stopLossPercent: 3,
-    takeProfitPercent: 9,
-    riskTolerance: 6,
-    minimumConfidence: 70,
-    autoExecuteAbove: 75,
-    strategies: {
-      aiMomentum: true,
-      aiMeanReversion: true,
-      aiBreakout: false,
-      aiArbitrage: false,
-      aiSentiment: true,
-      aiNews: true,
-      aiPattern: true,
-      aiEnsemble: true
-    },
-    timeframes: ['1H', '4H', '1D'],
-    watchlistSymbols: ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'AMZN', 'META', 'SPY'],
-    notifications: {
-      email: true,
-      push: true,
-      discord: false,
-      highConfidenceOnly: true,
-      executionAlerts: true
-    },
-    riskLimits: {
-      maxRiskPerTrade: 2.5,
-      maxDailyLoss: 4.0,
-      maxPortfolioRisk: 18.0,
-      stopLossRequired: true,
-      takeProfitRequired: true,
-      correlationLimit: 0.65,
-      maxDrawdown: 12.0,
-      volatilityLimit: 25.0
-    },
-    advancedSettings: {
-      paperTradingFirst: true,
-      backtestRequired: true,
-      minimumBacktestPeriod: 30,
-      learningMode: true,
-      adaptiveParameters: true,
-      marketRegimeDetection: true
+  const [botConfig, setBotConfig] = useState<BotConfig>(() => {
+    // Initialize bot config from localStorage if available
+    if (typeof window !== 'undefined') {
+      try {
+        const savedConfig = localStorage.getItem('ai-bot-config')
+        if (savedConfig) {
+          return JSON.parse(savedConfig)
+        }
+      } catch (e) {
+        console.error('Failed to parse saved bot config:', e)
+      }
+    }
+
+    return {
+      enabled: false,
+      mode: 'BALANCED',
+      aiModel: 'ENSEMBLE',
+      maxPositionSize: 8,
+      maxDailyTrades: 50,
+      stopLossPercent: 3,
+      takeProfitPercent: 9,
+      riskTolerance: 6,
+      minimumConfidence: 70,
+      autoExecuteAbove: 75,
+      strategies: {
+        aiMomentum: true,
+        aiMeanReversion: true,
+        aiBreakout: false,
+        aiArbitrage: false,
+        aiSentiment: true,
+        aiNews: true,
+        aiPattern: true,
+        aiEnsemble: true
+      },
+      timeframes: ['1H', '4H', '1D'],
+      watchlistSymbols: [
+        // Major Tech Giants
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
+        // Popular ETFs & Market Indicators
+        'SPY', 'QQQ', 'IWM', 'VTI', 'DIA',
+        // Crypto Assets (Alpaca supported)
+        'BTCUSD', 'ETHUSD', 'ADAUSD', 'SOLUSD', 'AVAXUSD',
+        // Growth & AI Stocks
+        'AMD', 'NFLX', 'ORCL', 'CRM', 'ADBE', 'PYPL',
+        // Financial & Energy
+        'JPM', 'BAC', 'WFC', 'XLE', 'XLF', 'GLD',
+        // Emerging & High-Volume Stocks
+        'PLTR', 'NIO', 'RIVN', 'COIN', 'HOOD', 'AMC', 'GME'
+      ],
+      notifications: {
+        email: true,
+        push: true,
+        discord: false,
+        highConfidenceOnly: true,
+        executionAlerts: true
+      },
+      riskLimits: {
+        maxRiskPerTrade: 2.5,
+        maxDailyLoss: 4.0,
+        maxPortfolioRisk: 18.0,
+        stopLossRequired: true,
+        takeProfitRequired: true,
+        correlationLimit: 0.65,
+        maxDrawdown: 12.0,
+        volatilityLimit: 25.0
+      },
+      advancedSettings: {
+        paperTradingFirst: true,
+        backtestRequired: true,
+        minimumBacktestPeriod: 30,
+        learningMode: true,
+        adaptiveParameters: true,
+        marketRegimeDetection: true
+      }
     }
   })
 
@@ -529,15 +626,65 @@ export default function AITradingDashboard() {
   const { quotes, marketStatus, isLoading: marketLoading, error: marketError, dataSource, refreshData } = useMarketData(botConfig.watchlistSymbols)
   const { account, positions, isLoading: tradingLoading, error: tradingError, fetchAccount, fetchPositions, executeOrder } = useAlpacaTrading()
 
-  // Enhanced account with calculated fields
+  // Bot state persistence effect
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('ai-bot-config', JSON.stringify(botConfig))
+      } catch (e) {
+        console.error('Failed to save bot config:', e)
+      }
+    }
+  }, [botConfig])
+
+  // Check AI bot status on load and restore state
+  useEffect(() => {
+    const checkBotStatus = async () => {
+      try {
+        const response = await fetch('/api/ai-trading', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'status' })
+        })
+        const statusData = await response.json()
+
+        if (statusData.running) {
+          setBotConfig(prev => ({ ...prev, enabled: true }))
+          setAlertMessage('AI Trading Bot was already running - state restored')
+          setTimeout(() => setAlertMessage(null), 3000)
+        }
+      } catch (error) {
+        console.error('Failed to check bot status:', error)
+      }
+    }
+
+    checkBotStatus()
+  }, [])
+
+  // Enhanced account with calculated fields and persistence
   const enhancedAccount: EnhancedAccount | null = useMemo(() => {
-    if (!account) return null
+    if (!account) {
+      // Try to load from localStorage if account data isn't available yet
+      const savedData = typeof window !== 'undefined' ? localStorage.getItem('ai-trading-portfolio') : null
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData)
+          // Only use saved data if it's recent (less than 5 minutes old)
+          if (Date.now() - parsed.timestamp < 5 * 60 * 1000) {
+            return parsed.account
+          }
+        } catch (e) {
+          console.error('Failed to parse saved portfolio data:', e)
+        }
+      }
+      return null
+    }
 
     const totalPnL = positions.reduce((sum, pos) => sum + pos.unrealizedPnL, 0)
     const totalReturn = account.totalBalance > 0 ? totalPnL / account.totalBalance : 0
     const investedAmount = positions.reduce((sum, pos) => sum + pos.marketValue, 0)
 
-    return {
+    const enhanced = {
       ...account,
       investedAmount,
       dayPnL: totalPnL * 0.1, // Approximate daily P&L
@@ -553,10 +700,36 @@ export default function AITradingDashboard() {
       bestStrategy: 'AI Ensemble Model',
       worstStrategy: 'Manual Analysis'
     }
+
+    // Save to localStorage for persistence
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('ai-trading-portfolio', JSON.stringify({
+          account: enhanced,
+          timestamp: Date.now()
+        }))
+      } catch (e) {
+        console.error('Failed to save portfolio data:', e)
+      }
+    }
+
+    return enhanced
   }, [account, positions])
 
   // Generate AI recommendations based on real market data
   const [aiRecommendations, setAiRecommendations] = useState<AIRecommendation[]>([])
+
+  // Auto-refresh portfolio data every 30 seconds for dynamic updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (fetchAccount && fetchPositions) {
+        fetchAccount()
+        fetchPositions()
+      }
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
+  }, [fetchAccount, fetchPositions])
 
   // Update AI recommendations when market data changes
   useEffect(() => {
@@ -651,10 +824,10 @@ export default function AITradingDashboard() {
             autoExecution: {
               autoExecuteEnabled: true,
               confidenceThresholds: {
-                minimum: 0.60,      // Updated to match API config
-                conservative: 0.70, // Updated to match API config
-                aggressive: 0.80,   // Updated to match API config
-                maximum: 0.90       // Updated to match API config
+                minimum: 0.55,      // Lowered for more trades
+                conservative: 0.65,
+                aggressive: 0.75,
+                maximum: 0.85
               }
             }
           }
@@ -665,8 +838,27 @@ export default function AITradingDashboard() {
       const result = await response.json()
 
       if (response.ok) {
-        setBotConfig(prev => ({ ...prev, enabled: newStatus }))
-        setAlertMessage(`AI Trading Bot ${newStatus ? 'started' : 'stopped'} successfully`)
+        const updatedConfig = { ...botConfig, enabled: newStatus }
+        setBotConfig(updatedConfig)
+
+        // Immediately save to localStorage
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('ai-bot-config', JSON.stringify(updatedConfig))
+          } catch (e) {
+            console.error('Failed to save bot config:', e)
+          }
+        }
+
+        setAlertMessage(`✅ AI Trading Bot ${newStatus ? 'started' : 'stopped'} successfully! ${newStatus ? 'Automatic order execution is now ACTIVE.' : ''}`)
+
+        if (newStatus) {
+          // Force refresh portfolio data when bot starts
+          if (fetchAccount && fetchPositions) {
+            fetchAccount()
+            fetchPositions()
+          }
+        }
       } else {
         throw new Error(result.details || result.error || 'Unknown error')
       }
@@ -678,11 +870,11 @@ export default function AITradingDashboard() {
         errorMessage = 'Request timeout - AI Trading Bot startup took too long. Please try again.'
       }
 
-      setAlertMessage(`Failed to ${botConfig.enabled ? 'stop' : 'start'} AI Trading Bot: ${errorMessage}`)
+      setAlertMessage(`❌ Failed to ${botConfig.enabled ? 'stop' : 'start'} AI Trading Bot: ${errorMessage}`)
     }
 
-    setTimeout(() => setAlertMessage(null), 5000)
-  }, [botConfig.enabled, botConfig.minimumConfidence])
+    setTimeout(() => setAlertMessage(null), 8000) // Longer timeout for better visibility
+  }, [botConfig, fetchAccount, fetchPositions])
 
   const refreshAIData = useCallback(() => {
     refreshData() // Refresh real market data first
@@ -772,7 +964,7 @@ export default function AITradingDashboard() {
             </div>
 
             <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${botConfig.enabled ? 'bg-indigo-400 animate-pulse' : 'bg-gray-400'}`}></div>
+              <div className={`w-2 h-2 rounded-full ${isClient && botConfig.enabled ? 'bg-indigo-400 animate-pulse' : 'bg-gray-400'}`}></div>
               <span className="text-xs text-gray-400">{aiStats.aiTrades} AI trades</span>
             </div>
           </div>
@@ -822,65 +1014,60 @@ export default function AITradingDashboard() {
               </div> */}
             </div>
 
-            {/* AI Bot Status */}
-            {/* <div className={`bg-gray-700 rounded-lg p-4 mb-4 border-l-4 ${
-              botConfig.enabled ? 'border-indigo-500' : 'border-gray-600'
+            {/* AI Bot Status - Compact */}
+            <div className={`bg-gray-700/50 rounded-lg p-3 mb-4 border ${
+              isClient && botConfig.enabled ? 'border-indigo-500/50' : 'border-gray-600/50'
             }`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-300">AI Bot Status</span>
-                <div className={`w-2 h-2 rounded-full ${
-                  botConfig.enabled ? 'bg-indigo-400 animate-pulse' : 'bg-gray-400'
-                }`}></div>
-              </div>
-              <div className={`font-semibold ${botConfig.enabled ? 'text-indigo-400' : 'text-gray-400'}`}>
-                {botConfig.enabled ? `Active (${botConfig.mode})` : 'Inactive'}
-              </div>
-              {botConfig.enabled && (
-                <div className="text-xs text-indigo-300 mt-1">
-                  Min Confidence: {botConfig.minimumConfidence}%
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    isClient && botConfig.enabled ? 'bg-indigo-400 animate-pulse' : 'bg-gray-400'
+                  }`}></div>
+                  <span className="text-xs text-gray-300">AI Bot</span>
                 </div>
-              )}
-            </div> */}
+                <div className={`text-xs font-semibold ${isClient && botConfig.enabled ? 'text-indigo-400' : 'text-gray-400'}`}>
+                  {isClient && botConfig.enabled ? botConfig.mode : 'OFF'}
+                </div>
+              </div>
+            </div>
 
             {/* Market Clock */}
             <MarketClock variant="sidebar" showDetails={true} />
 
-            {/* Live AI Recommendations from Alpaca API */}
+            {/* Live AI Signals Summary */}
             <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-500/30 rounded-lg p-4 mb-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-purple-300 flex items-center gap-2">
                   <SparklesIcon className="w-4 h-4" />
-                  Live AI Signals
+                  AI Signals
                 </span>
                 <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-xs text-gray-400">Active Signals</div>
-                  <div className="font-semibold text-purple-400">{aiStats.totalRecommendations}</div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-400">Active:</span>
+                  <span className="text-purple-400 font-semibold text-xs">{aiStats.totalRecommendations}</span>
                 </div>
-                <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-xs text-gray-400">High Confidence</div>
-                  <div className="font-semibold text-green-400">{aiStats.highConfidenceCount}</div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-400">High Confidence:</span>
+                  <span className="text-green-400 font-semibold text-xs">{aiStats.highConfidenceCount}</span>
                 </div>
-              </div>
-
-              {/* Top Recommendation */}
-              {aiRecommendations.length > 0 && (
-                <div className="mt-3 p-2 bg-gray-700/30 rounded border-l-2 border-green-400">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="text-sm font-medium text-white">{aiRecommendations[0].symbol}</div>
-                      <div className="text-xs text-green-400">{aiRecommendations[0].action} Signal</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-green-400">{aiRecommendations[0].confidence.toFixed(0)}%</div>
-                      <div className="text-xs text-gray-400">{formatCurrency(aiRecommendations[0].currentPrice)}</div>
+                {aiRecommendations.length > 0 && (
+                  <div className="pt-2 border-t border-gray-700">
+                    <div className="text-xs text-gray-400 mb-1">Top Signal:</div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-white font-medium text-xs">{aiRecommendations[0].symbol}</span>
+                      <span className={`text-xs font-bold ${
+                        aiRecommendations[0].action === 'BUY' ? 'text-green-400' :
+                        aiRecommendations[0].action === 'SELL' ? 'text-red-400' : 'text-yellow-400'
+                      }`}>
+                        {aiRecommendations[0].action} {aiRecommendations[0].confidence}%
+                      </span>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
@@ -905,33 +1092,23 @@ export default function AITradingDashboard() {
             ))}
           </nav>
 
-          {/* Enhanced Footer with AI Performance */}
+          {/* Compact Footer */}
           <div className="p-4 border-t border-gray-700 bg-gray-800/50">
-            <div className="text-xs text-gray-400 mb-2">Real-time Alpaca Integration</div>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Connected:</span>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Connection:</span>
                 <span className={enhancedAccount?.isConnected ? 'text-green-400' : 'text-red-400'}>
-                  {enhancedAccount?.isConnected ? 'Yes' : 'No'}
+                  {enhancedAccount?.isConnected ? '🟢' : '🔴'}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">AI Profit:</span>
-                <span className={getColorClass(aiStats.aiProfit)}>{formatCurrency(aiStats.aiProfit)}</span>
-              </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between text-xs">
                 <span className="text-gray-400">Positions:</span>
                 <span className="text-white">{positions.length}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Last Update:</span>
-                <span className="text-white">{isClient ? lastUpdate.toLocaleTimeString() : '--:--:-- --'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Data Source:</span>
-                <span className={dataSource === 'alpaca' ? 'text-green-400' : dataSource === 'hybrid' ? 'text-blue-400' : 'text-yellow-400'}>
-                  {dataSource === 'alpaca' ? 'Alpaca' : dataSource === 'hybrid' ? 'Hybrid' : 'Fallback'}
-                  {dataSource !== 'alpaca' && '⚠️'}
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Source:</span>
+                <span className={dataSource === 'alpaca' ? 'text-green-400' : 'text-yellow-400'}>
+                  {dataSource === 'alpaca' ? 'Live' : 'Demo'}
                 </span>
               </div>
             </div>
@@ -954,22 +1131,18 @@ export default function AITradingDashboard() {
                         {aiStats.highConfidenceCount} High-Confidence Signal{aiStats.highConfidenceCount > 1 ? 's' : ''}
                       </div>
                       <div className="text-xs text-green-400">
-                        Top: {aiRecommendations[0]?.symbol} {aiRecommendations[0]?.action} @ {aiRecommendations[0]?.confidence.toFixed(0)}%
+                        {aiRecommendations[0]?.symbol} {aiRecommendations[0]?.action} @ {aiRecommendations[0]?.confidence.toFixed(0)}%
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* AI Stats Summary */}
-                <div className="flex items-center gap-4 text-sm text-gray-400">
+                {/* Compact Status Bar */}
+                <div className="flex items-center gap-3 text-sm text-gray-400">
                   <MarketClock variant="header" showDetails={false} />
-                  <span>•</span>
-                  <span className="text-purple-400">{aiStats.totalRecommendations} AI Signals Active</span>
-                  <span>•</span>
-                  <span>Avg Confidence: {aiStats.avgConfidence.toFixed(0)}%</span>
-                  <span>•</span>
+                  <span className="text-purple-400">{aiStats.totalRecommendations} Signals</span>
                   <span className={dataSource === 'alpaca' ? 'text-green-400' : 'text-yellow-400'}>
-                    {dataSource === 'alpaca' ? 'Live Alpaca Data' : 'Fallback Data'}
+                    {dataSource === 'alpaca' ? 'Live Data' : 'Demo Mode'}
                   </span>
                 </div>
               </div>
@@ -977,12 +1150,12 @@ export default function AITradingDashboard() {
               {/* Enhanced Control Bar */}
               <div className="flex items-center gap-3">
                 <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border ${
-                  botConfig.enabled
+                  isClient && botConfig.enabled
                     ? 'bg-indigo-900/30 text-indigo-300 border-indigo-500/30'
                     : 'bg-gray-900/30 text-gray-400 border-gray-500/30'
                 }`}>
                   <CpuChipIcon className="w-4 h-4" />
-                  AI Bot: {botConfig.enabled ? botConfig.mode : 'OFF'}
+                  AI Bot: {isClient && botConfig.enabled ? botConfig.mode : 'OFF'}
                 </div>
 
                 {/* <div className="bg-gray-700 rounded-lg px-3 py-2 text-sm">
@@ -1004,13 +1177,13 @@ export default function AITradingDashboard() {
                   onClick={toggleBot}
                   disabled={!enhancedAccount?.isConnected}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    botConfig.enabled
+                    isClient && botConfig.enabled
                       ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                       : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                   }`}
                 >
                   <BotIcon className="w-5 h-5" />
-                  {botConfig.enabled ? 'Disable Bot' : 'Enable Bot'}
+                  {isClient && botConfig.enabled ? 'Disable Bot' : 'Enable Bot'}
                 </button>
               </div>
             </div>
@@ -1059,58 +1232,96 @@ export default function AITradingDashboard() {
 
           {/* Scrollable Content Area */}
           <div className="flex-1 overflow-y-auto">
-            <div className="p-4 lg:p-2 space-y-6 pb-20 lg:pb-6">
+            <div className="p-4 lg:p-6 space-y-6 pb-20 lg:pb-6">
 
               {/* Overview Tab */}
               {activeTab === 'overview' && (
                 <div className="space-y-6">
-                  {/* 🚨 SPOTLIGHT: AI TRADING FLOOR - Wall Street Experience */}
+                  {/* 🚨 SPOTLIGHT: Enhanced AI TRADING FLOOR - Professional Wall Street Experience */}
                   <section className="relative bg-gradient-to-br from-green-900/30 via-blue-900/30 to-purple-900/30 border-2 border-green-500/50 rounded-xl shadow-2xl overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-green-400/5 via-blue-400/5 to-purple-400/5"></div>
+
+                    {/* Enhanced animated background pattern */}
+                    <div className="absolute inset-0 opacity-10">
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(34,197,94,0.1)_0%,transparent_50%)] animate-pulse"></div>
+                      <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(59,130,246,0.05)_50%,transparent_75%)] animate-gradient"></div>
+                    </div>
+
                     <div className="relative">
-                      {/* Wall Street Trading Floor Header */}
-                      <div className="bg-gradient-to-r from-green-800/50 to-blue-800/50 p-6 border-b border-green-500/30">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            {/* <div className="relative">
-                              <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-xl border-2 border-green-400/30">
-                                <DollarSignIcon className="w-8 h-8 text-white" />
+                      {/* Enhanced Wall Street Trading Floor Header */}
+                      <div className="bg-gradient-to-r from-green-800/50 to-blue-800/50 p-4 lg:p-6 border-b border-green-500/30">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <div className="relative">
+                              <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-xl border-2 border-green-400/30 animate-pulse-slow">
+                                <CpuChipIcon className="w-8 h-8 text-white" />
                               </div>
-                              {botConfig.enabled && (
-                                <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-400 rounded-full animate-pulse border-2 border-gray-900 shadow-lg"></div>
+                              {isClient && botConfig.enabled && (
+                                <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-400 rounded-full animate-pulse border-2 border-gray-900 shadow-lg">
+                                  <div className="absolute inset-0 bg-green-400 rounded-full animate-ping"></div>
+                                </div>
                               )}
-                            </div> */}
+                              <div className="absolute -bottom-1 -right-1 px-2 py-1 bg-indigo-600 rounded-full text-xs font-bold text-white border border-indigo-400/50">
+                                AI
+                              </div>
+                            </div>
                             <div>
                               <h2 className="text-3xl font-bold text-white flex items-center gap-3">
                                 🏢 AI TRADING FLOOR
-                                <span className={`px-4 py-2 rounded-full text-sm font-bold shadow-lg ${
-                                  botConfig.enabled
-                                    ? 'bg-green-500/20 text-green-300 border border-green-400/50 shadow-green-400/20'
+                                <span className={`px-4 py-2 rounded-full text-sm font-bold shadow-lg transition-all duration-500 ${
+                                  isClient && botConfig.enabled
+                                    ? 'bg-green-500/20 text-green-300 border border-green-400/50 shadow-green-400/20 animate-pulse-glow'
                                     : 'bg-red-500/20 text-red-300 border border-red-400/50 shadow-red-400/20'
                                 }`}>
-                                  {botConfig.enabled ? '🔴 LIVE TRADING' : '⏸️ MARKET CLOSED'}
+                                  {isClient && botConfig.enabled ? '🔴 LIVE TRADING' : '⏸️ STANDBY MODE'}
                                 </span>
                               </h2>
-                              <p className="text-green-200 text-sm mt-4 flex items-center gap-2">
+                              <p className="text-green-200 text-sm mt-4 flex items-center gap-2 flex-wrap">
                                 📊 Real-time Wall Street Operations •
                                 <span className="text-blue-300 font-semibold">{botConfig.mode} Mode</span> •
-                                <span className="text-purple-300">Min {botConfig.minimumConfidence}% Confidence</span>
+                                <span className="text-purple-300">Min {botConfig.minimumConfidence}% Confidence</span> •
+                                <span className="text-cyan-300">{botConfig.watchlistSymbols.length} Assets Monitored</span>
                               </p>
+                              {isClient && botConfig.enabled && (
+                                <div className="mt-2 flex items-center gap-2">
+                                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                  <span className="text-green-300 text-xs">AI Engine Active • Auto-Execution Enabled</span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
-                          {/* Live Market Ticker - Wall Street Style */}
-                          <div className="text-right">
-                            <div className="text-4xl font-bold text-green-400 mb-1">
-                              {enhancedAccount ? formatCurrency(enhancedAccount.totalBalance) : '$100,000'}
+                          {/* Enhanced Live Market Ticker - Wall Street Style */}
+                          <div className="text-center lg:text-right">
+                            <div className="mb-2">
+                              <div className="text-3xl lg:text-4xl font-bold text-green-400 mb-1 font-mono tracking-tight">
+                                {enhancedAccount ? formatCurrency(enhancedAccount.totalBalance) : '$100,000'}
+                              </div>
+                              <div className="text-sm lg:text-md text-green-200 font-medium">Portfolio Value</div>
+                              {enhancedAccount?.totalPnL && (
+                                <div className={`text-sm font-bold ${getColorClass(enhancedAccount.totalPnL)}`}>
+                                  {enhancedAccount.totalPnL >= 0 ? '▲' : '▼'} {formatCurrency(Math.abs(enhancedAccount.totalPnL))}
+                                  ({formatPercent((enhancedAccount.totalPnL / enhancedAccount.totalBalance) * 100)})
+                                </div>
+                              )}
                             </div>
-                            <div className="text-md text-green-200 font-medium">Portfolio Value</div>
-                            <div className="flex items-center gap-3 mt-2 justify-end">
-                              <div className={`w-3 h-3 rounded-full ${botConfig.enabled ? 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50' : 'bg-red-400'}`}></div>
+                            <div className="flex items-center gap-3 mt-3 justify-center lg:justify-end flex-wrap">
+                              <div className={`w-3 h-3 rounded-full transition-all duration-500 ${
+                                isClient && botConfig.enabled
+                                  ? 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50'
+                                  : 'bg-red-400 animate-pulse-slow'
+                              }`}></div>
                               <span className="text-xs text-gray-300 font-medium">{marketStatus} Market</span>
-                              {/* <div className="bg-blue-500/20 px-3 py-1 rounded-full border border-blue-400/30">
+                              <div className="bg-blue-500/20 px-3 py-1 rounded-full border border-blue-400/30">
                                 <span className="text-blue-300 text-xs font-bold">ALPACA API</span>
-                              </div> */}
+                              </div>
+                              <div className={`px-3 py-1 rounded-full border text-xs font-bold ${
+                                enhancedAccount?.isConnected
+                                  ? 'bg-green-500/20 text-green-300 border-green-400/30'
+                                  : 'bg-red-500/20 text-red-300 border-red-400/30'
+                              }`}>
+                                {enhancedAccount?.isConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1119,7 +1330,7 @@ export default function AITradingDashboard() {
                       {/* AI Bot Activity Monitor - Integrated into Trading Floor */}
                       <div className="p-0 bg-gradient-to-br from-gray-900/50 to-gray-800/50">
                         <AIBotActivityMonitor
-                          botEnabled={botConfig.enabled}
+                          botEnabled={isClient && botConfig.enabled}
                           mode={botConfig.mode}
                           minimumConfidence={botConfig.minimumConfidence}
                         />
@@ -1158,6 +1369,10 @@ export default function AITradingDashboard() {
                             <span className="text-blue-400 font-medium">{enhancedAccount?.investedAmount ? formatCurrency(enhancedAccount.investedAmount) : '$0.00'}</span>
                           </div>
                           <div className="flex justify-between">
+                            <span className="text-gray-400">Buying Power:</span>
+                            <span className="text-yellow-400 font-medium">{enhancedAccount ? formatCurrency(enhancedAccount.availableBuyingPower) : '$0.00'}</span>
+                          </div>
+                          <div className="flex justify-between">
                             <span className="text-gray-400">Unrealized P&L:</span>
                             <span className={`font-medium ${enhancedAccount?.totalPnL ? getColorClass(enhancedAccount.totalPnL) : 'text-gray-400'}`}>
                               {enhancedAccount?.totalPnL ? formatCurrency(enhancedAccount.totalPnL) : '$0.00'}
@@ -1170,6 +1385,46 @@ export default function AITradingDashboard() {
                             </span>
                           </div>
                         </div>
+                      </div>
+
+                      {/* Current Positions Display */}
+                      <div className="bg-gray-800 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-purple-300 mb-3 flex items-center gap-2">
+                          <ChartBarIcon className="w-4 h-4" />
+                          Current Positions ({positions.length})
+                        </h4>
+                        {positions.length === 0 ? (
+                          <div className="text-center py-4">
+                            <div className="text-gray-400 text-sm">No open positions</div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {positions.map((position, index) => (
+                              <div key={position.symbol || index} className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                                    <span className="text-xs font-bold text-white">{position.symbol?.slice(0, 2)}</span>
+                                  </div>
+                                  <div>
+                                    <div className="text-sm font-medium text-white">{position.symbol}</div>
+                                    <div className="text-xs text-gray-400">{Math.abs(parseFloat(position.quantity || position.qty || '0'))} shares</div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-sm font-medium text-white">
+                                    {formatCurrency(parseFloat(position.marketValue || position.market_value || '0'))}
+                                  </div>
+                                  <div className={`text-xs ${
+                                    (parseFloat(position.unrealizedPnL || position.unrealized_pl || '0')) >= 0 ? 'text-green-400' : 'text-red-400'
+                                  }`}>
+                                    {(parseFloat(position.unrealizedPnL || position.unrealized_pl || '0')) >= 0 ? '+' : ''}
+                                    {formatCurrency(parseFloat(position.unrealizedPnL || position.unrealized_pl || '0'))}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="bg-gray-800 rounded-lg p-4">
@@ -1281,7 +1536,7 @@ export default function AITradingDashboard() {
                         <span>•</span>
                         <span>{aiRecommendations.filter(r => r.confidence >= 85).length} high confidence</span>
                         <span>•</span>
-                        <span>Bot: {botConfig.enabled ? `Active (${botConfig.mode})` : 'Inactive'}</span>
+                        <span>Bot: {isClient && botConfig.enabled ? `Active (${botConfig.mode})` : 'Inactive'}</span>
                       </div>
                     </div>
 
@@ -1336,7 +1591,7 @@ export default function AITradingDashboard() {
                         }`}>
                           {botConfig.mode} Mode
                         </div>
-                        <div className={`w-3 h-3 rounded-full ${botConfig.enabled ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+                        <div className={`w-3 h-3 rounded-full ${isClient && botConfig.enabled ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
                       </div>
                     </div>
 
@@ -1358,7 +1613,7 @@ export default function AITradingDashboard() {
                         <label className={`relative inline-flex items-center ${enhancedAccount?.isConnected ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                           <input
                             type="checkbox"
-                            checked={botConfig.enabled}
+                            checked={isClient && botConfig.enabled}
                             disabled={!enhancedAccount?.isConnected}
                             onChange={(e) => setBotConfig(prev => ({ ...prev, enabled: e.target.checked }))}
                             className="sr-only peer"
@@ -1368,7 +1623,7 @@ export default function AITradingDashboard() {
                       </div>
                     </div>
 
-                    {botConfig.enabled && enhancedAccount?.isConnected && (
+                    {isClient && botConfig.enabled && enhancedAccount?.isConnected && (
                       <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
                         <div className="flex items-center gap-2 text-green-400 mb-2">
                           <BoltIcon className="w-4 h-4" />
@@ -1381,7 +1636,7 @@ export default function AITradingDashboard() {
                       </div>
                     )}
 
-                    {botConfig.enabled && !enhancedAccount?.isConnected && (
+                    {isClient && botConfig.enabled && !enhancedAccount?.isConnected && (
                       <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
                         <div className="flex items-center gap-2 text-red-400 mb-2">
                           <ExclamationTriangleIcon className="w-4 h-4" />

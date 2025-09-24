@@ -95,8 +95,12 @@ export class AutoTradeExecutor {
     const decision = await this.makeExecutionDecision(signal, marketData, portfolio, aiScore)
 
     // Step 2: Execute if approved
+    console.log(`🔧 AutoTradeExecutor Config: autoExecute=${this.config.autoExecuteEnabled}, isEnabled=${this.isExecutionEnabled}`)
+
     if (decision.shouldExecute && this.config.autoExecuteEnabled && this.isExecutionEnabled) {
       try {
+        console.log(`🚀 EXECUTING TRADE: ${signal.action} ${marketData[0].symbol} - Position Size: ${(decision.positionSize * 100).toFixed(2)}%`)
+
         const execution = await this.executeTradeOrder(signal, decision, marketData, portfolio)
 
         // Track trade entry for learning
@@ -119,12 +123,16 @@ export class AutoTradeExecutor {
         })
 
         console.log(`🚀 AUTO-EXECUTED: ${signal.action} ${marketData[0].symbol} - Confidence: ${(signal.confidence * 100).toFixed(1)}%`)
+        console.log(`💰 Order ID: ${tradeId} | Price: $${execution.price} | Amount: $${(execution.price * execution.quantity).toFixed(2)}`)
         console.log(`📚 Learning: Tracking trade ${tradeId} for AI improvement`)
       } catch (error) {
         console.error(`❌ Auto-execution failed for ${marketData[0].symbol}:`, error.message)
+        console.error('📊 Error details:', error.stack)
         decision.shouldExecute = false
         decision.reason = `Execution failed: ${error.message}`
       }
+    } else {
+      console.log(`⏸️ AUTO-EXECUTION BLOCKED: shouldExecute=${decision.shouldExecute}, autoEnabled=${this.config.autoExecuteEnabled}, executionEnabled=${this.isExecutionEnabled}`)
     }
 
     return decision
@@ -713,9 +721,22 @@ export class AutoTradeExecutor {
   }
 
   private isCryptoSymbol(symbol: string): boolean {
-    // Common crypto symbols on Alpaca
-    const cryptoSymbols = ['BTCUSD', 'ETHUSD', 'LTCUSD', 'BCHUSD', 'ADAUSD', 'DOTUSD', 'SOLUSD', 'AVAXUSD', 'MATICUSD', 'SHIBUSD']
-    return cryptoSymbols.includes(symbol) || (symbol.endsWith('USD') && symbol.length <= 7)
+    // Comprehensive crypto symbols list for Alpaca
+    const cryptoSymbols = [
+      // Major Cryptos
+      'BTCUSD', 'ETHUSD', 'LTCUSD', 'BCHUSD',
+      // Popular Altcoins
+      'ADAUSD', 'DOTUSD', 'SOLUSD', 'AVAXUSD', 'MATICUSD', 'SHIBUSD',
+      // Additional Crypto Assets
+      'LINKUSD', 'UNIUSD', 'AAVEUSD', 'ALGOUSD', 'BATUSD', 'COMPUSD',
+      'TRXUSD', 'XLMUSD', 'XTZUSD', 'ATOMUSD', 'EOSUSD', 'IOTAUSD'
+    ]
+
+    // Enhanced crypto detection - USD pairs with short names are likely crypto
+    return cryptoSymbols.includes(symbol) ||
+           (symbol.endsWith('USD') && symbol.length >= 6 && symbol.length <= 8) ||
+           (symbol.endsWith('USDT') && symbol.length <= 9) ||
+           (symbol.endsWith('USDC') && symbol.length <= 9)
   }
 
   private isMarketOpen(): boolean {

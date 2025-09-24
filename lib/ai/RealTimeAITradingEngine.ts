@@ -81,29 +81,33 @@ export class RealTimeAITradingEngine {
 
   private getDefaultExecutionConfig(): ExecutionConfig {
     return {
-      autoExecuteEnabled: true,
+      autoExecuteEnabled: true, // ✅ AUTOMATIC EXECUTION ENABLED BY DEFAULT
       confidenceThresholds: {
-        minimum: 0.65,      // 65% minimum to consider execution
-        conservative: 0.75, // 75% for conservative positions
-        aggressive: 0.85,   // 85% for aggressive positions
-        maximum: 0.95       // 95% for maximum position size
+        minimum: 0.55,      // 55% minimum to consider execution (lowered for more trades)
+        conservative: 0.65, // 65% for conservative positions
+        aggressive: 0.75,   // 75% for aggressive positions
+        maximum: 0.85       // 85% for maximum position size
       },
       positionSizing: {
-        baseSize: 0.02,            // 2% base position size
-        maxSize: 0.08,             // 8% maximum position size
-        confidenceMultiplier: 2.0   // Confidence multiplier effect
+        baseSize: 0.03,            // 3% base position size (increased)
+        maxSize: 0.12,             // 12% maximum position size (increased)
+        confidenceMultiplier: 2.5   // Higher confidence multiplier effect
       },
       riskControls: {
-        maxDailyTrades: 20,        // Max 20 trades per day
-        maxOpenPositions: 15,      // Max 15 open positions
+        maxDailyTrades: 200,       // Max 200 trades per day (increased for maximum automation)
+        maxOpenPositions: 30,      // Max 30 open positions (increased)
         maxDailyLoss: 0.05,        // 5% max daily loss
-        cooldownPeriod: 15         // 15 minutes between trades for same symbol
+        cooldownPeriod: 3          // 3 minutes between trades for same symbol (reduced)
       },
       executionRules: {
-        marketHoursOnly: true,     // Only trade during market hours
-        avoidEarnings: false,      // Don't avoid earnings (requires earnings data)
-        volumeThreshold: 100000,   // Minimum 100K volume
-        spreadThreshold: 0.02      // Maximum 2% spread
+        marketHoursOnly: false,        // ✅ Allow 24/7 trading for crypto
+        avoidEarnings: false,          // Don't avoid earnings
+        volumeThreshold: 25000,        // Minimum 25K volume (lowered)
+        spreadThreshold: 0.04,         // Maximum 4% spread (increased for more opportunities)
+        cryptoTradingEnabled: true,    // ✅ Enable crypto trading
+        afterHoursTrading: true,       // ✅ Enable after hours trading
+        weekendTrading: true,          // ✅ Enable weekend trading for crypto
+        cryptoSpreadThreshold: 0.06    // Higher spread tolerance for crypto (6%)
       }
     }
   }
@@ -241,16 +245,16 @@ export class RealTimeAITradingEngine {
   private async loadInitialMarketData(): Promise<void> {
     console.log(`📈 Loading initial market data for ${this.activeWatchlist.length} symbols...`)
 
-    // For faster startup, load data for fewer symbols initially
-    const initialLoadLimit = Math.min(20, this.activeWatchlist.length) // Reduced from 100 to 20
+    // Yahoo Finance has no rate limits, so we can load more symbols
+    const initialLoadLimit = Math.min(10, this.activeWatchlist.length) // Yahoo Finance can handle more
     const symbolsToLoad = this.activeWatchlist.slice(0, initialLoadLimit)
 
     if (initialLoadLimit < this.activeWatchlist.length) {
       console.log(`🎯 Loading initial data for top ${initialLoadLimit} symbols (${this.activeWatchlist.length - initialLoadLimit} remaining will load on-demand)`)
     }
 
-    // Process in smaller batches for faster startup
-    const batchSize = 5
+    // Yahoo Finance can handle parallel requests
+    const batchSize = 3 // Small batches for Yahoo Finance
     let loadedCount = 0
     let errorCount = 0
 
@@ -288,9 +292,9 @@ export class RealTimeAITradingEngine {
 
       await Promise.all(batchPromises)
 
-      // Reduced delay between batches for faster startup
+      // Small delay between batches for Yahoo Finance (no rate limits needed)
       if (i + batchSize < symbolsToLoad.length) {
-        await new Promise(resolve => setTimeout(resolve, 500)) // 0.5 second delay between batches
+        await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay between batches
       }
     }
 
@@ -355,18 +359,29 @@ export class RealTimeAITradingEngine {
   }
 
   private startTradingLoop(): void {
-    // Main AI trading decision loop - runs every 5 minutes during market hours
+    // Main AI trading decision loop - runs every 5 minutes during market hours (or 24/7 if crypto enabled)
     const tradingInterval = setInterval(async () => {
-      if (!this.isRunning || !this.isMarketOpen()) return
+      if (!this.isRunning) {
+        console.log('⏸️ Trading loop skipped: Engine not running')
+        return
+      }
 
+      if (!this.isMarketOpen()) {
+        console.log('🕐 Trading loop skipped: Market closed and crypto not enabled')
+        return
+      }
+
+      console.log('⚡ AI Trading Loop executing...')
       try {
         await this.executeAITradingCycle()
+        console.log('✅ AI Trading Loop completed successfully')
       } catch (error) {
-        console.error('Error in trading cycle:', error)
+        console.error('❌ Error in trading cycle:', error)
       }
-    }, 5 * 60 * 1000) // 5 minutes
+    }, 1 * 60 * 1000) // 1 minute for faster testing (changed from 5 minutes)
 
     this.tradingIntervals.set('main', tradingInterval)
+    console.log('🔄 AI Trading Loop started - running every 1 minute')
   }
 
   private startMarketDataUpdates(): void {
@@ -398,23 +413,29 @@ export class RealTimeAITradingEngine {
 
   private async executeAITradingCycle(): Promise<void> {
     console.log('🧠 Executing AI trading cycle...')
+    console.log(`📊 Market Open Check: ${this.isMarketOpen()} | Crypto Enabled: ${this.config.autoExecution?.executionRules?.cryptoTradingEnabled}`)
 
     // Get current portfolio
     const portfolio = await this.getCurrentPortfolio()
+    console.log(`💰 Portfolio: $${portfolio.totalValue.toFixed(2)} | Buying Power: $${portfolio.buyingPower.toFixed(2)}`)
 
     // Generate AI trading decisions for all watchlist symbols
     const decisions: AITradingDecision[] = []
+    console.log(`🔍 Analyzing ${this.activeWatchlist.length} symbols for trading opportunities...`)
 
     for (const symbol of this.activeWatchlist) {
       try {
         const decision = await this.generateAITradingDecision(symbol, portfolio)
         if (decision) {
           decisions.push(decision)
+          console.log(`📈 ${symbol}: ${decision.action} ${(decision.confidence * 100).toFixed(1)}% confidence | AI Score: ${decision.aiScore.toFixed(2)}`)
         }
       } catch (error) {
         console.error(`Error generating decision for ${symbol}:`, error.message)
       }
     }
+
+    console.log(`🎯 Generated ${decisions.length} trading decisions`)
 
     // Sort decisions by AI score (best opportunities first)
     decisions.sort((a, b) => b.aiScore - a.aiScore)
@@ -422,6 +443,8 @@ export class RealTimeAITradingEngine {
     // Execute top decisions using AutoTradeExecutor
     let evaluatedTrades = 0
     let executedTrades = 0
+
+    console.log(`🚀 Evaluating top ${Math.min(5, decisions.length)} trading opportunities...`)
 
     for (const decision of decisions) {
       if (evaluatedTrades >= 5) break // Evaluate top 5 opportunities per cycle
@@ -437,6 +460,8 @@ export class RealTimeAITradingEngine {
           strategy: 'AI_ML_ENGINE'
         }
 
+        console.log(`🔍 Evaluating ${decision.symbol} ${decision.action}: ${(decision.confidence * 100).toFixed(1)}% confidence`)
+
         // Let AutoTradeExecutor evaluate and potentially execute
         const executionDecision = await this.autoTradeExecutor.evaluateAndExecute(
           signal,
@@ -446,6 +471,8 @@ export class RealTimeAITradingEngine {
         )
 
         evaluatedTrades++
+
+        console.log(`⚖️ ${decision.symbol} Execution Decision: ${executionDecision.shouldExecute ? 'EXECUTE' : 'SKIP'} - ${executionDecision.reason}`)
 
         if (executionDecision.shouldExecute) {
           executedTrades++

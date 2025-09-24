@@ -230,7 +230,7 @@ async getAccount() {
     }
   }
 
-  // Market data operations
+  // Market data operations using Alpaca Data API
   async getBarsV2(symbol: string, options: {
     timeframe?: string,
     start?: string,
@@ -239,24 +239,266 @@ async getAccount() {
     adjustment?: string
   }) {
     try {
-      console.log(`📊 AlpacaServerClient: Fetching bars for ${symbol}`)
+      console.log(`📊 AlpacaServerClient: Fetching bars for ${symbol} using Alpaca Data API`)
 
-      const barsOptions = {
-        start: options.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        end: options.end || new Date().toISOString().split('T')[0],
-        timeframe: options.timeframe || '1Day',
-        limit: options.limit || 100
+      // Use Alpaca Data API directly for better reliability
+      const endDate = new Date().toISOString().split('T')[0]
+      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+      const url = `https://data.alpaca.markets/v2/stocks/${symbol}/bars?timeframe=1Day&start=${startDate}&end=${endDate}&limit=${options.limit || 50}&feed=iex`
+
+      console.log(`📊 Alpaca Data API URL: ${url}`)
+
+      const response = await fetch(url, {
+        headers: {
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!,
+          'accept': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Alpaca Data API error: ${response.status} ${response.statusText}`)
       }
 
-      console.log(`📊 Bars options:`, barsOptions)
+      const data = await response.json()
 
-      const bars = await this.client.getBarsV2(symbol, barsOptions)
+      if (!data.bars || data.bars.length === 0) {
+        console.warn(`No bars data for ${symbol}`)
+        return []
+      }
 
-      console.log(`✅ Fetched ${Array.isArray(bars) ? bars.length : 'unknown'} bars for ${symbol}`)
+      // Convert Alpaca format to our MarketData format
+      const bars = data.bars.map(bar => ({
+        symbol: symbol,
+        timestamp: new Date(bar.t),
+        timeframe: '1Day',
+        open: bar.o,
+        high: bar.h,
+        low: bar.l,
+        close: bar.c,
+        volume: bar.v,
+        source: 'alpaca_data_api'
+      }))
+
+      console.log(`✅ Fetched ${bars.length} bars for ${symbol} from Alpaca Data API`)
       return bars
+
     } catch (error) {
       console.error(`❌ Error fetching bars for ${symbol}:`, error.message)
-      return []
+
+      // Fallback to client method if available
+      try {
+        console.log(`🔄 Falling back to client method for ${symbol}`)
+        const bars = await this.client.getBarsV2(symbol, options)
+        return bars || []
+      } catch (fallbackError) {
+        console.error(`❌ Fallback also failed for ${symbol}:`, fallbackError.message)
+        return []
+      }
+    }
+  }
+
+  // Get latest bars for multiple symbols (real-time data)
+  async getLatestBars(symbols: string[]) {
+    try {
+      console.log(`📊 Fetching latest bars for ${symbols.length} symbols`)
+
+      const symbolsParam = symbols.join(',')
+      const url = `https://data.alpaca.markets/v2/stocks/bars/latest?symbols=${symbolsParam}&feed=iex`
+
+      const response = await fetch(url, {
+        headers: {
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!,
+          'accept': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Alpaca latest bars API error: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (!data.bars) {
+        console.warn('No latest bars data received')
+        return {}
+      }
+
+      // Convert to our format
+      const result = {}
+      Object.keys(data.bars).forEach(symbol => {
+        const bar = data.bars[symbol]
+        result[symbol] = {
+          symbol: symbol,
+          timestamp: new Date(bar.t),
+          timeframe: 'latest',
+          open: bar.o,
+          high: bar.h,
+          low: bar.l,
+          close: bar.c,
+          volume: bar.v,
+          source: 'alpaca_latest_api'
+        }
+      })
+
+      console.log(`✅ Fetched latest bars for ${Object.keys(result).length} symbols`)
+      return result
+
+    } catch (error) {
+      console.error('❌ Error fetching latest bars:', error.message)
+      return {}
+    }
+  }
+
+  // Get latest quotes for multiple symbols (real-time quotes)
+  async getLatestQuotes(symbols: string[]) {
+    try {
+      console.log(`📊 Fetching latest quotes for ${symbols.length} symbols`)
+
+      const symbolsParam = symbols.join(',')
+      const url = `https://data.alpaca.markets/v2/stocks/quotes/latest?symbols=${symbolsParam}&feed=iex`
+
+      const response = await fetch(url, {
+        headers: {
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!,
+          'accept': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Alpaca latest quotes API error: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (!data.quotes) {
+        console.warn('No latest quotes data received')
+        return {}
+      }
+
+      // Convert to our format
+      const result = {}
+      Object.keys(data.quotes).forEach(symbol => {
+        const quote = data.quotes[symbol]
+        result[symbol] = {
+          symbol: symbol,
+          timestamp: new Date(quote.t),
+          bid: quote.bp, // bid price
+          ask: quote.ap, // ask price
+          bidSize: quote.bs, // bid size
+          askSize: quote.as, // ask size
+          source: 'alpaca_quotes_api'
+        }
+      })
+
+      console.log(`✅ Fetched latest quotes for ${Object.keys(result).length} symbols`)
+      return result
+
+    } catch (error) {
+      console.error('❌ Error fetching latest quotes:', error.message)
+      return {}
+    }
+  }
+
+  // Crypto market data operations
+  async getCryptoLatestBars(symbols: string[]) {
+    try {
+      console.log(`₿ Fetching latest crypto bars for ${symbols.length} symbols`)
+
+      const symbolsParam = symbols.join(',')
+      const url = `https://data.alpaca.markets/v1beta3/crypto/us/latest/bars?symbols=${symbolsParam}`
+
+      const response = await fetch(url, {
+        headers: {
+          'accept': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Alpaca crypto bars API error: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (!data.bars) {
+        console.warn('No crypto bars data received')
+        return {}
+      }
+
+      // Convert to our format
+      const result = {}
+      Object.keys(data.bars).forEach(symbol => {
+        const bar = data.bars[symbol]
+        result[symbol] = {
+          symbol: symbol,
+          timestamp: new Date(bar.t),
+          timeframe: 'latest',
+          open: bar.o,
+          high: bar.h,
+          low: bar.l,
+          close: bar.c,
+          volume: bar.v,
+          source: 'alpaca_crypto_api'
+        }
+      })
+
+      console.log(`✅ Fetched crypto bars for ${Object.keys(result).length} symbols`)
+      return result
+
+    } catch (error) {
+      console.error('❌ Error fetching crypto bars:', error.message)
+      return {}
+    }
+  }
+
+  async getCryptoLatestQuotes(symbols: string[]) {
+    try {
+      console.log(`₿ Fetching latest crypto quotes for ${symbols.length} symbols`)
+
+      const symbolsParam = symbols.join(',')
+      const url = `https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes?symbols=${symbolsParam}`
+
+      const response = await fetch(url, {
+        headers: {
+          'accept': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Alpaca crypto quotes API error: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (!data.quotes) {
+        console.warn('No crypto quotes data received')
+        return {}
+      }
+
+      // Convert to our format
+      const result = {}
+      Object.keys(data.quotes).forEach(symbol => {
+        const quote = data.quotes[symbol]
+        result[symbol] = {
+          symbol: symbol,
+          timestamp: new Date(quote.t),
+          bid: quote.bp,
+          ask: quote.ap,
+          bidSize: quote.bs,
+          askSize: quote.as,
+          source: 'alpaca_crypto_quotes_api'
+        }
+      })
+
+      console.log(`✅ Fetched crypto quotes for ${Object.keys(result).length} symbols`)
+      return result
+
+    } catch (error) {
+      console.error('❌ Error fetching crypto quotes:', error.message)
+      return {}
     }
   }
 }

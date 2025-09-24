@@ -50,7 +50,7 @@ let isSimulatingActivity = false
 let simulationInterval: NodeJS.Timeout | null = null
 
 // Order execution configuration
-let orderExecutionEnabled = false
+let orderExecutionEnabled = true
 const autoExecutionConfig = {
   minConfidenceForOrder: 70, // 70% minimum confidence to execute trades
   maxPositionSize: 5000, // Maximum $5000 per position

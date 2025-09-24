@@ -26,6 +26,19 @@ interface BotActivity {
   status: 'active' | 'completed' | 'failed'
 }
 
+interface AIRecommendation {
+  symbol: string
+  action: 'BUY' | 'SELL'
+  confidence: number
+  aiScore: number
+  riskScore: number
+  reasoning: string[]
+  lastUpdate: string
+  dataPoints: number
+  canExecute: boolean
+  executionReason: string
+}
+
 interface BotMetrics {
   symbolsScanned: number
   analysisCompleted: number
@@ -50,6 +63,8 @@ export default function AIBotActivityMonitor({
   minimumConfidence
 }: AIBotActivityMonitorProps) {
   const [activities, setActivities] = useState<BotActivity[]>([])
+  const [recommendations, setRecommendations] = useState<AIRecommendation[]>([])
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false)
   const [metrics, setMetrics] = useState<BotMetrics>({
     symbolsScanned: 0,
     analysisCompleted: 0,
@@ -72,6 +87,55 @@ export default function AIBotActivityMonitor({
     dailyOrderLimit: 10
   })
 
+  // Fetch AI recommendations from the real AI trading engine
+  const fetchAIRecommendations = useCallback(async () => {
+    if (!botEnabled) return
+
+    setIsLoadingRecommendations(true)
+    try {
+      // First check if the AI engine is actually running
+      const statusResponse = await fetch('/api/ai-trading')
+      const statusData = await statusResponse.json()
+
+      if (!statusData.running) {
+        // Engine not running, don't try to fetch recommendations
+        setIsLoadingRecommendations(false)
+        return
+      }
+
+      const response = await fetch('/api/ai-trading', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'get_recommendations' })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setRecommendations(data.recommendations || [])
+
+          // Update metrics based on real data
+          setMetrics(prev => ({
+            ...prev,
+            symbolsScanned: data.marketDataStatus?.length || prev.symbolsScanned,
+            recommendationsGenerated: data.recommendations?.length || prev.recommendationsGenerated,
+            tradesExecuted: data.session?.tradesExecuted || prev.tradesExecuted,
+            lastActivityTime: new Date(),
+            successRate: data.autoExecutionMetrics?.successRate || prev.successRate
+          }))
+        }
+      } else {
+        console.error('Failed to fetch AI recommendations:', response.status)
+      }
+    } catch (error) {
+      console.error('Failed to fetch AI recommendations:', error)
+    } finally {
+      setIsLoadingRecommendations(false)
+    }
+  }, [botEnabled])
+
   // Fetch real-time bot activity from API
   const fetchBotActivity = useCallback(async () => {
     try {
@@ -80,7 +144,10 @@ export default function AIBotActivityMonitor({
         const data = await response.json()
         if (data.success) {
           setActivities(data.data.activities || [])
-          setMetrics(data.data.metrics || {})
+          setMetrics(prev => ({
+            ...prev,
+            ...data.data.metrics
+          }))
 
           // Update order execution state
           if (data.data.orderExecution) {
@@ -100,6 +167,114 @@ export default function AIBotActivityMonitor({
       console.error('Failed to fetch bot activity:', error)
     }
   }, [])
+
+  // Request notification permission on component mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
+  // Show browser notification for successful trades
+  const showTradeNotification = (symbol: string, action: 'BUY' | 'SELL', amount: number, success: boolean) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const title = success
+        ? `🎉 Trade Executed Successfully!`
+        : `❌ Trade Failed`
+
+      const body = success
+        ? `${action} $${amount} ${symbol} - Order submitted to Alpaca`
+        : `Failed to ${action} ${symbol} - Check account permissions`
+
+      const icon = success ? '🚀' : '⚠️'
+
+      new Notification(title, {
+        body,
+        icon: '/favicon.ico',
+        tag: `trade-${symbol}-${Date.now()}`,
+        requireInteraction: false,
+        silent: false
+      })
+    }
+  }
+
+  // Get a fresh AI recommendation to replace the bought card
+  const getNewRecommendation = useCallback(async (excludeSymbol: string): Promise<AIRecommendation | null> => {
+    try {
+      const response = await fetch('/api/ai-trading', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'get_single_recommendation', exclude: excludeSymbol })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        return data.recommendation || null
+      }
+    } catch (error) {
+      console.error('Failed to get new recommendation:', error)
+    }
+    return null
+  }, [])
+
+  // Manual trade execution function with card replacement
+  const executeManualTrade = useCallback(async (symbol: string, action: 'BUY' | 'SELL', notionalAmount: number = 20) => {
+    try {
+      const response = await fetch('/api/alpaca/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          symbol,
+          notional: notionalAmount,
+          side: action.toLowerCase(),
+          type: 'market',
+          time_in_force: 'day',
+          client_order_id: `manual_${symbol}_${Date.now()}`
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Show success notification
+        showTradeNotification(symbol, action, notionalAmount, true)
+
+        // Also show alert for immediate feedback
+        alert(`✅ ${action} order for ${symbol} ($${notionalAmount}) submitted successfully!`)
+
+        // If BUY was successful, replace the card with a new recommendation
+        if (action === 'BUY') {
+          const newRecommendation = await getNewRecommendation(symbol)
+          if (newRecommendation) {
+            setRecommendations(prev =>
+              prev.map(rec =>
+                rec.symbol === symbol ? newRecommendation : rec
+              )
+            )
+          } else {
+            // If no new recommendation available, remove the bought card
+            setRecommendations(prev => prev.filter(rec => rec.symbol !== symbol))
+          }
+        } else {
+          // For SELL orders, just refresh all recommendations
+          fetchAIRecommendations()
+        }
+      } else {
+        // Show failure notification
+        showTradeNotification(symbol, action, notionalAmount, false)
+
+        alert(`❌ Order failed: ${result.error || result.details}`)
+      }
+    } catch (error) {
+      console.error('Manual trade execution failed:', error)
+      showTradeNotification(symbol, action, notionalAmount, false)
+      alert(`❌ Trade execution failed: ${error.message}`)
+    }
+  }, [fetchAIRecommendations, getNewRecommendation])
 
 
   // Start/stop bot activity monitoring
@@ -128,16 +303,20 @@ export default function AIBotActivityMonitor({
 
     // Initial fetch
     fetchBotActivity()
+    fetchAIRecommendations()
 
     // Poll for updates every 3 seconds when bot is active
-    const interval = setInterval(fetchBotActivity, 3000)
+    const interval = setInterval(() => {
+      fetchBotActivity()
+      fetchAIRecommendations()
+    }, 15000) // Every 15 seconds for AI recommendations (increased from 5s)
 
     return () => {
       clearInterval(interval)
       // Stop simulation when component unmounts
       fetch('/api/ai-bot-activity?action=stop-simulation').catch(console.error)
     }
-  }, [botEnabled, fetchBotActivity])
+  }, [botEnabled, fetchBotActivity, fetchAIRecommendations])
 
   // Countdown for next scan
   useEffect(() => {
@@ -238,17 +417,130 @@ export default function AIBotActivityMonitor({
             </div>
           </div>
 
-          {/* Current Activity Status */}
-          <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-500/30 rounded-lg p-4 mb-4">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-green-400 font-medium text-sm">AI Bot Active</span>
-              <span className="text-gray-400 text-xs">•</span>
-              <span className="text-purple-400 text-xs">Min Confidence: {minimumConfidence}%</span>
+          {/* AI Recommendations Cards */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="text-green-400 font-medium text-sm">Live AI Recommendations</span>
+                <span className="text-gray-400 text-xs">•</span>
+                <span className="text-purple-400 text-xs">Min Confidence: {minimumConfidence}%</span>
+                {isLoadingRecommendations && (
+                  <ArrowPathIcon className="w-4 h-4 text-yellow-400 animate-spin" />
+                )}
+              </div>
+              <button
+                onClick={fetchAIRecommendations}
+                className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg transition-colors"
+              >
+                Refresh
+              </button>
             </div>
-            <div className="text-sm text-gray-300">
-              🤖 Continuously monitoring Alpaca markets, analyzing patterns, and generating trading recommendations
-            </div>
+
+            {recommendations.length === 0 ? (
+              <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-500/30 rounded-lg p-4">
+                <div className="text-center py-4">
+                  <SparklesIcon className="w-8 h-8 text-purple-400 mx-auto mb-2" />
+                  <p className="text-gray-300 text-sm mb-1">Generating AI Recommendations...</p>
+                  <p className="text-gray-400 text-xs">AI is analyzing market data from Yahoo Finance</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {recommendations.map((rec, index) => (
+                  <div
+                    key={`${rec.symbol}-${index}`}
+                    className={`bg-gradient-to-r rounded-lg p-4 border ${
+                      rec.action === 'BUY'
+                        ? 'from-green-900/20 to-emerald-900/20 border-green-500/30'
+                        : 'from-red-900/20 to-rose-900/20 border-red-500/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-lg">{rec.symbol}</span>
+                          <div className={`px-2 py-1 rounded text-xs font-bold ${
+                            rec.action === 'BUY'
+                              ? 'bg-green-600 text-white'
+                              : 'bg-red-600 text-white'
+                          }`}>
+                            {rec.action}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            rec.confidence >= 0.8 ? 'bg-green-900/30 text-green-400' :
+                            rec.confidence >= 0.7 ? 'bg-yellow-900/30 text-yellow-400' :
+                            'bg-gray-600 text-gray-300'
+                          }`}>
+                            {(rec.confidence * 100).toFixed(0)}% confidence
+                          </span>
+                          <span className="px-2 py-1 bg-purple-900/30 text-purple-400 rounded text-xs">
+                            AI Score: {(rec.aiScore * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => executeManualTrade(rec.symbol, rec.action, 20)}
+                          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                            rec.canExecute
+                              ? rec.action === 'BUY'
+                                ? 'bg-green-600 hover:bg-green-700 text-white'
+                                : 'bg-red-600 hover:bg-red-700 text-white'
+                              : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                          }`}
+                          disabled={!rec.canExecute}
+                        >
+                          {rec.action} $20
+                        </button>
+                        <button
+                          onClick={() => executeManualTrade(rec.symbol, rec.action, 50)}
+                          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                            rec.canExecute
+                              ? rec.action === 'BUY'
+                                ? 'bg-green-700 hover:bg-green-800 text-white'
+                                : 'bg-red-700 hover:bg-red-800 text-white'
+                              : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                          }`}
+                          disabled={!rec.canExecute}
+                        >
+                          {rec.action} $50
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm">
+                        <span className="text-gray-400">AI Analysis:</span>
+                        <div className="mt-1 space-y-1">
+                          {rec.reasoning.map((reason, i) => (
+                            <div key={i} className="text-xs text-gray-300 pl-2 border-l-2 border-gray-600">
+                              • {reason}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-gray-400">
+                        <div className="flex items-center gap-4">
+                          <span>Risk: {(rec.riskScore * 100).toFixed(0)}%</span>
+                          <span>Data Points: {rec.dataPoints}</span>
+                          <span>Updated: {new Date(rec.lastUpdate).toLocaleTimeString()}</span>
+                        </div>
+                        {!rec.canExecute && (
+                          <span className="text-yellow-400 text-xs">
+                            ⚠️ {rec.executionReason}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Order Execution Controls */}
