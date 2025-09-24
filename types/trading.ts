@@ -1,5 +1,5 @@
 import { Decimal } from 'decimal.js'
-import { StrategyMetrics } from './dashboard'
+
 /**
  * Market data structure for OHLCV data
  */
@@ -645,6 +645,18 @@ export interface StrategyConfig {
   type: string
 }
 
+
+export interface StrategyMetrics {
+  totalTrades: number
+  winningTrades: number
+  losingTrades: number
+  avgReturn: number
+  bestTrade: number
+  worstTrade: number
+  avgHoldingPeriod: number
+  monthlyReturns: number[]
+  yearlyReturns: number[]
+}
 
 export interface EnhancedStrategyMetrics extends StrategyMetrics {
   winRate: any

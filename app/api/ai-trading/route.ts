@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { AlpacaServerClient } from '@/lib/alpaca/server-client'
 import { RealTimeAITradingEngine } from '@/lib/ai/RealTimeAITradingEngine'
+import { AlphaVantageClient } from '@/lib/market-data/AlphaVantageClient'
 
 // Global instance of the AI trading engine
 let aiTradingEngine: RealTimeAITradingEngine | null = null
@@ -69,9 +70,12 @@ const DEFAULT_CONFIG = {
 // AlpacaServerClient to AlpacaClient adapter for compatibility with AI Trading Engine
 class AlpacaClientAdapter {
   private serverClient: AlpacaServerClient
+  private alphaVantageClient: AlphaVantageClient
 
   constructor() {
     this.serverClient = new AlpacaServerClient()
+    // Use Alpha Vantage for market data with your API key
+    this.alphaVantageClient = new AlphaVantageClient('YDUIUWNTAWIFTZLT')
   }
 
   // Adapter methods that match AlpacaClient interface
@@ -103,14 +107,27 @@ class AlpacaClientAdapter {
 
   // Add missing method for AI Trading Engine compatibility
   async getBarsV2(symbol: string, options: any) {
-    // AlpacaServerClient uses getBarsV2 method from the underlying client
-    // We need to access it through the serverClient's underlying client
     try {
-      // For now, return empty data to prevent errors
-      // The AI engine will handle missing data gracefully
-      return []
+      console.log(`📊 AlpacaClientAdapter: Fetching market data for ${symbol}`)
+
+      // First try Alpha Vantage (free and reliable)
+      if (this.alphaVantageClient.canMakeRequest()) {
+        console.log(`📈 Using Alpha Vantage for ${symbol}`)
+        const bars = await this.alphaVantageClient.getDailyBars(symbol, 'compact')
+
+        if (bars.length > 0) {
+          // Limit to requested amount
+          const limit = options.limit || 100
+          return bars.slice(-limit) // Get most recent bars
+        }
+      }
+
+      // Fallback to Alpaca if Alpha Vantage fails
+      console.log(`📊 Falling back to Alpaca for ${symbol}`)
+      return await this.serverClient.getBarsV2(symbol, options)
+
     } catch (error) {
-      console.warn(`getBarsV2 not implemented in adapter for ${symbol}:`, error)
+      console.error(`getBarsV2 error in adapter for ${symbol}:`, error.message)
       return []
     }
   }
@@ -355,6 +372,100 @@ export async function POST(request: NextRequest) {
           currentConfig: DEFAULT_CONFIG
         })
 
+      case 'manual_execute':
+        if (!aiTradingEngine) {
+          return NextResponse.json(
+            { error: 'AI Trading Engine not initialized' },
+            { status: 400 }
+          )
+        }
+
+        // Force generate and execute a test AI recommendation
+        try {
+          console.log('🧪 Manually triggering AI recommendation execution...')
+
+          // Get real market data from Alpaca for the AI decision
+          const symbol = body.symbol || 'AAPL'
+          const alpacaTestClient = getAlpacaClient()
+
+          // Fetch real market data
+          const marketData = await alpacaTestClient.getBarsV2(symbol, {
+            timeframe: '1Day',
+            limit: 50
+          })
+
+          if (!marketData || marketData.length === 0) {
+            throw new Error(`No market data available for ${symbol}`)
+          }
+
+          // Use real market data for AI decision
+          const latestBar = marketData[marketData.length - 1]
+          const testDecision = {
+            symbol: symbol,
+            action: body.tradeAction || body.action || 'BUY',
+            confidence: body.confidence || 0.8,
+            aiScore: 0.85,
+            riskScore: 0.2,
+            positionSize: 0.02, // 2% position size
+            stopLoss: 0.95,
+            takeProfit: 1.1,
+            reasoning: ['Manual test execution with real market data', 'High confidence AI signal'],
+            marketData: marketData // Use real market data
+          }
+
+          // Create signal for the decision
+          const signal = {
+            action: testDecision.action,
+            confidence: testDecision.confidence,
+            reason: testDecision.reasoning.join('; '),
+            timestamp: new Date(),
+            riskScore: testDecision.riskScore,
+            strategy: 'MANUAL_TEST'
+          }
+
+          // Get real portfolio data from Alpaca
+          const account = await alpacaTestClient.getAccount()
+          const positions = await alpacaTestClient.getPositions()
+
+          const portfolio = {
+            totalValue: account.totalBalance || 10000, // Use real balance
+            cashBalance: account.cashBalance || account.availableBuyingPower || 5000,
+            positions: positions || [],
+            dayPnL: 0
+          }
+
+          console.log('💰 Real portfolio data:', {
+            totalValue: portfolio.totalValue,
+            cashBalance: portfolio.cashBalance,
+            positionsCount: portfolio.positions.length
+          })
+
+          // Test auto-execution
+          const executionDecision = await aiTradingEngine.getAutoTradeExecutor().evaluateAndExecute(
+            signal,
+            testDecision.marketData,
+            portfolio,
+            testDecision.aiScore
+          )
+
+          console.log('🎯 Manual execution result:', executionDecision)
+
+          return NextResponse.json({
+            success: true,
+            message: 'Manual AI execution test completed',
+            testDecision,
+            executionDecision,
+            executed: executionDecision.shouldExecute
+          })
+
+        } catch (error) {
+          console.error('❌ Manual execution test failed:', error)
+          return NextResponse.json(
+            { error: 'Manual execution test failed', details: error.message },
+            { status: 500 }
+          )
+        }
+
       case 'execution_control':
         if (!aiTradingEngine) {
           return NextResponse.json(
@@ -446,7 +557,7 @@ export async function POST(request: NextRequest) {
       default:
         console.log('❓ Invalid action received:', action)
         return NextResponse.json(
-          { error: 'Invalid action. Use: start, stop, status, update_watchlist, update_config, execution_control, or test' },
+          { error: 'Invalid action. Use: start, stop, status, update_watchlist, update_config, execution_control, manual_execute, or test' },
           { status: 400 }
         )
     }

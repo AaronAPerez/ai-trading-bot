@@ -229,4 +229,34 @@ async getAccount() {
       throw new Error('Failed to fetch orders from Alpaca')
     }
   }
+
+  // Market data operations
+  async getBarsV2(symbol: string, options: {
+    timeframe?: string,
+    start?: string,
+    end?: string,
+    limit?: number,
+    adjustment?: string
+  }) {
+    try {
+      console.log(`📊 AlpacaServerClient: Fetching bars for ${symbol}`)
+
+      const barsOptions = {
+        start: options.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        end: options.end || new Date().toISOString().split('T')[0],
+        timeframe: options.timeframe || '1Day',
+        limit: options.limit || 100
+      }
+
+      console.log(`📊 Bars options:`, barsOptions)
+
+      const bars = await this.client.getBarsV2(symbol, barsOptions)
+
+      console.log(`✅ Fetched ${Array.isArray(bars) ? bars.length : 'unknown'} bars for ${symbol}`)
+      return bars
+    } catch (error) {
+      console.error(`❌ Error fetching bars for ${symbol}:`, error.message)
+      return []
+    }
+  }
 }

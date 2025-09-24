@@ -318,19 +318,19 @@ export class AutoTradeExecutor {
 
     const symbol = marketData[0].symbol
     const currentPrice = marketData[marketData.length - 1].close
-    const positionValue = portfolio.totalValue * decision.positionSize
-    const quantity = Math.floor(positionValue / currentPrice)
+    const notionalAmount = portfolio.totalValue * decision.positionSize
 
-    if (quantity < 1) {
-      throw new Error(`Quantity too small: ${quantity} shares`)
+    // Use minimum $1 for notional orders (Alpaca requirement)
+    if (notionalAmount < 1) {
+      throw new Error(`Notional amount too small: $${notionalAmount.toFixed(2)} (minimum $1)`)
     }
 
     const startTime = Date.now()
 
-    // Create order payload for direct API call
+    // Create order payload for direct API call using notional orders
     const orderPayload = {
       symbol,
-      qty: quantity,
+      notional: Math.round(notionalAmount * 100) / 100, // Round to 2 decimal places
       side: signal.action.toLowerCase(), // buy/sell
       type: 'market', // Use market orders for immediate execution
       time_in_force: 'day',
@@ -340,7 +340,11 @@ export class AutoTradeExecutor {
     console.log(`🚀 Executing order via direct API:`, orderPayload)
 
     // Direct fetch to our orders API endpoint
-    const response = await fetch('/api/alpaca/orders', {
+    const baseUrl = process.env.NODE_ENV === 'production'
+      ? 'https://ai-trading-bot-nextjs.vercel.app'
+      : 'http://localhost:3000'
+
+    const response = await fetch(`${baseUrl}/api/alpaca/orders`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -366,11 +370,14 @@ export class AutoTradeExecutor {
     const filledPrice = order.filledPrice || order.filled_avg_price || currentPrice
     const slippage = Math.abs(filledPrice - currentPrice) / currentPrice
 
+    // Calculate actual quantity from notional amount and fill price
+    const actualQuantity = filledPrice ? (notionalAmount / filledPrice) : 0
+
     // Create execution record
     const execution: TradeExecution = {
       symbol,
       action: signal.action === 'HOLD' ? 'BUY' : signal.action, // Default to 'BUY' if 'HOLD' (or handle as needed)
-      quantity,
+      quantity: actualQuantity,
       price: filledPrice,
       orderId: order.orderId || order.id,
       timestamp: new Date(),
@@ -391,7 +398,7 @@ export class AutoTradeExecutor {
       await this.setAutomatedStopLossAndTakeProfit(execution, signal, marketData)
     }
 
-    console.log(`✅ AUTO-EXECUTED: ${signal.action} ${quantity} ${symbol} @ $${filledPrice.toFixed(2)}`)
+    console.log(`✅ AUTO-EXECUTED: ${signal.action} $${notionalAmount.toFixed(2)} ${symbol} @ $${filledPrice.toFixed(2)} (${actualQuantity.toFixed(4)} shares)`)
     console.log(`   Execution Time: ${executionTime}ms, Slippage: ${(slippage * 100).toFixed(3)}%`)
 
     return execution

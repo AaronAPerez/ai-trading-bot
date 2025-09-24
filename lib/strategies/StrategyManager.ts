@@ -4,8 +4,25 @@ import { MACDStrategy } from './MACDStrategy'
 import { BollingerBandsStrategy } from './BollingerBandsStrategy'
 import { MovingAverageCrossoverStrategy } from './MovingAverageCrossoverStrategy'
 import { MeanReversionStrategy } from './MeanReversionStrategy'
-import { EnsembleData, StrategyMetrics, StrategySignal } from '@/types/dashboard'
+
 import { EnhancedStrategyMetrics, StrategyRecommendation, TopStrategyAnalysis, TradeSignal } from '@/types/trading'
+
+// Add missing type definition for EnsembleData
+type StrategySignal = {
+  action: 'BUY' | 'SELL' | 'HOLD'
+  confidence: number
+  reason?: string
+  timestamp?: Date
+  price?: number
+  riskScore?: number
+}
+
+type EnsembleData = {
+  signal: StrategySignal
+  consensus: number
+  individualSignals: Record<string, StrategySignal>
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
+}
 
 // STEP 2: Enhanced Strategy Manager
 export class StrategyManager {

@@ -571,6 +571,11 @@ export class RealTimeAITradingEngine {
     return this.autoTradeExecutor.getTodayStats()
   }
 
+  // Access to AutoTradeExecutor for manual testing
+  getAutoTradeExecutor() {
+    return this.autoTradeExecutor
+  }
+
   // Start AI Learning Cycle
   private startLearningCycle(): void {
     // Run learning cycle every 5 minutes

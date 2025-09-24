@@ -1,4 +1,5 @@
 import Alpaca from '@alpacahq/alpaca-trade-api'
+import alpaca from './alpaca'
 
 export function initSocket(onUpdate: (msg: any) => void) {
   const socket = alpaca.trade_ws

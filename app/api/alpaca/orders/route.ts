@@ -10,15 +10,23 @@ export async function POST(request: NextRequest) {
     const orderData = await request.json()
     console.log('📋 Order data:', JSON.stringify(orderData, null, 2))
 
-    // Validate required fields
-    if (!orderData.symbol || !orderData.qty || !orderData.side) {
+    // Validate required fields - either qty OR notional is required
+    if (!orderData.symbol || (!orderData.qty && !orderData.notional) || !orderData.side) {
       console.error('❌ Missing required order fields')
       return NextResponse.json(
         {
           error: 'Missing required order fields',
-          required: ['symbol', 'qty', 'side'],
+          required: ['symbol', '(qty OR notional)', 'side'],
           received: Object.keys(orderData)
         },
+        { status: 400 }
+      )
+    }
+
+    // Validate that only one of qty or notional is provided
+    if (orderData.qty && orderData.notional) {
+      return NextResponse.json(
+        { error: 'Cannot specify both qty and notional. Use one or the other.' },
         { status: 400 }
       )
     }
@@ -51,10 +59,16 @@ export async function POST(request: NextRequest) {
     // Prepare order payload for Alpaca
     const orderPayload = {
       symbol: orderData.symbol.toUpperCase(),
-      qty: orderData.qty.toString(),
       side: orderData.side.toLowerCase(),
       type: orderData.type.toLowerCase(),
       time_in_force: orderData.time_in_force.toLowerCase()
+    }
+
+    // Add quantity or notional amount
+    if (orderData.qty) {
+      orderPayload.qty = orderData.qty.toString()
+    } else if (orderData.notional) {
+      orderPayload.notional = orderData.notional.toString()
     }
 
     // Add optional fields

@@ -33,6 +33,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/decimal.js": "^0.0.32",
     "@types/node": "^20.19.13",
     "@types/react": "^19",
     "@types/react-dom": "^19",
