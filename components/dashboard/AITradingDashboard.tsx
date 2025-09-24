@@ -103,7 +103,7 @@ interface AIRecommendation {
 }
 
 // Enhanced Balance Chart Component
-function BalanceChart({ account }: { account: EnhancedAccount | null }) {
+function BalanceChart({ account, isClient }: { account: EnhancedAccount | null, isClient: boolean }) {
   if (!account) {
     return (
       <div className="bg-gray-700 rounded-lg p-4">
@@ -142,7 +142,7 @@ function BalanceChart({ account }: { account: EnhancedAccount | null }) {
         <div className="text-center py-4 border-t border-gray-600">
           <div className="text-xs text-gray-500 mb-1">Real-time Alpaca data</div>
           <div className="text-xs text-gray-400">
-            Updated: {currentData.timestamp.toLocaleTimeString()}
+            Updated: {isClient ? currentData.timestamp.toLocaleTimeString() : '--:--:-- --'}
           </div>
         </div>
       </div>
@@ -288,7 +288,7 @@ function AIRecommendationCard({ recommendation, onExecute }: {
              `Execute AI ${recommendation.action}`}
           </button>
           <div className="text-xs text-center text-gray-400">
-            Expires: {recommendation.expiresAt.toLocaleTimeString()}
+            Expires: {isClient ? recommendation.expiresAt.toLocaleTimeString() : '--:--:-- --'}
           </div>
           <div className="text-xs text-center text-purple-400">
             Strategy: {recommendation.strategyBasis}
@@ -465,6 +465,12 @@ export default function AITradingDashboard() {
   const [alertMessage, setAlertMessage] = useState<string | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
+  const [isClient, setIsClient] = useState(false)
+
+  // Prevent hydration mismatch with time display
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
   const [isLiveMode, setIsLiveMode] = useState(false)
 
   const [botConfig, setBotConfig] = useState<BotConfig>({
@@ -518,7 +524,7 @@ export default function AITradingDashboard() {
   })
 
   // Real Alpaca API data hooks
-  const { quotes, marketStatus, isLoading: marketLoading, error: marketError, refreshData } = useMarketData(botConfig.watchlistSymbols)
+  const { quotes, marketStatus, isLoading: marketLoading, error: marketError, dataSource, refreshData } = useMarketData(botConfig.watchlistSymbols)
   const { account, positions, isLoading: tradingLoading, error: tradingError, fetchAccount, fetchPositions, executeOrder } = useAlpacaTrading()
 
   // Enhanced account with calculated fields
@@ -626,11 +632,16 @@ export default function AITradingDashboard() {
 
       setAlertMessage(`${newStatus ? 'Starting' : 'Stopping'} AI Trading Bot...`)
 
+      // Create abort controller for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 150000) // 2.5 minute timeout
+
       const response = await fetch('/api/ai-trading', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: controller.signal,
         body: JSON.stringify({
           action,
           config: {
@@ -638,16 +649,17 @@ export default function AITradingDashboard() {
             autoExecution: {
               autoExecuteEnabled: true,
               confidenceThresholds: {
-                minimum: 0.75,
-                conservative: 0.80,
-                aggressive: 0.85,
-                maximum: 0.95
+                minimum: 0.60,      // Updated to match API config
+                conservative: 0.70, // Updated to match API config
+                aggressive: 0.80,   // Updated to match API config
+                maximum: 0.90       // Updated to match API config
               }
             }
           }
         }),
       })
 
+      clearTimeout(timeoutId) // Clear timeout if request completes
       const result = await response.json()
 
       if (response.ok) {
@@ -658,7 +670,13 @@ export default function AITradingDashboard() {
       }
     } catch (error) {
       console.error('Failed to toggle AI Trading Bot:', error)
-      setAlertMessage(`Failed to ${botConfig.enabled ? 'stop' : 'start'} AI Trading Bot: ${error.message}`)
+
+      let errorMessage = error.message
+      if (error.name === 'AbortError') {
+        errorMessage = 'Request timeout - AI Trading Bot startup took too long. Please try again.'
+      }
+
+      setAlertMessage(`Failed to ${botConfig.enabled ? 'stop' : 'start'} AI Trading Bot: ${errorMessage}`)
     }
 
     setTimeout(() => setAlertMessage(null), 5000)
@@ -888,7 +906,14 @@ export default function AITradingDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Last Update:</span>
-                <span className="text-white">{lastUpdate.toLocaleTimeString()}</span>
+                <span className="text-white">{isClient ? lastUpdate.toLocaleTimeString() : '--:--:-- --'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Data Source:</span>
+                <span className={dataSource === 'alpaca' ? 'text-green-400' : dataSource === 'hybrid' ? 'text-blue-400' : 'text-yellow-400'}>
+                  {dataSource === 'alpaca' ? 'Alpaca' : dataSource === 'hybrid' ? 'Hybrid' : 'Fallback'}
+                  {dataSource !== 'alpaca' && '⚠️'}
+                </span>
               </div>
             </div>
           </div>
@@ -908,7 +933,12 @@ export default function AITradingDashboard() {
                 <div className="flex items-center gap-4 text-sm text-gray-400">
                   <MarketClock variant="header" showDetails={false} />
                   <span>•</span>
-                  <span>Last AI Update: {lastUpdate.toLocaleTimeString()}</span>
+                  <span>Last AI Update: {isClient ? lastUpdate.toLocaleTimeString() : '--:--:-- --'}</span>
+                  <span>•</span>
+                  <span className={dataSource === 'alpaca' ? 'text-green-400' : dataSource === 'hybrid' ? 'text-blue-400' : 'text-yellow-400'}>
+                    Data: {dataSource === 'alpaca' ? 'Alpaca' : dataSource === 'hybrid' ? 'Alpaca + Fallback' : 'Fallback APIs'}
+                    {dataSource !== 'alpaca' && '⚠️'}
+                  </span>
                 </div>
               </div>
 
@@ -1010,7 +1040,7 @@ export default function AITradingDashboard() {
                     </h2>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      <BalanceChart account={enhancedAccount} />
+                      <BalanceChart account={enhancedAccount} isClient={isClient} />
 
                       <MarketClock variant="card" showDetails={true} />
 

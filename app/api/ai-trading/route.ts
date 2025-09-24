@@ -8,42 +8,39 @@ let aiTradingEngine: RealTimeAITradingEngine | null = null
 const DEFAULT_CONFIG = {
   maxPositionsCount: 15,
   riskPerTrade: 0.02, // 2% risk per trade
-  minConfidenceThreshold: 0.75, // 75% minimum confidence
+  minConfidenceThreshold: 0.65, // 65% minimum confidence (lowered for more trades)
   rebalanceFrequency: 4, // Rebalance every 4 hours
-  watchlistSize: 50, // Limit to 50 most popular symbols for better performance
-  watchlist: [
-    // Major Tech Stocks
-    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'NFLX',
-    // Blue Chip Stocks
-    'JPM', 'JNJ', 'V', 'PG', 'UNH', 'MA', 'HD', 'BAC', 'DIS', 'ADBE',
-    // Popular Growth Stocks
-    'CRM', 'UBER', 'LYFT', 'SNAP', 'TWTR', 'ZOOM', 'ROKU', 'SQ', 'PYPL', 'SHOP',
-    // Financial & Banking
-    'GS', 'WFC', 'C', 'MS', 'AXP',
-    // Popular ETFs
-    'SPY', 'QQQ', 'IWM', 'GLD', 'TLT',
-    // Energy & Utilities
-    'XOM', 'CVX', 'COP', 'SLB',
-    // Healthcare & Pharma
-    'PFE', 'ABBV', 'TMO', 'ABT', 'LLY',
-    // Consumer & Retail
-    'KO', 'PEP', 'WMT', 'COST', 'NKE'
-  ], // Predefined watchlist of actively traded symbols
+  watchlistSize: 200, // Increased to 200 symbols for more trading opportunities
   watchlistCriteria: {
-    includeETFs: false, // Disable auto-fetch to use predefined list
-    includeCrypto: false, // Disable crypto for paper trading compatibility
+    includeETFs: true, // Include ETFs for diversification
+    includeCrypto: true, // Include crypto for 24/7 trading opportunities
     riskLevel: 'medium' as 'low' | 'medium' | 'high',
-    marketCap: ['mega', 'large'] as ('mega' | 'large' | 'mid' | 'small')[],
-    categories: ['growth_tech', 'fintech', 'clean_energy']
+    marketCap: ['mega', 'large', 'mid'] as ('mega' | 'large' | 'mid' | 'small')[],
+    categories: ['growth_tech', 'fintech', 'clean_energy', 'healthcare', 'financial', 'consumer', 'industrial', 'energy', 'crypto'],
+    sectors: ['Technology', 'Healthcare', 'Financials', 'Consumer Discretionary', 'Communication Services', 'Industrials', 'Energy', 'Materials', 'Utilities', 'Real Estate'],
+    exchanges: ['NASDAQ', 'NYSE', 'BATS', 'CRYPTO'],
+    minVolume: 50000, // Lower for crypto markets
+    minPrice: 0.01, // Lower for crypto
+    maxPrice: 100000, // Higher for crypto like BTC
+    includeDividendStocks: true,
+    includeGrowthStocks: true,
+    includeValueStocks: true,
+    includeMomentumStocks: true,
+    cryptoPreferences: {
+      includeMajorCoins: true, // BTC, ETH, etc.
+      includeAltcoins: true,   // Other crypto
+      minMarketCap: 1000000000, // $1B minimum market cap for crypto
+      maxVolatility: 0.1       // 10% max daily volatility filter
+    }
   },
   paperTrading: process.env.NEXT_PUBLIC_TRADING_MODE === 'paper',
   autoExecution: {
     autoExecuteEnabled: true,
     confidenceThresholds: {
-      minimum: 0.75,      // 75% minimum to consider execution
-      conservative: 0.80, // 80% for conservative positions
-      aggressive: 0.85,   // 85% for aggressive positions
-      maximum: 0.95       // 95% for maximum position size
+      minimum: 0.60,      // 60% minimum to consider execution (lowered)
+      conservative: 0.70, // 70% for conservative positions
+      aggressive: 0.80,   // 80% for aggressive positions
+      maximum: 0.90       // 90% for maximum position size
     },
     positionSizing: {
       baseSize: 0.02,            // 2% base position size
@@ -51,16 +48,20 @@ const DEFAULT_CONFIG = {
       confidenceMultiplier: 2.0   // Confidence multiplier effect
     },
     riskControls: {
-      maxDailyTrades: 50,        // Max 50 trades per day
-      maxOpenPositions: 15,      // Max 15 open positions
-      maxDailyLoss: 0.05,        // 5% max daily loss
-      cooldownPeriod: 15         // 15 minutes between trades for same symbol
+      maxDailyTrades: 100,       // Max 100 trades per day (increased)
+      maxOpenPositions: 20,      // Max 20 open positions (increased)
+      maxDailyLoss: 0.03,        // 3% max daily loss (lowered for safety)
+      cooldownPeriod: 5          // 5 minutes between trades for same symbol (reduced)
     },
     executionRules: {
-      marketHoursOnly: true,     // Only trade during market hours
+      marketHoursOnly: false,    // Allow 24/7 trading for crypto
       avoidEarnings: false,      // Don't avoid earnings (requires earnings data)
-      volumeThreshold: 100000,   // Minimum 100K volume
-      spreadThreshold: 0.02      // Maximum 2% spread
+      volumeThreshold: 50000,    // Minimum 50K volume (lower for crypto)
+      spreadThreshold: 0.03,     // Maximum 3% spread (higher for crypto)
+      cryptoTradingEnabled: true, // Enable crypto trading
+      afterHoursTrading: true,   // Enable after hours trading
+      weekendTrading: true,      // Enable weekend trading for crypto
+      cryptoSpreadThreshold: 0.05 // Higher spread tolerance for crypto (5%)
     }
   }
 }
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
           await Promise.race([
             aiTradingEngine.startAITrading(),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('AI Trading Engine startup timeout')), 30000)
+              setTimeout(() => reject(new Error('AI Trading Engine startup timeout')), 120000)
             )
           ])
           console.log('🎉 AI Trading Engine started successfully!')

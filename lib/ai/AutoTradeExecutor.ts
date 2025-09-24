@@ -25,6 +25,10 @@ export interface ExecutionConfig {
     avoidEarnings: boolean // Avoid trading around earnings
     volumeThreshold: number // Minimum volume requirement
     spreadThreshold: number // Maximum bid-ask spread
+    cryptoTradingEnabled?: boolean // Enable crypto trading
+    afterHoursTrading?: boolean // Enable after hours trading
+    weekendTrading?: boolean // Enable weekend trading for crypto
+    cryptoSpreadThreshold?: number // Higher spread tolerance for crypto
   }
 }
 
@@ -153,9 +157,10 @@ export class AutoTradeExecutor {
       return decision
     }
 
-    // Check 2: Market hours (if required)
-    if (this.config.executionRules.marketHoursOnly && !this.isMarketOpen()) {
-      decision.reason = 'Market is closed'
+    // Check 2: Market hours (if required, but skip for crypto)
+    const isCrypto = this.isCryptoSymbol(symbol)
+    if (this.config.executionRules.marketHoursOnly && !isCrypto && !this.isMarketOpen()) {
+      decision.reason = 'Market is closed (non-crypto asset)'
       return decision
     }
 
@@ -197,10 +202,14 @@ export class AutoTradeExecutor {
       return decision
     }
 
-    // Check 8: Bid-ask spread (if available)
+    // Check 8: Bid-ask spread (if available) - use crypto threshold for crypto assets
     const spread = this.estimateSpread(marketData)
-    if (spread > this.config.executionRules.spreadThreshold) {
-      decision.reason = `Spread too wide: ${(spread * 100).toFixed(2)}%`
+    const spreadThreshold = isCrypto && this.config.executionRules.cryptoSpreadThreshold
+      ? this.config.executionRules.cryptoSpreadThreshold
+      : this.config.executionRules.spreadThreshold
+
+    if (spread > spreadThreshold) {
+      decision.reason = `Spread too wide: ${(spread * 100).toFixed(2)}% (${isCrypto ? 'crypto' : 'stock'} threshold: ${(spreadThreshold * 100).toFixed(1)}%)`
       return decision
     }
 
@@ -220,9 +229,10 @@ export class AutoTradeExecutor {
     // Calculate position size based on confidence
     decision.positionSize = this.calculateOptimalPositionSize(confidence, aiScore, portfolio, signal.riskScore || 0.5)
 
-    // Minimum position size check
-    if (decision.positionSize < 0.005) { // Less than 0.5% of portfolio
-      decision.reason = 'Position size too small'
+    // Minimum position size check (lower for crypto)
+    const minPositionSize = isCrypto ? 0.001 : 0.005 // 0.1% for crypto, 0.5% for stocks
+    if (decision.positionSize < minPositionSize) {
+      decision.reason = `Position size too small: ${(decision.positionSize * 100).toFixed(3)}% < ${(minPositionSize * 100).toFixed(1)}%`
       return decision
     }
 
@@ -693,6 +703,47 @@ export class AutoTradeExecutor {
 
   disableExecution(): void {
     this.isExecutionEnabled = false
+  }
+
+  private isCryptoSymbol(symbol: string): boolean {
+    // Common crypto symbols on Alpaca
+    const cryptoSymbols = ['BTCUSD', 'ETHUSD', 'LTCUSD', 'BCHUSD', 'ADAUSD', 'DOTUSD', 'SOLUSD', 'AVAXUSD', 'MATICUSD', 'SHIBUSD']
+    return cryptoSymbols.includes(symbol) || (symbol.endsWith('USD') && symbol.length <= 7)
+  }
+
+  private isMarketOpen(): boolean {
+    // If crypto trading is enabled and we have crypto, market is always open
+    if (this.config.executionRules.cryptoTradingEnabled) {
+      return true
+    }
+
+    // Get current time in Eastern Time (market timezone)
+    const now = new Date()
+    const etTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}))
+    const hour = etTime.getHours()
+    const minute = etTime.getMinutes()
+    const day = etTime.getDay()
+
+    // US market hours: 9:30 AM - 4:00 PM ET, Monday-Friday
+    const isWeekday = day >= 1 && day <= 5
+    const isAfterOpen = hour > 9 || (hour === 9 && minute >= 30)
+    const isBeforeClose = hour < 16
+
+    let isOpen = isWeekday && isAfterOpen && isBeforeClose
+
+    // Extended hours support
+    if (this.config.executionRules.afterHoursTrading) {
+      const isPreMarket = isWeekday && hour >= 4 && (hour < 9 || (hour === 9 && minute < 30))
+      const isAfterHours = isWeekday && hour >= 16 && hour < 20
+      isOpen = isOpen || isPreMarket || isAfterHours
+    }
+
+    // Weekend trading for crypto
+    if (this.config.executionRules.weekendTrading && !isWeekday) {
+      isOpen = true
+    }
+
+    return isOpen
   }
 
   updateConfig(newConfig: Partial<ExecutionConfig>): void {

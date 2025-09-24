@@ -12,20 +12,46 @@ interface MarketQuote {
   volume?: number
 }
 
-export function useMarketData(symbols: string[] = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA']) {
+export function useMarketData(symbols?: string[]) {
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
   const [marketStatus, setMarketStatus] = useState<'OPEN' | 'CLOSED' | 'PRE' | 'POST'>('CLOSED')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [dataSource, setDataSource] = useState<'alpaca' | 'fallback' | 'hybrid'>('alpaca')
+  const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>(symbols || [])
+
+  // Fetch default popular symbols if none provided
+  useEffect(() => {
+    if (!symbols || symbols.length === 0) {
+      fetch('/api/symbols?action=popular&size=20')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.symbols) {
+            setWatchlistSymbols(data.symbols)
+          } else {
+            // Fallback to a small set of popular symbols
+            setWatchlistSymbols(['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'AMZN', 'META', 'SPY', 'QQQ'])
+          }
+        })
+        .catch(() => {
+          // Fallback to a small set of popular symbols
+          setWatchlistSymbols(['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'AMZN', 'META', 'SPY', 'QQQ'])
+        })
+    } else {
+      setWatchlistSymbols(symbols)
+    }
+  }, [symbols])
 
   const refreshData = useCallback(async () => {
+    if (watchlistSymbols.length === 0) return
+
     try {
       setError(null)
-      
+
       const response = await fetch('/api/market-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols })
+        body: JSON.stringify({ symbols: watchlistSymbols })
       })
       
       if (!response.ok) {
@@ -47,8 +73,14 @@ export function useMarketData(symbols: string[] = ['AAPL', 'MSFT', 'GOOGL', 'TSL
       
       setQuotes(processedQuotes)
       setMarketStatus(data.marketStatus)
-      
-      console.log('Real market data loaded for:', Object.keys(processedQuotes))
+      setDataSource(data.dataSource || 'alpaca')
+
+      console.log(`Market data loaded from ${data.dataSource || 'alpaca'} for:`, Object.keys(processedQuotes))
+      if (data.dataSource === 'fallback') {
+        console.log('⚠️ Using fallback market data APIs - Alpaca data unavailable')
+      } else if (data.dataSource === 'hybrid') {
+        console.log('📊 Using hybrid data sources - Alpaca + fallback APIs for complete coverage')
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch market data'
       setError(errorMessage)
@@ -56,7 +88,7 @@ export function useMarketData(symbols: string[] = ['AAPL', 'MSFT', 'GOOGL', 'TSL
     } finally {
       setIsLoading(false)
     }
-  }, [symbols])
+  }, [watchlistSymbols])
 
   // Refresh data on mount and periodically
   useEffect(() => {
@@ -73,6 +105,7 @@ export function useMarketData(symbols: string[] = ['AAPL', 'MSFT', 'GOOGL', 'TSL
     marketStatus,
     isLoading,
     error,
+    dataSource,
     refreshData
   }
 }

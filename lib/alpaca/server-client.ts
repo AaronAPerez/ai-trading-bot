@@ -78,31 +78,104 @@ async getAccount() {
   // Market data operations
   async getLatestQuotes(symbols: string[]) {
     try {
-      const quotes = await this.client.getLatestQuotes(symbols)
-      const result: Record<string, any> = {}
-      
-      Object.entries(quotes).forEach(([symbol, quote]) => {
-        const q = quote as any
-        result[symbol] = {
-          symbol,
-          bidPrice: q.bp || 0,
-          askPrice: q.ap || 0,
-          midPrice: ((q.ap || 0) + (q.bp || 0)) / 2,
-          timestamp: new Date(q.t || Date.now()),
-          spread: (q.ap || 0) - (q.bp || 0),
-          volume: q.s || 0
+      console.log('Fetching quotes for symbols:', symbols)
+
+      // Try different methods to get market data
+      let quotes: any = {}
+
+      try {
+        // Method 1: Try latest quotes (real-time)
+        quotes = await this.client.getLatestQuotes(symbols)
+        console.log('Latest quotes response:', quotes)
+      } catch (quotesError) {
+        console.log('Latest quotes failed, trying bars method:', quotesError.message)
+
+        // Method 2: Try recent bars as fallback
+        try {
+          const endDate = new Date()
+          const startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000) // 24 hours ago
+
+          for (const symbol of symbols) {
+            try {
+              const bars = await this.client.getBarsV2(symbol, {
+                start: startDate.toISOString().split('T')[0],
+                end: endDate.toISOString().split('T')[0],
+                timeframe: '1Day',
+                limit: 1
+              })
+
+              console.log(`Bars for ${symbol}:`, bars)
+
+              if (bars && bars.length > 0) {
+                const latestBar = bars[bars.length - 1]
+                quotes[symbol] = {
+                  ap: latestBar.c, // Use close as ask
+                  bp: latestBar.c * 0.999, // Simulate bid slightly lower
+                  t: latestBar.t,
+                  s: latestBar.v
+                }
+              }
+            } catch (barError) {
+              console.log(`Failed to get bars for ${symbol}:`, barError.message)
+            }
+          }
+        } catch (barsError) {
+          console.log('Bars method also failed:', barsError.message)
         }
-      })
-      
+      }
+
+      const result: Record<string, any> = {}
+
+      // Handle both Map (from getLatestQuotes) and Object (from bars fallback)
+      if (quotes instanceof Map) {
+        quotes.forEach((quote: any, symbol: string) => {
+          const bidPrice = quote.BidPrice || 0
+          const askPrice = quote.AskPrice || 0
+          const timestamp = quote.Timestamp || Date.now()
+
+          result[symbol] = {
+            symbol,
+            bidPrice,
+            askPrice,
+            midPrice: ((askPrice + bidPrice) / 2) || askPrice || bidPrice,
+            timestamp: new Date(timestamp),
+            spread: askPrice - bidPrice,
+            volume: 0, // Volume not available in latest quotes
+            dailyChangePercent: 0
+          }
+        })
+      } else {
+        // Handle Object format (bars fallback)
+        Object.entries(quotes).forEach(([symbol, quote]) => {
+          const q = quote as any
+          const bidPrice = q.bp || 0
+          const askPrice = q.ap || 0
+          const timestamp = q.t || Date.now()
+          const volume = q.s || 0
+
+          result[symbol] = {
+            symbol,
+            bidPrice,
+            askPrice,
+            midPrice: ((askPrice + bidPrice) / 2) || askPrice || bidPrice,
+            timestamp: new Date(timestamp),
+            spread: askPrice - bidPrice,
+            volume,
+            dailyChangePercent: 0
+          }
+        })
+      }
+
+      console.log('Final processed quotes:', result)
       return result
     } catch (error) {
       console.error('Alpaca quotes error:', error)
-      
+
       // Check if it's an authentication error
       if (error instanceof Error && (error.message?.includes('401') || error.message?.includes('code: 401'))) {
         throw new Error('Authentication failed: Check your Alpaca API keys in .env.local')
       }
-      
+
       throw new Error(`Failed to fetch quotes from Alpaca: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }

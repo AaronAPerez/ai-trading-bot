@@ -28,7 +28,7 @@ interface MLModel {
 export class MLPredictionEngine {
   private models: Map<string, MLModel> = new Map()
   private modelWeights: Map<string, number> = new Map()
-  private minDataPoints = 100
+  private minDataPoints = 50 // Reduced minimum data points for faster startup
 
   constructor() {
     this.initializeModels()
@@ -231,8 +231,8 @@ export class MLPredictionEngine {
     const priceChange = (sequencePattern + trendContinuation + features.market_sentiment * 0.3) * volatility
     const priceTarget = currentPrice * (1 + priceChange)
 
-    const direction = priceChange > 0.005 ? 'UP' : priceChange < -0.005 ? 'DOWN' : 'SIDEWAYS'
-    const confidence = Math.min(0.85, Math.abs(priceChange) * 10 + 0.4)
+    const direction = priceChange > 0.002 ? 'UP' : priceChange < -0.002 ? 'DOWN' : 'SIDEWAYS'
+    const confidence = Math.min(0.85, Math.abs(priceChange) * 8 + 0.6) // Higher baseline confidence
 
     return {
       direction,
@@ -255,8 +255,8 @@ export class MLPredictionEngine {
     const priceChange = (patternRecognition + sentimentImpact + features.price_momentum * 0.3) * features.volatility
     const priceTarget = currentPrice * (1 + priceChange)
 
-    const direction = priceChange > 0.008 ? 'UP' : priceChange < -0.008 ? 'DOWN' : 'SIDEWAYS'
-    const confidence = Math.min(0.90, Math.abs(priceChange) * 8 + 0.5)
+    const direction = priceChange > 0.003 ? 'UP' : priceChange < -0.003 ? 'DOWN' : 'SIDEWAYS'
+    const confidence = Math.min(0.90, Math.abs(priceChange) * 6 + 0.65) // Higher baseline confidence
 
     return {
       direction,

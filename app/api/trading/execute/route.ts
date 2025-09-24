@@ -137,24 +137,20 @@ async function executeSimulatedTrade(order: any) {
   const assetType = detectAssetType(order.symbol)
   const metadata = getSymbolMetadata(order.symbol)
   
-  // Get real market price if possible
-  let price = metadata.sector === 'Cryptocurrency' ? 50000 : 150 // Default prices
-  
+  // Get real market price from Alpaca API
+  let price = 100 // Default fallback price
+
   try {
-    // Try to get real price from market data service
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/market-data/${order.symbol}?quote=true`, {
-      method: 'GET'
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      if (data.success && data.data.quote) {
-        price = data.data.quote.last
-        console.log(`📈 Using real market price for ${order.symbol}: ${price}`)
-      }
+    // Get real price from Alpaca API directly
+    const quotes = await alpacaClient.getLatestQuotes([order.symbol])
+    if (quotes[order.symbol]) {
+      price = quotes[order.symbol].midPrice || quotes[order.symbol].askPrice || quotes[order.symbol].bidPrice
+      console.log(`📈 Using real Alpaca price for ${order.symbol}: ${price}`)
+    } else {
+      console.warn(`⚠️ No quote available for ${order.symbol}, using fallback price`)
     }
   } catch (error) {
-    console.warn(`⚠️ Could not fetch real price for ${order.symbol}, using estimated price`)
+    console.warn(`⚠️ Could not fetch Alpaca price for ${order.symbol}:`, error.message)
   }
 
   // Enhanced slippage calculation based on asset type
@@ -182,14 +178,19 @@ async function executeSimulatedTrade(order: any) {
   }
 }
 
-// Helper function to check market status
+// Helper function to check market status using Alpaca API
 async function checkMarketStatus() {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/market-status`)
-    const data = await response.json()
-    return data.success ? data.data : getDefaultMarketStatus()
+    const marketStatus = await alpacaClient.getMarketStatus()
+    return {
+      stockMarket: {
+        isOpen: marketStatus.isOpen,
+        nextOpen: marketStatus.nextOpen,
+        nextClose: marketStatus.nextClose
+      }
+    }
   } catch (error) {
-    console.warn('Could not fetch market status:', error)
+    console.warn('Could not fetch market status from Alpaca:', error)
     return getDefaultMarketStatus()
   }
 }

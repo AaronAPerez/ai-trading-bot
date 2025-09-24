@@ -241,16 +241,16 @@ export class RealTimeAITradingEngine {
   private async loadInitialMarketData(): Promise<void> {
     console.log(`📈 Loading initial market data for ${this.activeWatchlist.length} symbols...`)
 
-    // For large watchlists, load data for top symbols only initially
-    const initialLoadLimit = this.activeWatchlist.length > 100 ? 100 : this.activeWatchlist.length
+    // For faster startup, load data for fewer symbols initially
+    const initialLoadLimit = Math.min(20, this.activeWatchlist.length) // Reduced from 100 to 20
     const symbolsToLoad = this.activeWatchlist.slice(0, initialLoadLimit)
 
     if (initialLoadLimit < this.activeWatchlist.length) {
       console.log(`🎯 Loading initial data for top ${initialLoadLimit} symbols (${this.activeWatchlist.length - initialLoadLimit} remaining will load on-demand)`)
     }
 
-    // Process in batches to avoid overwhelming the API
-    const batchSize = 10
+    // Process in smaller batches for faster startup
+    const batchSize = 5
     let loadedCount = 0
     let errorCount = 0
 
@@ -264,11 +264,11 @@ export class RealTimeAITradingEngine {
       // Process batch in parallel with rate limiting
       const batchPromises = batch.map(async (symbol, index) => {
         try {
-          // Staggered delay within batch
-          await new Promise(resolve => setTimeout(resolve, index * 200))
+          // Reduced delay for faster startup
+          await new Promise(resolve => setTimeout(resolve, index * 50))
 
-          // Get 100 bars of historical data (about 2-3 weeks of daily data)
-          const marketData = await this.fetchMarketData(symbol, '1Day', 100)
+          // Get fewer bars for faster startup (about 1 week of daily data)
+          const marketData = await this.fetchMarketData(symbol, '1Day', 50)
           this.marketDataCache.set(symbol, marketData)
 
           loadedCount++
@@ -280,16 +280,17 @@ export class RealTimeAITradingEngine {
           errorCount++
           // Only log first few errors to avoid spam
           if (errorCount <= 3) {
-            console.error(`Failed to load data for ${symbol}:`, error.message)
+            console.warn(`⚠️ Failed to load data for ${symbol}:`, error.message)
           }
+          // Continue with startup even if some symbols fail
         }
       })
 
       await Promise.all(batchPromises)
 
-      // Delay between batches
+      // Reduced delay between batches for faster startup
       if (i + batchSize < symbolsToLoad.length) {
-        await new Promise(resolve => setTimeout(resolve, 2000)) // 2 second delay between batches
+        await new Promise(resolve => setTimeout(resolve, 500)) // 0.5 second delay between batches
       }
     }
 
@@ -309,7 +310,8 @@ export class RealTimeAITradingEngine {
         adjustment: 'raw'
       })
 
-      console.log(`📊 Raw bars response for ${symbol}:`, JSON.stringify(barsResponse, null, 2).substring(0, 500))
+      // Reduced logging for faster startup
+      console.log(`📊 Fetched ${symbol} data: ${Array.isArray(barsResponse) ? barsResponse.length : 'processing'} bars`)
 
       // Handle different response formats from Alpaca API
       let barsData: any[] = []
@@ -477,7 +479,7 @@ export class RealTimeAITradingEngine {
 
   private async generateAITradingDecision(symbol: string, portfolio: Portfolio): Promise<AITradingDecision | null> {
     const marketData = this.marketDataCache.get(symbol)
-    if (!marketData || marketData.length < 50) {
+    if (!marketData || marketData.length < 20) { // Reduced from 50 to 20
       return null
     }
 
@@ -852,6 +854,11 @@ export class RealTimeAITradingEngine {
 
   // Utility methods
   private isMarketOpen(): boolean {
+    // If crypto trading is enabled, market is always open (24/7)
+    if (this.config.autoExecution?.executionRules?.cryptoTradingEnabled) {
+      return true
+    }
+
     // Get current time in Eastern Time (market timezone)
     const now = new Date()
     const etTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}))
@@ -864,14 +871,34 @@ export class RealTimeAITradingEngine {
     const isAfterOpen = hour > 9 || (hour === 9 && minute >= 30)
     const isBeforeClose = hour < 16
 
-    const isOpen = isWeekday && isAfterOpen && isBeforeClose
+    let isOpen = isWeekday && isAfterOpen && isBeforeClose
+
+    // Extended hours support
+    if (this.config.autoExecution?.executionRules?.afterHoursTrading) {
+      // Pre-market: 4:00 AM - 9:30 AM ET
+      // After-hours: 4:00 PM - 8:00 PM ET
+      const isPreMarket = isWeekday && hour >= 4 && (hour < 9 || (hour === 9 && minute < 30))
+      const isAfterHours = isWeekday && hour >= 16 && hour < 20
+      isOpen = isOpen || isPreMarket || isAfterHours
+    }
+
+    // Weekend trading for crypto
+    if (this.config.autoExecution?.executionRules?.weekendTrading && !isWeekday) {
+      isOpen = true
+    }
 
     if (!isOpen) {
       const timeStr = etTime.toLocaleTimeString('en-US', { timeZone: 'America/New_York' })
-      console.log(`⏰ Market is closed (ET: ${timeStr}). Skipping market data updates.`)
+      console.log(`⏰ Market is closed (ET: ${timeStr}). Checking crypto opportunities...`)
     }
 
     return isOpen
+  }
+
+  private isCryptoSymbol(symbol: string): boolean {
+    // Common crypto symbols on Alpaca
+    const cryptoSymbols = ['BTCUSD', 'ETHUSD', 'LTCUSD', 'BCHUSD', 'ADAUSD', 'DOTUSD', 'SOLUSD', 'AVAXUSD', 'MATICUSD', 'SHIBUSD']
+    return cryptoSymbols.includes(symbol) || symbol.endsWith('USD') && symbol.length <= 7
   }
 
   private calculateAIScore(prediction: any, volatility: number, momentum: number, riskReward: number): number {

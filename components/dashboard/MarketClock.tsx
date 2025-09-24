@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { useMarketClock } from '@/hooks/useMarketClock'
 import {
   ClockIcon,
@@ -24,6 +24,26 @@ export function MarketClock({ variant = 'card', showDetails = true }: MarketCloc
     timeUntilNextEvent,
     refreshClock
   } = useMarketClock()
+
+  const [currentTime, setCurrentTime] = useState<string>('')
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+    const updateTime = () => {
+      setCurrentTime(new Date().toLocaleTimeString('en-US', {
+        timeZone: 'America/New_York',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      }))
+    }
+
+    updateTime()
+    const interval = setInterval(updateTime, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   if (error) {
     return (
@@ -81,15 +101,6 @@ export function MarketClock({ variant = 'card', showDetails = true }: MarketCloc
     })
   }
 
-  const getCurrentETTime = () => {
-    return new Date().toLocaleTimeString('en-US', {
-      timeZone: 'America/New_York',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    })
-  }
 
   // Sidebar variant
   if (variant === 'sidebar') {
@@ -133,7 +144,7 @@ export function MarketClock({ variant = 'card', showDetails = true }: MarketCloc
           </span>
         </div>
         <div className="text-sm text-gray-400">
-          ET: {getCurrentETTime()}
+          ET: {isClient ? currentTime : '--:--:-- --'}
         </div>
         {timeUntilNextEvent && (
           <div className="text-sm text-gray-300">
@@ -180,7 +191,7 @@ export function MarketClock({ variant = 'card', showDetails = true }: MarketCloc
         {/* Current Eastern Time */}
         <div className="flex items-center justify-between">
           <span className="text-gray-400 text-sm">Current (ET):</span>
-          <span className="text-white text-sm font-mono">{getCurrentETTime()}</span>
+          <span className="text-white text-sm font-mono">{isClient ? currentTime : '--:--:-- --'}</span>
         </div>
 
         {/* Countdown */}
