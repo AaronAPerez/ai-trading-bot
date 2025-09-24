@@ -27,7 +27,7 @@ import AITradingControl from './AITradingControl'
 import AILearningDashboard from './AILearningDashboard'
 import AIBotActivityMonitor from './AIBotActivityMonitor'
 import { MarketClock } from './MarketClock'
-import { BotIcon, Brain, BrainCircuit, DollarSignIcon } from 'lucide-react'
+import { BotIcon } from 'lucide-react'
 
 // Enhanced interfaces for better AI integration
 interface EnhancedAccount {
@@ -1464,7 +1464,7 @@ export default function AITradingDashboard() {
                           </label>
                           <input
                             type="range"
-                            min="80"
+                            min="70"
                             max="98"
                             value={botConfig.autoExecuteAbove}
                             disabled={!enhancedAccount?.isConnected}
@@ -1472,7 +1472,7 @@ export default function AITradingDashboard() {
                             className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                           <div className="flex justify-between text-xs text-gray-400 mt-1">
-                            <span>80% (Frequent Auto)</span>
+                            <span>70% (Frequent Auto)</span>
                             <span>98% (Rare Auto)</span>
                           </div>
                         </div>
@@ -1499,7 +1499,7 @@ export default function AITradingDashboard() {
                           <input
                             type="range"
                             min="1"
-                            max="30"
+                            max="50"
                             value={botConfig.maxDailyTrades}
                             disabled={!enhancedAccount?.isConnected}
                             onChange={(e) => setBotConfig(prev => ({ ...prev, maxDailyTrades: parseInt(e.target.value) }))}
