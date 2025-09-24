@@ -68,41 +68,22 @@ export function AIRecommendations({ quotes, botConfig, executeOrder, account }: 
       if (hasRealData) {
         currentPrice = quote.midPrice
       } else {
-        // Fallback: Use approximate prices based on known market values (last known data)
-        const fallbackPrices: Record<string, number> = {
-          'AAPL': 175,
-          'MSFT': 335,
-          'GOOGL': 131,
-          'TSLA': 244,
-          'NVDA': 440,
-          'AMZN': 145,
-          'META': 298,
-          'SPY': 428,
-          'QQQ': 367,
-          'BTCUSD': 43000,
-          'ETHUSD': 2600,
-          'ADAUSD': 0.45,
-          'SOLUSD': 145,
-          'AVAXUSD': 27,
-          'MATICUSD': 0.89
-        }
-
-        currentPrice = fallbackPrices[symbol]
-        if (!currentPrice) {
-          return null // Skip unknown symbols
-        }
-
-        console.log(`⚠️ Using fallback price for ${symbol}: $${currentPrice} (no real-time data available)`)
+        // No real-time data available - skip this symbol
+        console.log(`⚠️ Skipping ${symbol}: No real-time data available from Alpaca API`)
+        return null
       }
 
       const assetType = cryptoSymbols.includes(symbol) ? 'CRYPTO' :
                       etfSymbols.includes(symbol) ? 'ETF' : 'STOCK'
 
-      // Use real data if available, otherwise simulate based on asset type
-      const priceChange = hasRealData ? (quote.dailyChangePercent || 0) :
-        (Math.random() - 0.5) * (assetType === 'CRYPTO' ? 8 : 4) // Crypto more volatile
-      const volume = hasRealData ? (quote.volume || 0) :
-        (assetType === 'CRYPTO' ? 500000 : 1000000) + Math.random() * 2000000
+      // Use only real Alpaca API data - no simulation
+      if (!hasRealData) {
+        console.log(`⚠️ Skipping ${symbol}: No market data available from Alpaca API`)
+        return null
+      }
+
+      const priceChange = quote.dailyChangePercent || 0
+      const volume = quote.volume || 0
       const volatility = Math.abs(priceChange)
 
       // AI logic based on real market data
