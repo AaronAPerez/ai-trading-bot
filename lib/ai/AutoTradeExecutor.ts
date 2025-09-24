@@ -142,7 +142,7 @@ export class AutoTradeExecutor {
     const currentPrice = marketData[marketData.length - 1].close
 
     // Default decision
-    const decision: ExecutionDecision = {
+    let decision: ExecutionDecision = {
       shouldExecute: false,
       positionSize: 0,
       reason: 'Analysis pending',
@@ -369,7 +369,7 @@ export class AutoTradeExecutor {
     // Create execution record
     const execution: TradeExecution = {
       symbol,
-      action: signal.action === 'HOLD' ? 'BUY' : signal.action, // Default to 'BUY' if 'HOLD' (or handle as needed)
+      action: signal.action,
       quantity,
       price: filledPrice,
       orderId: order.orderId || order.id,

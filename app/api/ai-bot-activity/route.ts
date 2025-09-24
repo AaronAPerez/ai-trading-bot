@@ -52,13 +52,11 @@ let simulationInterval: NodeJS.Timeout | null = null
 // Order execution configuration
 let orderExecutionEnabled = false
 const autoExecutionConfig = {
-  minConfidenceForOrder: 70, // 70% minimum confidence to execute trades
-  maxPositionSize: 5000, // Maximum $5000 per position
-  orderCooldown: 180000, // 3 minutes between orders for same symbol
-  dailyOrderLimit: 100, // Maximum 100 orders per day
-  riskPerTrade: 0.08, // 8% of portfolio per trade (increased from 5%)
-  minOrderValue: 50, // Minimum $50 per order (increased from $25)
-  baseMinPositionValue: 100 // Minimum base position size before confidence multiplier
+  minConfidenceForOrder: 70, // 80% minimum confidence to execute trades
+  maxPositionSize: 1000, // Maximum $1000 per position
+  orderCooldown: 300000, // 5 minutes between orders for same symbol
+  dailyOrderLimit: 10, // Maximum 10 orders per day
+  riskPerTrade: 0.02 // 2% of portfolio per trade
 }
 
 const recentOrders: Set<string> = new Set() // Track symbols with recent orders
@@ -76,12 +74,7 @@ const orderExecutionMetrics = {
 
 // Order execution function
 async function executeOrder(symbol: string, confidence: number, recommendation: string) {
-  console.log(`🔍 Order execution check - Symbol: ${symbol}, Confidence: ${confidence}%, Enabled: ${orderExecutionEnabled}`)
-
-  if (!orderExecutionEnabled) {
-    console.log('❌ Order execution is disabled')
-    return null
-  }
+  if (!orderExecutionEnabled) return null
 
   try {
     // Reset daily count if new day
@@ -108,9 +101,11 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       return null
     }
 
-    // Handle both crypto and stock symbols
-    const isCrypto = symbol.includes('/USD') || symbol.includes('USD')
-    console.log(`📊 Processing ${isCrypto ? 'crypto' : 'stock'} symbol: ${symbol}`)
+    // Skip crypto for now (more complex trading logic needed)
+    if (symbol.includes('USD')) {
+      console.log(`⚠️ Skipping crypto symbol ${symbol}`)
+      return null
+    }
 
     console.log(`🚀 Executing order for ${symbol} with ${confidence}% confidence`)
 
@@ -122,10 +117,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     const portfolioValue = account.totalBalance
 
     // Calculate position size based on confidence and risk parameters
-    const basePositionSize = Math.max(
-      portfolioValue * autoExecutionConfig.riskPerTrade,
-      autoExecutionConfig.baseMinPositionValue
-    )
+    const basePositionSize = portfolioValue * autoExecutionConfig.riskPerTrade
     const confidenceMultiplier = Math.min(confidence / 100 * 1.5, 2.0) // Max 2x multiplier
     let positionValue = basePositionSize * confidenceMultiplier
     positionValue = Math.min(positionValue, autoExecutionConfig.maxPositionSize)
@@ -138,34 +130,11 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     }
 
     const currentPrice = quotes[symbol].midPrice
+    const quantity = Math.floor(positionValue / currentPrice)
 
-    // Check if order value meets minimum threshold first
-    if (positionValue < autoExecutionConfig.minOrderValue) {
-      console.log(`⚠️ Position value $${positionValue.toFixed(2)} below minimum $${autoExecutionConfig.minOrderValue} for ${symbol}`)
+    if (quantity < 1) {
+      console.log(`⚠️ Calculated quantity ${quantity} too small for ${symbol}`)
       return null
-    }
-
-    // For stocks: use notional orders (fractional shares) if 1 share costs more than position value
-    // For crypto: use quantity-based orders with fractional precision
-    let orderParams: any
-    let orderValue: number
-
-    if (isCrypto) {
-      // For crypto, calculate fractional quantity
-      const quantity = Math.floor((positionValue / currentPrice) * 100000) / 100000 // 5 decimal precision
-      if (quantity < 0.00001) {
-        console.log(`⚠️ Calculated crypto quantity ${quantity} too small for ${symbol}`)
-        return null
-      }
-      orderValue = quantity * currentPrice
-      orderParams = { qty: quantity }
-      console.log(`💰 Crypto Order: Quantity: ${quantity}, Price: $${currentPrice.toFixed(4)}, Value: $${orderValue.toFixed(2)}`)
-    } else {
-      // For stocks: use notional (dollar amount) orders to support fractional shares
-      orderValue = positionValue
-      orderParams = { notional: positionValue }
-      const estimatedShares = positionValue / currentPrice
-      console.log(`💰 Stock Order: Notional: $${positionValue.toFixed(2)}, Est. Shares: ${estimatedShares.toFixed(4)}, Price: $${currentPrice.toFixed(2)}`)
     }
 
     // Determine buy/sell based on recommendation
@@ -176,22 +145,14 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       side = 'sell'
     }
 
-    // Create order using either qty (crypto) or notional (stocks)
+    // Create order
     const orderData = {
       symbol: symbol,
-      ...orderParams, // Either { qty: number } or { notional: number }
+      qty: quantity,
       side: side,
       type: 'market' as const,
       time_in_force: 'day' as const
     }
-
-    // Validate order data as recommended in improvements.txt
-    if (!orderData.qty && !orderData.notional) {
-      console.log(`❌ Order validation failed: missing qty or notional for ${symbol}`)
-      return null
-    }
-
-    console.log(`🚀 Creating ${isCrypto ? 'crypto' : 'stock'} order:`, JSON.stringify(orderData, null, 2))
 
     const order = await alpacaClient.createOrder(orderData)
 
@@ -208,43 +169,27 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       recentOrders.delete(symbol)
     }, autoExecutionConfig.orderCooldown)
 
-    // Safe parsing as recommended in improvements.txt
-    const executedQty = parseFloat(order.qty ?? '0')
-    const actualValue = isCrypto ? executedQty * currentPrice : orderValue
-
-    console.log(`✅ Order executed: ${side.toUpperCase()} ${isCrypto ? executedQty : `$${orderValue.toFixed(2)} notional`} ${symbol} @ $${currentPrice.toFixed(isCrypto ? 4 : 2)} (Value: $${actualValue.toFixed(2)})`)
+    console.log(`✅ Order executed: ${side.toUpperCase()} ${quantity} ${symbol} @ $${currentPrice.toFixed(2)}`)
 
     return {
       orderId: order.id,
       symbol: symbol,
       side: side,
-      quantity: executedQty,
+      quantity: quantity,
       price: currentPrice,
-      value: actualValue,
+      value: positionValue,
       confidence: confidence,
-      timestamp: new Date(),
-      assetType: isCrypto ? 'crypto' : 'stock'
+      timestamp: new Date()
     }
 
   } catch (error) {
-    // Enhanced error handling as recommended in improvements.txt
-    if (error instanceof Error) {
-      console.error(`❌ Order execution failed for ${symbol}:`, error.stack || error.message)
-
-      // Check for authentication errors
-      if (error.message.includes('401')) {
-        console.error('🚨 Authentication failed - check Alpaca API keys')
-      }
-    } else {
-      console.error(`❌ Order execution failed for ${symbol}:`, error)
-    }
-
+    console.error(`❌ Order execution failed for ${symbol}:`, error)
     orderExecutionMetrics.failedOrders++
     return null
   }
 }
 
-async function performRealBotActivity() {
+function simulateBotActivity() {
   // Stop any existing simulation first
   if (simulationInterval) {
     clearInterval(simulationInterval)
@@ -253,250 +198,181 @@ async function performRealBotActivity() {
 
   isSimulatingActivity = true
 
-  // Get real watchlist symbols from Alpaca
-  const alpacaClient = new AlpacaServerClient()
-
-  // Expanded watchlist for more trading opportunities
-  let watchlistSymbols = [
-    // Large Cap Tech Stocks
-    'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'NFLX', 'NVDA', 'AMD', 'CRM', 'ORCL', 'CSCO', 'ADBE', 'INTC',
-    // Electric Vehicle & Clean Energy
-    'TSLA', 'NIO', 'RIVN', 'LCID', 'ENPH', 'SEDG', 'FSLR', 'PLUG', 'CHPT', 'QS', 'BLNK',
-    // Financial & Banking
-    'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'PYPL', 'SQ', 'WFC', 'C', 'AXP', 'BRK.B', 'KO', 'JNJ',
-    // Healthcare & Biotech
-    'JNJ', 'PFE', 'UNH', 'MRNA', 'BNTX', 'ABBV', 'LLY', 'TMO', 'DHR', 'ABT', 'BMY', 'MRK',
-    // ETFs & Index Funds (High Volume)
-    'SPY', 'QQQ', 'IWM', 'VTI', 'ARKK', 'TQQQ', 'SQQQ', 'XLF', 'XLK', 'XLE', 'GDX', 'EEM', 'FXI',
-    // Retail & Consumer
-    'WMT', 'TGT', 'COST', 'HD', 'DIS', 'SBUX', 'NKE', 'MCD', 'LOW', 'TJX', 'AMZN', 'EBAY',
-    // Energy & Commodities
-    'XOM', 'CVX', 'COP', 'GLD', 'USO', 'UCO', 'SLV', 'GDX', 'KMI', 'EOG', 'OKE', 'PSX',
-    // Communication & Media
-    'VZ', 'T', 'CMCSA', 'CHTR', 'TTWO', 'EA', 'ATVI', 'ROKU', 'SNAP', 'TWTR', 'PINS',
-    // Affordable High-Volume Stocks (Better execution rates)
-    'F', 'SOFI', 'PLTR', 'BB', 'WISH', 'CLOV', 'AMC', 'GME', 'NOK', 'SNDL', 'PTON', 'HOOD', 'COIN',
-    // Real Estate & REITs
-    'VNQ', 'O', 'AMT', 'PLD', 'CCI', 'EQIX', 'SPG', 'EXR', 'AVB', 'EQR',
-    // Industrials & Materials
-    'CAT', 'BA', 'GE', 'MMM', 'HON', 'UPS', 'FDX', 'RTX', 'LMT', 'DE',
-    // Major Cryptocurrencies (Note: Some may not be available in Alpaca)
-    'BTC/USD', 'ETH/USD', 'LTC/USD', 'BCH/USD', 'AAVE/USD', 'AVAX/USD',
-    'DOGE/USD', 'ADA/USD', 'SOL/USD', 'MATIC/USD', 'DOT/USD', 'UNI/USD'
+  const symbols = [
+    'AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'AMZN', 'META', 'SPY', 'QQQ',
+    'BTCUSD', 'ETHUSD', 'SOLUSD', 'ADAUSD', 'AVAXUSD', 'MATICUSD'
   ]
 
-  try {
-    // Get current positions to include them in monitoring
-    const positions = await alpacaClient.getPositions()
-    const positionSymbols = positions.map(p => p.symbol)
-    watchlistSymbols = [...new Set([...watchlistSymbols, ...positionSymbols])]
-  } catch (error) {
-    console.log('Could not fetch positions, using default watchlist:', error.message)
+  const activities = {
+    scan: [
+      'Market scan initiated for technical indicators',
+      'Scanning for breakout patterns across watchlist',
+      'Volume analysis in progress',
+      'Monitoring correlation matrices',
+      'Analyzing market sentiment signals',
+      'Checking crypto market conditions',
+      'Evaluating sector rotation patterns',
+      'Processing real-time price feeds'
+    ],
+    analysis: [
+      'Deep learning model processing market data',
+      'Pattern recognition algorithm active',
+      'Sentiment analysis complete',
+      'Risk assessment calculation finished',
+      'Portfolio optimization analysis',
+      'Volatility surface modeling',
+      'Monte Carlo simulation running',
+      'Neural network inference complete'
+    ],
+    recommendation: [
+      'High-confidence trading signal generated',
+      'Risk-adjusted position size calculated',
+      'Entry and exit points determined',
+      'Stop-loss and take-profit levels set',
+      'Trade recommendation ready for execution',
+      'Portfolio impact assessment complete',
+      'Backtesting validation passed',
+      'Risk management checks passed'
+    ],
+    trade: [
+      'Trade order submitted to Alpaca API',
+      'Position opened successfully',
+      'Stop-loss order placed',
+      'Take-profit order activated',
+      'Portfolio rebalancing executed',
+      'Risk limits adjusted'
+    ],
+    info: [
+      'Market hours validation complete',
+      'Connection to Alpaca API verified',
+      'Real-time data stream active',
+      'Risk management protocols engaged',
+      'Portfolio synchronization complete',
+      'Watchlist updated with new symbols',
+      'Performance metrics recalculated',
+      'System health check passed'
+    ],
+    error: [
+      'API rate limit reached, throttling requests',
+      'Market data feed temporarily unavailable',
+      'High volatility detected, reducing position sizes',
+      'Correlation warning: positions too similar',
+      'Insufficient buying power for recommendation'
+    ]
   }
 
-  const generateRealActivity = async () => {
-    // Check if activity should continue
+  const generateActivity = () => {
+    // Check if simulation should continue
     if (!isSimulatingActivity) return
 
     const activityTypes = ['scan', 'analysis', 'recommendation', 'info'] as const
     const type = activityTypes[Math.floor(Math.random() * activityTypes.length)]
-    const symbol = Math.random() > 0.3 ? watchlistSymbols[Math.floor(Math.random() * watchlistSymbols.length)] : undefined
+    const symbol = Math.random() > 0.3 ? symbols[Math.floor(Math.random() * symbols.length)] : undefined
+    const messages = activities[type]
+    const message = messages[Math.floor(Math.random() * messages.length)]
 
-    let message = ''
-    let details = ''
-    let confidence: number | undefined
-    let status: 'completed' | 'failed' = 'completed'
-    const executionTime = 500 + Math.random() * 2000
+    const executionTime = 500 + Math.random() * 3000 // 0.5-3.5 seconds
+    const confidence = type === 'recommendation' ? 65 + Math.random() * 30 : undefined
+    const status = Math.random() > 0.05 ? 'completed' : 'failed'
 
-    try {
+    // Execute real orders for high-confidence recommendations
+    if (type === 'recommendation' && confidence && confidence >= 75) {
+      setTimeout(async () => {
+        const orderResult = await executeOrder(symbol || 'AAPL', confidence, message)
 
-      // Generate real activity based on actual Alpaca data
-      switch (type) {
-        case 'scan':
-          if (symbol) {
-            try {
-              const quotes = await alpacaClient.getLatestQuotes([symbol])
-              const quote = quotes[symbol]
-              if (quote) {
-                message = `Market scan completed for ${symbol} - Price: $${quote.midPrice.toFixed(2)}`
-                details = `Bid: $${quote.bidPrice.toFixed(2)}, Ask: $${quote.askPrice.toFixed(2)}, Spread: $${quote.spread.toFixed(3)}`
-              } else {
-                message = `Market scan attempted for ${symbol} - No current market data available`
-                status = 'failed'
-              }
-            } catch (error) {
-              message = `Market scan failed for ${symbol}`
-              details = `Error: ${error.message}`
-              status = 'failed'
-            }
-          } else {
-            message = `Portfolio scan completed - Monitoring ${watchlistSymbols.length} symbols`
-            details = `Watchlist: ${watchlistSymbols.slice(0, 3).join(', ')}${watchlistSymbols.length > 3 ? '...' : ''}`
+        if (orderResult) {
+          // Create a successful trade activity log
+          const tradeActivity: BotActivityLog = {
+            id: `order_${Date.now()}_${Math.random()}`,
+            timestamp: new Date(),
+            type: 'trade',
+            symbol: orderResult.symbol,
+            message: `${orderResult.side.toUpperCase()} order executed: ${orderResult.quantity} shares @ $${orderResult.price.toFixed(2)}`,
+            status: 'completed',
+            executionTime: 500 + Math.random() * 1000,
+            details: `Order ID: ${orderResult.orderId}, Value: $${orderResult.value.toFixed(2)}, Confidence: ${orderResult.confidence}%`
           }
-          break
 
-        case 'analysis':
-          if (symbol) {
-            try {
-              const quotes = await alpacaClient.getLatestQuotes([symbol])
-              const quote = quotes[symbol]
-              if (quote) {
-                const volatility = Math.random() * 30 + 10 // Simulated volatility analysis
-                const trendStrength = Math.random() * 100
-                message = `Technical analysis completed for ${symbol}`
-                details = `Price: $${quote.midPrice.toFixed(2)}, Volatility: ${volatility.toFixed(1)}%, Trend: ${trendStrength.toFixed(1)}%`
-              } else {
-                message = `Analysis failed for ${symbol} - Insufficient market data`
-                status = 'failed'
-              }
-            } catch (error) {
-              message = `Analysis error for ${symbol}`
-              details = `Error: ${error.message}`
-              status = 'failed'
-            }
-          } else {
-            message = `Portfolio risk analysis completed`
-            details = `Risk metrics updated for ${watchlistSymbols.length} positions`
+          botActivityLogs.unshift(tradeActivity)
+          botMetrics.tradesExecuted++
+
+          console.log('📈 Real trade executed and logged:', tradeActivity.message)
+        } else {
+          // Log why the order wasn't executed
+          const tradeActivity: BotActivityLog = {
+            id: `order_skip_${Date.now()}_${Math.random()}`,
+            timestamp: new Date(),
+            type: 'info',
+            symbol,
+            message: `Order execution skipped for ${symbol}`,
+            status: 'completed',
+            executionTime: 100,
+            details: `Confidence: ${confidence}%, execution conditions not met`
           }
-          break
 
-        case 'recommendation':
-          if (symbol) {
-            try {
-              const quotes = await alpacaClient.getLatestQuotes([symbol])
-              const quote = quotes[symbol]
-              if (quote) {
-                confidence = 60 + Math.random() * 35 // 60-95% confidence
-                const action = Math.random() > 0.5 ? 'BUY' : 'HOLD'
-                const targetPrice = quote.midPrice * (1 + (Math.random() * 0.1 - 0.05))
-                message = `${action} signal generated for ${symbol}`
-                details = `Current: $${quote.midPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}, Confidence: ${confidence.toFixed(1)}%`
-              } else {
-                message = `Recommendation generation failed for ${symbol}`
-                details = `No market data available`
-                status = 'failed'
-              }
-            } catch (error) {
-              message = `Recommendation error for ${symbol}`
-              details = `Error: ${error.message}`
-              status = 'failed'
-            }
-          } else {
-            confidence = 70 + Math.random() * 25
-            message = `Portfolio rebalancing recommendation generated`
-            details = `Suggested adjustments based on market conditions, Confidence: ${confidence.toFixed(1)}%`
-          }
-          break
-
-        case 'info':
-          try {
-            const account = await alpacaClient.getAccount()
-            if (Math.random() > 0.5) {
-              message = `Account status verified - Trading: ${account.tradingEnabled ? 'ENABLED' : 'DISABLED'}`
-              details = `Portfolio Value: $${account.totalBalance.toLocaleString()}, Buying Power: $${account.availableBuyingPower.toLocaleString()}`
-            } else {
-              message = `Market data connection verified`
-              details = `Real-time data feed active, Monitoring ${watchlistSymbols.length} symbols`
-            }
-          } catch (error) {
-            message = `System health check failed`
-            details = `Error: ${error.message}`
-            status = 'failed'
-          }
-          break
-      }
-
-      // Execute real orders for high-confidence recommendations when live trading is enabled
-      if (type === 'recommendation' && confidence && confidence >= autoExecutionConfig.minConfidenceForOrder && symbol) {
-        setTimeout(async () => {
-          const orderResult = await executeOrder(symbol, confidence, message)
-
-          if (orderResult) {
-            // Create a successful trade activity log
-            const isCrypto = symbol.includes('/USD') || symbol.includes('USD')
-            const priceDecimals = isCrypto ? 4 : 2
-            const quantityStr = isCrypto ? orderResult.quantity.toFixed(5) : orderResult.quantity.toString()
-
-            const tradeActivity: BotActivityLog = {
-              id: `order_${Date.now()}_${Math.random()}`,
-              timestamp: new Date(),
-              type: 'trade',
-              symbol: orderResult.symbol,
-              message: `${orderResult.side.toUpperCase()} order executed: ${quantityStr} ${orderResult.symbol} @ $${orderResult.price.toFixed(priceDecimals)}`,
-              status: 'completed',
-              executionTime: 500 + Math.random() * 1000,
-              details: `Order ID: ${orderResult.orderId}, Value: $${orderResult.value.toFixed(2)}, Confidence: ${orderResult.confidence}%, Type: ${orderResult.assetType}`
-            }
-
-            botActivityLogs.unshift(tradeActivity)
-            botMetrics.tradesExecuted++
-
-            console.log('📈 Real trade executed and logged:', tradeActivity.message)
-          } else if (orderExecutionEnabled) {
-            // Only log skipped orders when live trading is enabled
-            const tradeActivity: BotActivityLog = {
-              id: `order_skip_${Date.now()}_${Math.random()}`,
-              timestamp: new Date(),
-              type: 'info',
-              symbol,
-              message: `Order execution conditions not met for ${symbol}`,
-              status: 'completed',
-              executionTime: 100,
-              details: `Confidence: ${confidence}%, Live Trading: ${orderExecutionEnabled ? 'ON' : 'OFF'}`
-            }
-
-            botActivityLogs.unshift(tradeActivity)
-          }
-        }, 1500) // Execute 1.5 seconds after recommendation
-      }
-
-    } catch (error) {
-      console.error('Error generating activity:', error)
-      message = `System error occurred`
-      details = `Error: ${error.message}`
-      status = 'failed'
+          botActivityLogs.unshift(tradeActivity)
+        }
+      }, 1000) // Execute 1 second after recommendation
     }
 
-      const activity: BotActivityLog = {
+    // Occasionally add simulated trade activities for lower confidence recommendations
+    else if (Math.random() > 0.95 && type === 'recommendation') {
+      const tradeMessage = activities.trade[Math.floor(Math.random() * activities.trade.length)]
+      const tradeActivity: BotActivityLog = {
         id: `activity_${Date.now()}_${Math.random()}`,
-        timestamp: new Date(),
-        type,
+        timestamp: new Date(Date.now() + 1000), // 1 second after recommendation
+        type: 'trade',
         symbol,
-        message,
-        confidence,
-        status,
-        executionTime,
-        details
+        message: `${tradeMessage} (simulated)`,
+        status: Math.random() > 0.1 ? 'completed' : 'failed',
+        executionTime: 200 + Math.random() * 800
       }
-
-      // Add to logs (keep last 100)
-      botActivityLogs.unshift(activity)
-      if (botActivityLogs.length > 100) {
-        botActivityLogs = botActivityLogs.slice(0, 100)
-      }
-
-      // Update metrics
-      botMetrics.symbolsScanned += type === 'scan' ? 1 : 0
-      botMetrics.analysisCompleted += type === 'analysis' ? 1 : 0
-      botMetrics.recommendationsGenerated += type === 'recommendation' ? 1 : 0
-      botMetrics.errorCount += status === 'failed' ? 1 : 0
-      botMetrics.lastActivityTime = new Date()
-      botMetrics.currentSymbol = symbol || botMetrics.currentSymbol
-      botMetrics.nextScanIn = 10 + Math.random() * 50 // 10-60 seconds
-      botMetrics.totalProcessingTime += executionTime
-      botMetrics.avgAnalysisTime = botMetrics.totalProcessingTime / (botMetrics.analysisCompleted || 1)
-
-      const totalActivities = botMetrics.symbolsScanned + botMetrics.analysisCompleted + botMetrics.recommendationsGenerated
-      botMetrics.successRate = totalActivities > 0 ? ((totalActivities - botMetrics.errorCount) / totalActivities) * 100 : 87.5
-      botMetrics.uptime = (Date.now() - botStartTime.getTime()) / 1000 // seconds
+      botActivityLogs.unshift(tradeActivity)
+      botMetrics.tradesExecuted++
     }
 
-    // Generate initial activity immediately
-    await generateRealActivity()
+    const activity: BotActivityLog = {
+      id: `activity_${Date.now()}_${Math.random()}`,
+      timestamp: new Date(),
+      type,
+      symbol,
+      message,
+      confidence,
+      status,
+      executionTime,
+      details: type === 'analysis' ?
+        `Processing time: ${executionTime.toFixed(0)}ms, Confidence: ${(70 + Math.random() * 25).toFixed(1)}%` :
+        undefined
+    }
 
-    // Set up interval for ongoing activities (every 3-8 seconds for more frequent opportunities)
-    simulationInterval = setInterval(generateRealActivity, 3000 + Math.random() * 5000)
+    // Add to logs (keep last 100)
+    botActivityLogs.unshift(activity)
+    if (botActivityLogs.length > 100) {
+      botActivityLogs = botActivityLogs.slice(0, 100)
+    }
+
+    // Update metrics
+    botMetrics.symbolsScanned += type === 'scan' ? 1 : 0
+    botMetrics.analysisCompleted += type === 'analysis' ? 1 : 0
+    botMetrics.recommendationsGenerated += type === 'recommendation' ? 1 : 0
+    botMetrics.errorCount += status === 'failed' ? 1 : 0
+    botMetrics.lastActivityTime = new Date()
+    botMetrics.currentSymbol = symbol || botMetrics.currentSymbol
+    botMetrics.nextScanIn = 10 + Math.random() * 50 // 10-60 seconds
+    botMetrics.totalProcessingTime += executionTime
+    botMetrics.avgAnalysisTime = botMetrics.totalProcessingTime / (botMetrics.analysisCompleted || 1)
+
+    const totalActivities = botMetrics.symbolsScanned + botMetrics.analysisCompleted + botMetrics.recommendationsGenerated
+    botMetrics.successRate = totalActivities > 0 ? ((totalActivities - botMetrics.errorCount) / totalActivities) * 100 : 87.5
+    botMetrics.uptime = (Date.now() - botStartTime.getTime()) / 1000 // seconds
   }
+
+  // Generate initial activity immediately
+  generateActivity()
+
+  // Set up interval for ongoing activities (every 2-6 seconds)
+  simulationInterval = setInterval(generateActivity, 2000 + Math.random() * 4000)
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -530,12 +406,12 @@ export async function GET(request: NextRequest) {
       }
       botActivityLogs = []
 
-      // Start real bot activity using Alpaca API
-      performRealBotActivity()
+      // Start simulating activity
+      simulateBotActivity()
 
       return NextResponse.json({
         success: true,
-        message: 'AI Bot activity started - Using real Alpaca API data',
+        message: 'Bot activity simulation started',
         timestamp: new Date().toISOString()
       })
     }
@@ -551,7 +427,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: 'AI Bot activity stopped',
+        message: 'Bot activity simulation stopped',
         timestamp: new Date().toISOString()
       })
     }

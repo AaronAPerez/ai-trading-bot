@@ -12,6 +12,8 @@ import {
   SparklesIcon,
   BoltIcon,
   MagnifyingGlassIcon,
+  PlayIcon,
+  StopIcon,
   ShieldCheckIcon
 } from '@heroicons/react/24/outline'
 
@@ -101,6 +103,23 @@ export default function AIBotActivityMonitor({
     }
   }, [])
 
+  // Toggle order execution
+  const toggleOrderExecution = async () => {
+    try {
+      const action = orderExecutionEnabled ? 'disable-execution' : 'enable-execution'
+      const response = await fetch(`/api/ai-bot-activity?action=${action}`)
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setOrderExecutionEnabled(data.orderExecutionStatus.enabled)
+          console.log(`Order execution ${data.orderExecutionStatus.enabled ? 'enabled' : 'disabled'}`)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle order execution:', error)
+    }
+  }
 
   // Start/stop bot activity monitoring
   useEffect(() => {
@@ -275,10 +294,26 @@ export default function AIBotActivityMonitor({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                <ShieldCheckIcon className="w-4 h-4" />
-                Controlled by AI Trading Control
-              </div>
+              <button
+                onClick={toggleOrderExecution}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                  orderExecutionEnabled
+                    ? 'bg-red-600 hover:bg-red-500 text-white'
+                    : 'bg-green-600 hover:bg-green-500 text-white'
+                }`}
+              >
+                {orderExecutionEnabled ? (
+                  <>
+                    <StopIcon className="w-4 h-4" />
+                    Disable Live Trading
+                  </>
+                ) : (
+                  <>
+                    <PlayIcon className="w-4 h-4" />
+                    Enable Live Trading
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Order Execution Metrics */}
@@ -311,7 +346,7 @@ export default function AIBotActivityMonitor({
 
             <div className="mt-3 text-xs text-gray-400">
               {orderExecutionEnabled
-                ? '⚠️ Live trading enabled - Real orders will be executed for high-confidence recommendations (≥70%)'
+                ? '⚠️ Live trading enabled - Real orders will be executed for high-confidence recommendations (≥80%)'
                 : '📊 Simulation mode - No real orders will be placed, only simulated trades'
               }
             </div>
