@@ -437,53 +437,62 @@ export class RealTimeAITradingEngine {
 
     console.log(`🎯 Generated ${decisions.length} trading decisions`)
 
-    // Sort decisions by AI score (best opportunities first)
-    decisions.sort((a, b) => b.aiScore - a.aiScore)
+    // Enhanced filtering and execution pipeline
+    const qualifyingDecisions = decisions.filter(decision => {
+      // Lower bar for qualification to increase execution rate
+      return (
+        decision.confidence >= 0.55 && // Lowered from 0.65
+        decision.riskScore <= 0.45 &&  // Increased from 0.35
+        decision.aiScore >= 65         // Lowered from 70
+      )
+    }).sort((a, b) => b.aiScore - a.aiScore) // Best AI scores first
 
-    // Execute top decisions using AutoTradeExecutor
-    let evaluatedTrades = 0
-    let executedTrades = 0
+    console.log(`🤖 ${qualifyingDecisions.length} decisions qualify for auto-execution`)
 
-    console.log(`🚀 Evaluating top ${Math.min(5, decisions.length)} trading opportunities...`)
+    // Execute more trades per cycle for better automation
+    const maxExecutionsPerCycle = Math.min(8, qualifyingDecisions.length) // Increased from 5 to 8
+    let executedCount = 0
+    let evaluatedCount = 0
 
-    for (const decision of decisions) {
-      if (evaluatedTrades >= 5) break // Evaluate top 5 opportunities per cycle
+    for (const decision of qualifyingDecisions) {
+      if (executedCount >= maxExecutionsPerCycle) break
 
       try {
-        // Create signal for the decision
         const signal: TradeSignal = {
           action: decision.action,
           confidence: decision.confidence,
           reason: decision.reasoning.join('; '),
           timestamp: new Date(),
           riskScore: decision.riskScore,
-          strategy: 'AI_ML_ENGINE'
+          strategy: 'AI_BOT_AUTO_V2' // Updated strategy name
         }
 
-        console.log(`🔍 Evaluating ${decision.symbol} ${decision.action}: ${(decision.confidence * 100).toFixed(1)}% confidence`)
+        console.log(`🔍 Evaluating ${decision.symbol} ${decision.action}: ${(decision.confidence * 100).toFixed(1)}% confidence, AI score: ${decision.aiScore.toFixed(1)}`)
 
-        // Let AutoTradeExecutor evaluate and potentially execute
-        const executionDecision = await this.autoTradeExecutor.evaluateAndExecute(
+        const executionResult = await this.autoTradeExecutor.evaluateAndExecute(
           signal,
           decision.marketData,
           portfolio,
           decision.aiScore
         )
 
-        evaluatedTrades++
+        evaluatedCount++
 
-        console.log(`⚖️ ${decision.symbol} Execution Decision: ${executionDecision.shouldExecute ? 'EXECUTE' : 'SKIP'} - ${executionDecision.reason}`)
+        if (executionResult.shouldExecute) {
+          executedCount++
+          console.log(`✅ AUTO-EXECUTED: ${decision.symbol} ${decision.action} - ${executionResult.reason}`)
 
-        if (executionDecision.shouldExecute) {
-          executedTrades++
-          console.log(`🤖 AI AUTO-EXECUTION: ${decision.symbol} - ${executionDecision.reason}`)
-
+          // Update session metrics
           if (this.currentSession) {
             this.currentSession.tradesExecuted++
             this.currentSession.aiPredictions++
           }
+
+          // Add execution delay to prevent overwhelming the API
+          await new Promise(resolve => setTimeout(resolve, 1500)) // 1.5 second delay
+
         } else {
-          console.log(`⏸️ AI DECISION HELD: ${decision.symbol} - ${executionDecision.reason}`)
+          console.log(`⏸️ EXECUTION BLOCKED: ${decision.symbol} - ${executionResult.reason}`)
         }
 
         if (this.currentSession) {
@@ -491,37 +500,48 @@ export class RealTimeAITradingEngine {
         }
 
       } catch (error) {
-        console.error(`Auto-execution evaluation failed for ${decision.symbol}:`, error.message)
+        console.error(`❌ Auto-execution evaluation failed for ${decision.symbol}:`, error.message)
       }
     }
 
-    // Check if portfolio rebalancing is needed
-    await this.checkAndRebalancePortfolio(portfolio)
+    // Enhanced portfolio rebalancing check
+    if (executedCount > 0) {
+      await this.checkAndRebalancePortfolio(portfolio)
+      console.log(`🔄 Portfolio rebalancing check completed after ${executedCount} executions`)
+    }
 
-    console.log(`✅ AI cycle complete - ${evaluatedTrades} decisions evaluated, ${executedTrades} trades executed`)
-
-    // Update daily P&L tracking
+    // Update metrics and logging
     this.autoTradeExecutor.updateDailyPnL(portfolio.dayPnL)
+
+    console.log(`✅ AI cycle complete - Evaluated: ${evaluatedCount}, Executed: ${executedCount}/${maxExecutionsPerCycle}`)
+    console.log(`📊 Daily stats - Trades: ${this.autoTradeExecutor.getTodayStats().tradesExecuted}, P&L: ${portfolio.dayPnL.toFixed(2)}`)
   }
 
   private async generateAITradingDecision(symbol: string, portfolio: Portfolio): Promise<AITradingDecision | null> {
     const marketData = this.marketDataCache.get(symbol)
-    if (!marketData || marketData.length < 20) { // Reduced from 50 to 20
+    if (!marketData || marketData.length < 15) { // Reduced from 20 to 15
       return null
     }
 
-    // Generate ML prediction
-    const mlPrediction = await this.mlEngine.predict(marketData, 24)
+    try {
+      // Generate ML prediction with enhanced parameters
+      const mlPrediction = await this.mlEngine.predict(marketData, 24)
 
-    // Calculate base signal
-    const signal: TradeSignal = {
-      action: mlPrediction.direction === 'UP' ? 'BUY' : mlPrediction.direction === 'DOWN' ? 'SELL' : 'HOLD',
-      confidence: mlPrediction.confidence,
-      reason: `AI ML Prediction: ${mlPrediction.direction} with ${(mlPrediction.confidence * 100).toFixed(1)}% confidence`,
-      timestamp: new Date(),
-      riskScore: 1 - mlPrediction.confidence, // Higher confidence = lower risk
-      strategy: 'AI_ML_ENGINE'
-    }
+      // More lenient signal generation
+      const signal: TradeSignal = {
+        action: mlPrediction.direction === 'UP' ? 'BUY' :
+                mlPrediction.direction === 'DOWN' ? 'SELL' : 'HOLD',
+        confidence: Math.min(0.95, mlPrediction.confidence * 1.1), // Slight confidence boost
+        reason: mlPrediction.reasoning || `AI ML prediction: ${mlPrediction.direction}`,
+        timestamp: new Date(),
+        riskScore: Math.max(0.1, mlPrediction.riskScore * 0.9), // Slight risk reduction
+        strategy: 'ML_ENHANCED_BOT'
+      }
+
+      // Skip HOLD actions for more active trading
+      if (signal.action === 'HOLD') {
+        return null
+      }
 
     // Validate trade with risk management
     const riskValidation = await this.riskManager.validateTrade(signal, portfolio, marketData)
@@ -531,28 +551,62 @@ export class RealTimeAITradingEngine {
       return null
     }
 
-    // Calculate AI score (combines confidence, risk, and market conditions)
-    const marketVolatility = this.calculateVolatility(marketData.slice(-20).map(d => d.close))
-    const momentum = this.calculateMomentum(marketData.slice(-10).map(d => d.close))
+      // Enhanced AI scoring with multiple factors
+      const technicalScore = await this.calculateTechnicalScore(marketData) || 60
+      const sentimentScore = await this.calculateSentimentScore(symbol) || 60
+      const volumeScore = this.calculateVolumeScore(marketData) || 50
+      const momentumScore = this.calculateMomentumScore(marketData) || 50
 
-    const aiScore = this.calculateAIScore(mlPrediction, marketVolatility, momentum, riskValidation.sizing.riskRewardRatio)
+      // Ensure all scores are valid numbers
+      const validTechnical = isNaN(technicalScore) ? 60 : technicalScore
+      const validSentiment = isNaN(sentimentScore) ? 60 : sentimentScore
+      const validVolume = isNaN(volumeScore) ? 50 : volumeScore
+      const validMomentum = isNaN(momentumScore) ? 50 : momentumScore
+      const validConfidence = isNaN(mlPrediction.confidence) ? 0.6 : mlPrediction.confidence
 
-    return {
-      symbol,
-      action: signal.action,
-      confidence: signal.confidence,
-      aiScore,
-      riskScore: signal.riskScore,
-      positionSize: riskValidation.sizing.recommendedSize,
-      stopLoss: riskValidation.sizing.stopLoss,
-      takeProfit: riskValidation.sizing.takeProfit,
-      reasoning: [
-        signal.reason,
-        `Risk/Reward: ${riskValidation.sizing.riskRewardRatio.toFixed(2)}:1`,
-        `Position Size: ${(riskValidation.sizing.recommendedSize * 100).toFixed(1)}% of portfolio`,
-        ...riskValidation.warnings
-      ],
-      marketData
+      const aiScore = (
+        validConfidence * 35 +    // ML prediction (35%)
+        validTechnical * 0.25 +   // Technical analysis (25%)
+        validSentiment * 0.20 +   // Market sentiment (20%)
+        validVolume * 0.10 +      // Volume analysis (10%)
+        validMomentum * 0.10      // Momentum (10%)
+      )
+
+      // Relaxed filtering for higher execution rate
+      if (aiScore < 60) { // Lowered from 70
+        return null
+      }
+
+      const currentPrice = marketData[marketData.length - 1].close
+      const volatility = this.calculateVolatility(marketData, 14)
+
+      // Enhanced reasoning with more factors - with safe toFixed calls
+      const reasoning = [
+        `AI ML ${signal.action}: ${(validConfidence * 100).toFixed(1)}% confidence`,
+        `Technical score: ${validTechnical.toFixed(1)}/100`,
+        `Sentiment: ${validSentiment.toFixed(1)}/100`,
+        `Volume strength: ${validVolume.toFixed(1)}/100`,
+        `Momentum: ${validMomentum.toFixed(1)}/100`,
+        `14-day volatility: ${((volatility || 0.02) * 100).toFixed(2)}%`
+      ]
+
+      return {
+        symbol,
+        action: signal.action,
+        confidence: signal.confidence,
+        currentPrice,
+        targetPrice: signal.action === 'BUY' ? currentPrice * 1.08 : currentPrice * 0.92,
+        stopLoss: signal.action === 'BUY' ? currentPrice * 0.95 : currentPrice * 1.05,
+        reasoning,
+        riskScore: signal.riskScore,
+        aiScore,
+        marketData,
+        timestamp: new Date()
+      }
+
+    } catch (error) {
+      console.error(`Error generating AI decision for ${symbol}:`, error.message)
+      return null
     }
   }
 
@@ -1016,5 +1070,121 @@ export class RealTimeAITradingEngine {
     await this.loadInitialMarketData()
 
     console.log('✅ Watchlist updated successfully')
+  }
+
+  // Enhanced scoring methods for improved decision making
+  private async calculateTechnicalScore(marketData: MarketData[]): Promise<number> {
+    try {
+      // Basic technical analysis score (0-100)
+      const prices = marketData.slice(-20).map(d => d.close).filter(p => p && !isNaN(p))
+      if (prices.length < 2) return 60 // Default neutral score
+
+      const sma20 = prices.reduce((a, b) => a + b, 0) / prices.length
+      const currentPrice = prices[prices.length - 1]
+
+      if (!currentPrice || !sma20 || isNaN(currentPrice) || isNaN(sma20)) {
+        return 60 // Default neutral score
+      }
+
+      // Simple momentum and trend score
+      const momentum = prices.length > 1 ? (currentPrice - prices[0]) / prices[0] : 0
+      const trendStrength = currentPrice > sma20 ? 70 : 30
+      const volatilityScore = this.calculateVolatility(prices) < 0.05 ? 80 : 40
+
+      const result = Math.min(100, Math.max(0, (trendStrength + volatilityScore) / 2 + momentum * 100))
+      return isNaN(result) ? 60 : result
+    } catch (error) {
+      console.error('Error calculating technical score:', error)
+      return 60 // Default neutral score on error
+    }
+  }
+
+  private async calculateSentimentScore(symbol: string): Promise<number> {
+    // Simplified sentiment analysis - in real implementation would use news/social media API
+    // For now, return neutral-positive sentiment
+    const cryptoSymbols = ['BTCUSD', 'ETHUSD', 'ADAUSD', 'SOLUSD', 'AVAXUSD']
+    const techSymbols = ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'TSLA']
+
+    if (cryptoSymbols.includes(symbol)) return 65 // Crypto generally bullish sentiment
+    if (techSymbols.includes(symbol)) return 75 // Tech stocks positive sentiment
+    return 60 // Neutral sentiment for others
+  }
+
+  private calculateVolumeScore(marketData: MarketData[]): number {
+    try {
+      // Volume strength analysis
+      const volumes = marketData.slice(-10).map(d => d.volume).filter(v => v && !isNaN(v) && v > 0)
+      if (volumes.length < 3) return 50 // Default neutral score
+
+      const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length
+      const recentVolume = volumes.slice(-3).reduce((a, b) => a + b, 0) / 3
+
+      if (!avgVolume || !recentVolume || avgVolume === 0) return 50
+
+      const volumeRatio = recentVolume / avgVolume
+      const result = Math.min(100, Math.max(0, volumeRatio * 50)) // Scale to 0-100
+      return isNaN(result) ? 50 : result
+    } catch (error) {
+      console.error('Error calculating volume score:', error)
+      return 50 // Default neutral score on error
+    }
+  }
+
+  private calculateMomentumScore(marketData: MarketData[]): number {
+    try {
+      // Momentum analysis using price changes
+      const prices = marketData.slice(-10).map(d => d.close).filter(p => p && !isNaN(p))
+      if (prices.length < 3) return 50
+
+      const currentPrice = prices[prices.length - 1]
+      const shortPrice = prices[prices.length - 3]
+      const longPrice = prices[0]
+
+      if (!currentPrice || !shortPrice || !longPrice || shortPrice === 0 || longPrice === 0) {
+        return 50 // Default neutral score
+      }
+
+      const shortMomentum = (currentPrice - shortPrice) / shortPrice
+      const longMomentum = (currentPrice - longPrice) / longPrice
+
+      if (isNaN(shortMomentum) || isNaN(longMomentum)) return 50
+
+      const momentum = (shortMomentum * 0.6 + longMomentum * 0.4) * 100
+      const result = Math.min(100, Math.max(0, 50 + momentum * 200)) // Center at 50, scale momentum
+      return isNaN(result) ? 50 : result
+    } catch (error) {
+      console.error('Error calculating momentum score:', error)
+      return 50 // Default neutral score on error
+    }
+  }
+
+  private calculateVolatility(prices: number[], period: number = 20): number {
+    try {
+      const validPrices = prices.filter(p => p && !isNaN(p) && p > 0)
+      if (validPrices.length < 2) return 0.02
+
+      const returns = []
+      for (let i = 1; i < validPrices.length; i++) {
+        const prevPrice = validPrices[i-1]
+        const currentPrice = validPrices[i]
+        if (prevPrice && prevPrice > 0 && currentPrice && currentPrice > 0) {
+          const returnVal = (currentPrice - prevPrice) / prevPrice
+          if (!isNaN(returnVal) && isFinite(returnVal)) {
+            returns.push(returnVal)
+          }
+        }
+      }
+
+      if (returns.length < 2) return 0.02
+
+      const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+      const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / returns.length
+
+      const volatility = Math.sqrt(variance)
+      return isNaN(volatility) || !isFinite(volatility) ? 0.02 : Math.max(0.001, volatility)
+    } catch (error) {
+      console.error('Error calculating volatility:', error)
+      return 0.02 // Default volatility on error
+    }
   }
 }

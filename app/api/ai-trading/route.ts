@@ -5,7 +5,7 @@ import { YahooFinanceClient } from '@/lib/market-data/YahooFinanceClient'
 
 // Global instance of the AI trading engine with persistence
 let aiTradingEngine: RealTimeAITradingEngine | null = null
-let aiEngineState = {
+const aiEngineState = {
   running: false,
   startTime: null as Date | null,
   lastActivity: new Date()
@@ -214,12 +214,51 @@ export async function POST(request: NextRequest) {
         const alpacaClient = getAlpacaClient()
 
         console.log('⚙️ Merging configuration...')
-        const config = { ...DEFAULT_CONFIG, ...body.config }
-        console.log('📊 Final config:', {
-          autoExecuteEnabled: config.autoExecution?.autoExecuteEnabled,
+        // Enhanced execution configuration from fix implementation
+        const executionConfig = {
+          autoExecuteEnabled: true,
+          confidenceThresholds: {
+            minimum: Math.max(0.55, (body.config?.minConfidenceThreshold || 0.65) - 0.05), // 5% buffer below user setting
+            conservative: Math.max(0.60, body.config?.minConfidenceThreshold || 0.65),
+            aggressive: Math.min(0.85, (body.config?.minConfidenceThreshold || 0.65) + 0.10),
+            maximum: 0.90
+          },
+          positionSizing: {
+            baseSize: 0.025,           // 2.5% base position (balanced)
+            maxSize: 0.08,             // 8% maximum position (safe)
+            confidenceMultiplier: 2.2   // Good sensitivity to confidence
+          },
+          riskControls: {
+            maxDailyTrades: Math.min(60, body.config?.maxDailyTrades || 40),      // Reasonable daily limit
+            maxOpenPositions: Math.min(20, body.config?.maxPositions || 12),      // Reasonable position limit
+            maxDailyLoss: 0.025,       // 2.5% max daily loss (conservative)
+            cooldownPeriod: Math.max(2, body.config?.cooldownMinutes || 3)        // Minimum 2 minutes
+          },
+          executionRules: {
+            marketHoursOnly: false,         // Allow 24/7 for crypto
+            avoidEarnings: body.config?.avoidEarnings || false,
+            volumeThreshold: 15000,         // Reasonable volume requirement
+            spreadThreshold: 0.045,         // 4.5% spread tolerance
+            cryptoTradingEnabled: true,     // Enable crypto
+            afterHoursTrading: true,        // Enable after hours
+            weekendTrading: true,           // Enable weekends for crypto
+            cryptoSpreadThreshold: 0.07     // 7% spread tolerance for crypto
+          }
+        }
+
+        const config = {
+          ...DEFAULT_CONFIG,
+          ...body.config,
+          autoExecution: executionConfig
+        }
+
+        console.log('📊 Enhanced execution config:', {
+          autoExecuteEnabled: executionConfig.autoExecuteEnabled,
+          minConfidence: (executionConfig.confidenceThresholds.minimum * 100).toFixed(1) + '%',
+          maxDailyTrades: executionConfig.riskControls.maxDailyTrades,
+          maxPositions: executionConfig.riskControls.maxOpenPositions,
           paperTrading: config.paperTrading,
-          watchlistSize: config.watchlistSize,
-          minConfidenceThreshold: config.minConfidenceThreshold
+          watchlistSize: config.watchlistSize
         })
 
         // Define production mode for both engine creation and startup
@@ -301,10 +340,16 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: 'AI Trading Engine started successfully',
+          message: 'AI Trading Engine started with automatic execution enabled',
           session: session,
-          config: {
-            autoExecuteEnabled: config.autoExecution?.autoExecuteEnabled,
+          config: executionConfig,
+          executionStatus: {
+            enabled: true,
+            dailyCount: 0,
+            dailyLimit: executionConfig.riskControls.maxDailyTrades
+          },
+          tradingConfig: {
+            autoExecuteEnabled: executionConfig.autoExecuteEnabled,
             paperTrading: config.paperTrading,
             watchlistSize: config.watchlistSize,
             minConfidenceThreshold: config.minConfidenceThreshold
@@ -331,8 +376,12 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: 'AI Trading Engine stopped successfully',
-          sessionSummary: finalSession
+          message: 'AI Trading Engine stopped',
+          sessionSummary: finalSession,
+          executionStatus: {
+            enabled: false,
+            dailyCount: 0
+          }
         })
 
       case 'status':
@@ -711,7 +760,7 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        const { executionAction, executionConfig } = body
+        const { executionAction, executionConfig: newExecutionConfig } = body
 
         switch (executionAction) {
           case 'enable':
@@ -731,8 +780,8 @@ export async function POST(request: NextRequest) {
             })
 
           case 'update_config':
-            if (executionConfig) {
-              aiTradingEngine.updateExecutionConfig(executionConfig)
+            if (newExecutionConfig) {
+              aiTradingEngine.updateExecutionConfig(newExecutionConfig)
               return NextResponse.json({
                 success: true,
                 message: 'Execution configuration updated',

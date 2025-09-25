@@ -159,22 +159,34 @@ export class AutoTradeExecutor {
       executionPriority: 'LOW'
     }
 
-    // Check 1: Confidence threshold
-    if (confidence < this.config.confidenceThresholds.minimum) {
-      decision.reason = `Confidence too low: ${(confidence * 100).toFixed(1)}% < ${(this.config.confidenceThresholds.minimum * 100).toFixed(1)}%`
+    // Check 1: Enhanced confidence threshold with performance adjustment
+    const performanceAdjustment = this.getPerformanceBasedAdjustment()
+    const effectiveMinimum = Math.max(0.55, this.config.confidenceThresholds.minimum + performanceAdjustment)
+
+    console.log(`📊 ${symbol} Execution Check: confidence=${(confidence * 100).toFixed(1)}%, threshold=${(effectiveMinimum * 100).toFixed(1)}%`)
+
+    if (confidence < effectiveMinimum) {
+      decision.reason = `Confidence below threshold: ${(confidence * 100).toFixed(1)}% < ${(effectiveMinimum * 100).toFixed(1)}%`
       return decision
     }
 
-    // Check 2: Market hours (if required, but skip for crypto)
+    // Check 2: Market conditions (relaxed for crypto)
     const isCrypto = this.isCryptoSymbol(symbol)
     if (this.config.executionRules.marketHoursOnly && !isCrypto && !this.isMarketOpen()) {
-      decision.reason = 'Market is closed (non-crypto asset)'
-      return decision
+      // Allow crypto trading 24/7, but respect market hours for stocks
+      const now = new Date()
+      const isWeekend = now.getDay() === 0 || now.getDay() === 6
+
+      if (!isWeekend || !this.config.executionRules.weekendTrading) {
+        decision.reason = 'Market closed and weekend trading disabled'
+        return decision
+      }
     }
 
-    // Check 3: Daily trade limits
-    if (this.dailyTradeCount >= this.config.riskControls.maxDailyTrades) {
-      decision.reason = `Daily trade limit reached: ${this.dailyTradeCount}/${this.config.riskControls.maxDailyTrades}`
+    // Check 3: Daily trade limits (more lenient for bot)
+    const dailyLimit = Math.min(this.config.riskControls.maxDailyTrades, 100) // Cap at 100/day
+    if (this.dailyTradeCount >= dailyLimit) {
+      decision.reason = `Daily trade limit reached: ${this.dailyTradeCount}/${dailyLimit}`
       return decision
     }
 
@@ -191,14 +203,14 @@ export class AutoTradeExecutor {
       return decision
     }
 
-    // Check 6: Cooldown period
-    const lastTrade = this.lastTradeTime.get(symbol)
-    if (lastTrade) {
-      const timeSinceLastTrade = Date.now() - lastTrade.getTime()
-      const cooldownMs = this.config.riskControls.cooldownPeriod * 60 * 1000
-      if (timeSinceLastTrade < cooldownMs) {
-        const remainingCooldown = Math.ceil((cooldownMs - timeSinceLastTrade) / 60000)
-        decision.reason = `Cooldown active: ${remainingCooldown} minutes remaining`
+    // Check 6: Cooldown period (relaxed)
+    const lastTradeTime = this.lastTradeTime.get(symbol)
+    if (lastTradeTime) {
+      const timeSinceLastTrade = (Date.now() - lastTradeTime.getTime()) / 1000 / 60 // minutes
+      const cooldownPeriod = Math.max(1, this.config.riskControls.cooldownPeriod / 2) // Half the cooldown
+
+      if (timeSinceLastTrade < cooldownPeriod) {
+        decision.reason = `Cooldown active: ${timeSinceLastTrade.toFixed(1)}/${cooldownPeriod} minutes`
         return decision
       }
     }
@@ -237,8 +249,8 @@ export class AutoTradeExecutor {
     // Calculate position size based on confidence
     decision.positionSize = this.calculateOptimalPositionSize(confidence, aiScore, portfolio, signal.riskScore || 0.5)
 
-    // Minimum position size check (lower for crypto)
-    const minPositionSize = isCrypto ? 0.001 : 0.005 // 0.1% for crypto, 0.5% for stocks
+    // Enhanced minimum position size check (lower for crypto)
+    const minPositionSize = isCrypto ? 0.003 : 0.005 // 0.3% crypto, 0.5% stocks
     if (decision.positionSize < minPositionSize) {
       decision.reason = `Position size too small: ${(decision.positionSize * 100).toFixed(3)}% < ${(minPositionSize * 100).toFixed(1)}%`
       return decision
@@ -252,7 +264,7 @@ export class AutoTradeExecutor {
     decision.reason = this.generateExecutionReason(confidence, aiScore, decision.positionSize, decision.executionPriority)
 
     return decision
-  }
+}
 
   private calculateOptimalPositionSize(
     confidence: number,
@@ -261,32 +273,39 @@ export class AutoTradeExecutor {
     riskScore: number
   ): number {
 
-    // Base position size
+    // Start with base size
     let positionSize = this.config.positionSizing.baseSize
 
-    // Confidence multiplier effect
-    const confidenceMultiplier = Math.pow(confidence, this.config.positionSizing.confidenceMultiplier)
-    positionSize *= confidenceMultiplier
+    // Enhanced confidence multiplier (more aggressive for bots)
+    const confidenceBonus = Math.pow(confidence / 0.6, 1.8) // Exponential scaling from 60% baseline
+    positionSize *= confidenceBonus
 
-    // AI score enhancement
-    const aiMultiplier = (aiScore / 100) * 1.5 // AI score is 0-100, convert to 0-1.5 multiplier
+    // AI score multiplier (0-100 scale)
+    const aiMultiplier = 0.5 + (aiScore / 100) * 1.5 // 0.5x to 2.0x multiplier
     positionSize *= aiMultiplier
 
-    // Risk adjustment (higher risk = smaller position)
-    const riskAdjustment = 1 - (riskScore * 0.5) // Max 50% reduction for high risk
+    // Risk adjustment (less aggressive penalty)
+    const riskAdjustment = 1 - (riskScore * 0.3) // Max 30% reduction for high risk
     positionSize *= riskAdjustment
 
-    // Apply confidence tier bonuses
-    if (confidence >= this.config.confidenceThresholds.maximum) {
-      positionSize *= 1.5 // 50% bonus for maximum confidence
-    } else if (confidence >= this.config.confidenceThresholds.aggressive) {
-      positionSize *= 1.25 // 25% bonus for aggressive confidence
-    } else if (confidence < this.config.confidenceThresholds.conservative) {
-      positionSize *= 0.75 // 25% reduction for low confidence
+    // Confidence tier bonuses (enhanced for automation)
+    if (confidence >= 0.90) {
+      positionSize *= 1.8 // 80% bonus for 90%+ confidence
+    } else if (confidence >= 0.85) {
+      positionSize *= 1.5 // 50% bonus for 85%+ confidence
+    } else if (confidence >= 0.75) {
+      positionSize *= 1.25 // 25% bonus for 75%+ confidence
+    } else if (confidence >= 0.65) {
+      positionSize *= 1.1 // 10% bonus for 65%+ confidence
     }
 
-    // Ensure within bounds
-    positionSize = Math.max(0.005, Math.min(positionSize, this.config.positionSizing.maxSize))
+    // Portfolio health multiplier
+    const portfolioHealth = this.assessPortfolioHealth(portfolio)
+    positionSize *= portfolioHealth
+
+    // Ensure within bounds with bot-friendly limits
+    const maxSize = Math.min(this.config.positionSizing.maxSize, 0.10) // Cap at 10% for safety
+    positionSize = Math.max(0.003, Math.min(positionSize, maxSize))
 
     return positionSize
   }
@@ -776,5 +795,42 @@ export class AutoTradeExecutor {
 
   updateConfig(newConfig: Partial<ExecutionConfig>): void {
     this.config = { ...this.config, ...newConfig }
+  }
+
+  // Performance-based threshold adjustment
+  private getPerformanceBasedAdjustment(): number {
+    const insights = this.learningSystem.getLatestInsights()
+
+    if (!insights) return 0
+
+    // Lower threshold if performing well, raise if performing poorly
+    if (insights.overallAccuracy > 0.75) {
+      return -0.05 // Lower threshold by 5% for good performance
+    } else if (insights.overallAccuracy < 0.55) {
+      return 0.10 // Raise threshold by 10% for poor performance
+    }
+
+    return 0
+  }
+
+  // Portfolio health assessment
+  private assessPortfolioHealth(portfolio: Portfolio): number {
+    // Base health multiplier
+    let healthMultiplier = 1.0
+
+    // Check daily P&L
+    if (this.dailyPnL > 0) {
+      healthMultiplier *= 1.1 // 10% bonus for positive day
+    } else if (this.dailyPnL < -0.02 * portfolio.totalValue) {
+      healthMultiplier *= 0.8 // 20% reduction for significant losses
+    }
+
+    // Check portfolio concentration
+    const totalPositions = portfolio.positions.length
+    if (totalPositions > this.config.riskControls.maxOpenPositions * 0.8) {
+      healthMultiplier *= 0.9 // Reduce position size when portfolio is concentrated
+    }
+
+    return Math.max(0.5, Math.min(1.5, healthMultiplier)) // Cap between 50% and 150%
   }
 }
