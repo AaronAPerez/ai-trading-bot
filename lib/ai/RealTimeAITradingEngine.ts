@@ -49,6 +49,12 @@ interface AITradingDecision {
 }
 
 export class RealTimeAITradingEngine {
+  stop() {
+      throw new Error("Method not implemented.")
+  }
+  start() {
+      throw new Error("Method not implemented.")
+  }
   private alpacaClient: AlpacaClient
   private symbolManager: AlpacaSymbolManager
   private mlEngine: MLPredictionEngine
@@ -417,7 +423,9 @@ export class RealTimeAITradingEngine {
 
     // Get current portfolio
     const portfolio = await this.getCurrentPortfolio()
-    console.log(`💰 Portfolio: $${portfolio.totalValue.toFixed(2)} | Buying Power: $${portfolio.buyingPower.toFixed(2)}`)
+    const portfolioValue = portfolio.totalValue || 0
+    const buyingPower = portfolio.buyingPower || 0
+    console.log(`💰 Portfolio: $${portfolioValue.toFixed(2)} | Buying Power: $${buyingPower.toFixed(2)}`)
 
     // Generate AI trading decisions for all watchlist symbols
     const decisions: AITradingDecision[] = []
@@ -514,7 +522,8 @@ export class RealTimeAITradingEngine {
     this.autoTradeExecutor.updateDailyPnL(portfolio.dayPnL)
 
     console.log(`✅ AI cycle complete - Evaluated: ${evaluatedCount}, Executed: ${executedCount}/${maxExecutionsPerCycle}`)
-    console.log(`📊 Daily stats - Trades: ${this.autoTradeExecutor.getTodayStats().tradesExecuted}, P&L: ${portfolio.dayPnL.toFixed(2)}`)
+    const dailyPnL = portfolio.dayPnL || 0
+    console.log(`📊 Daily stats - Trades: ${this.autoTradeExecutor.getTodayStats().tradesExecuted}, P&L: ${dailyPnL.toFixed(2)}`)
   }
 
   private async generateAITradingDecision(symbol: string, portfolio: Portfolio): Promise<AITradingDecision | null> {

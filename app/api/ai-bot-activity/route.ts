@@ -49,15 +49,15 @@ let botStartTime = new Date()
 let isSimulatingActivity = false
 let simulationInterval: NodeJS.Timeout | null = null
 
-// Order execution configuration
+// Order execution configuration - aligned with enhanced bot execution
 let orderExecutionEnabled = true
 const autoExecutionConfig = {
-  minConfidenceForOrder: 70, // 70% minimum confidence to execute trades
+  minConfidenceForOrder: 55, // 55% minimum confidence to execute trades (lowered for better execution rate)
   maxPositionSize: 5000, // Maximum $5000 per position
-  orderCooldown: 180000, // 3 minutes between orders for same symbol
-  dailyOrderLimit: 100, // Maximum 100 orders per day
-  riskPerTrade: 0.08, // 8% of portfolio per trade (increased from 5%)
-  minOrderValue: 50, // Minimum $50 per order (increased from $25)
+  orderCooldown: 120000, // 2 minutes between orders for same symbol (reduced from 3 minutes)
+  dailyOrderLimit: 60, // Maximum 60 orders per day (reasonable limit)
+  riskPerTrade: 0.06, // 6% of portfolio per trade (balanced risk)
+  minOrderValue: 25, // Minimum $25 per order (lowered for more opportunities)
   baseMinPositionValue: 100 // Minimum base position size before confidence multiplier
 }
 
@@ -92,9 +92,11 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       recentOrders.clear()
     }
 
-    // Check execution conditions
+    // Check execution conditions with detailed logging
+    console.log(`🔍 Execution check for ${symbol}: confidence=${confidence}%, threshold=${autoExecutionConfig.minConfidenceForOrder}%`)
+
     if (confidence < autoExecutionConfig.minConfidenceForOrder) {
-      console.log(`⚠️ Confidence ${confidence}% below threshold ${autoExecutionConfig.minConfidenceForOrder}%`)
+      console.log(`❌ Confidence ${confidence}% below threshold ${autoExecutionConfig.minConfidenceForOrder}%`)
       return null
     }
 

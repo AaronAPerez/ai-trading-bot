@@ -1,6 +1,27 @@
 @import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 
 :root {
+  /* Primary AI/Innovation */
+  --primary-ai: #6366F1;
+  --primary-innovation: #00D4FF;
+  
+  /* Financial Success */
+  --success: #10B981;
+  --profit: #059669;
+  
+  /* Warnings & Losses */
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  
+  /* Backgrounds */
+  --bg-primary: #111827;
+  --bg-secondary: #1F2937;
+  --bg-accent: #374151;
+
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -23,4 +44,24 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+
+/* 1 column mobile → 2 tablet → 4 desktop */
+.responsive-grid {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4;
+}
+
+/* Mobile-first card layouts */
+.card-mobile {
+  @apply p-4 lg:p-6; /* Smaller padding on mobile */
+  @apply text-sm lg:text-base; /* Smaller text on mobile */
+  @apply rounded-lg; /* Consistent border radius */
+}
+
+/* Touch-friendly buttons (minimum 44px) */
+.touch-button {
+  @apply min-h-[44px] min-w-[44px] p-3 rounded-lg;
+  @apply transition-colors duration-200;
+  @apply focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
 }

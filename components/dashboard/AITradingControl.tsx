@@ -101,9 +101,31 @@ export default function AITradingControl() {
 
   const fetchStatus = async () => {
     try {
-      const response = await fetch('/api/ai-trading')
-      const data = await response.json()
-      setStatus(data)
+      // Try the new bot control API first
+      const botResponse = await fetch('/api/ai/bot-control')
+      const botData = await botResponse.json()
+
+      if (botResponse.ok) {
+        // Update status based on new API response
+        setStatus(prevStatus => ({
+          ...prevStatus,
+          running: botData.data?.isRunning || false,
+          session: botData.data?.isRunning ? {
+            sessionId: botData.data.sessionId || 'unknown',
+            startTime: botData.data.startTime || new Date().toISOString(),
+            tradesExecuted: 0,
+            totalPnL: 0,
+            maxDrawdown: 0,
+            aiPredictions: 0,
+            successfulPredictions: 0
+          } : null
+        }))
+      } else {
+        // Fallback to original API
+        const response = await fetch('/api/ai-trading')
+        const data = await response.json()
+        setStatus(data)
+      }
       setError(null)
     } catch (err) {
       setError('Failed to fetch AI trading status')
@@ -128,36 +150,83 @@ export default function AITradingControl() {
     console.log('🚀 Starting AI Trading Engine with Live Execution...')
 
     try {
-      // 1. Start the AI bot activity monitoring
-      const botActivityResponse = await fetch('/api/ai-bot-activity?action=start-simulation')
-      if (!botActivityResponse.ok) {
-        throw new Error('Failed to start AI bot activity monitoring')
+      // Use the new bot control system
+      const defaultConfig = {
+        enabled: true,
+        mode: 'CONSERVATIVE' as const,
+        strategies: [
+          {
+            id: 'ml_enhanced',
+            name: 'ML Enhanced Analysis',
+            type: 'ML_ENHANCED' as const,
+            enabled: true,
+            weight: 0.4,
+            parameters: {}
+          },
+          {
+            id: 'technical_analysis',
+            name: 'Technical Analysis',
+            type: 'TECHNICAL' as const,
+            enabled: true,
+            weight: 0.3,
+            parameters: {}
+          },
+          {
+            id: 'sentiment_analysis',
+            name: 'Sentiment Analysis',
+            type: 'SENTIMENT' as const,
+            enabled: true,
+            weight: 0.3,
+            parameters: {}
+          }
+        ],
+        riskManagement: {
+          maxPositionSize: 0.05,
+          maxDailyLoss: 0.02,
+          maxDrawdown: 0.10,
+          minConfidence: 0.75,
+          stopLossPercent: 0.05,
+          takeProfitPercent: 0.10,
+          correlationLimit: 0.7
+        },
+        executionSettings: {
+          autoExecute: false,
+          minConfidenceForOrder: 0.80,
+          maxOrdersPerDay: 20,
+          orderSizePercent: 0.02,
+          slippageTolerance: 0.01,
+          marketHoursOnly: true
+        },
+        scheduleSettings: {
+          tradingHours: {
+            start: '09:30',
+            end: '16:00'
+          },
+          excludedDays: ['Saturday', 'Sunday'],
+          cooldownMinutes: 5
+        }
       }
 
-      // 2. Enable live trading execution
-      const executionResponse = await fetch('/api/ai-bot-activity?action=enable-execution')
-      if (!executionResponse.ok) {
-        throw new Error('Failed to enable live trading execution')
-      }
-
-      // 3. Start the main AI trading engine
-      const response = await fetch('/api/ai-trading', {
+      const response = await fetch('/api/ai/bot-control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start' })
+        body: JSON.stringify({
+          action: 'start',
+          config: defaultConfig
+        })
       })
 
-      const data = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to start AI trading')
+        throw new Error(result.error || 'Failed to start AI trading')
       }
 
-      console.log('✅ AI Trading Engine with Live Execution started successfully!')
+      console.log('✅ AI Trading Engine started successfully!', result)
       await fetchStatus()
     } catch (err) {
-      console.error('❌ Failed to start AI Trading:', err.message)
-      setError(err.message)
+      console.error('❌ Failed to start AI Trading:', err)
+      setError(err instanceof Error ? err.message : 'Unknown error occurred')
     } finally {
       setLoading(false)
     }
@@ -168,35 +237,27 @@ export default function AITradingControl() {
     setError(null)
 
     try {
-      // 1. Stop the AI trading engine
-      const response = await fetch('/api/ai-trading', {
+      console.log('🛑 Stopping AI Trading Engine...')
+
+      // Use the new bot control system
+      const response = await fetch('/api/ai/bot-control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'stop' })
       })
 
-      const data = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to stop AI trading')
+        throw new Error(result.error || 'Failed to stop AI trading')
       }
 
-      // 2. Disable live trading execution
-      const executionResponse = await fetch('/api/ai-bot-activity?action=disable-execution')
-      if (!executionResponse.ok) {
-        console.warn('Failed to disable live trading execution')
-      }
-
-      // 3. Stop bot activity monitoring
-      const botActivityResponse = await fetch('/api/ai-bot-activity?action=stop-simulation')
-      if (!botActivityResponse.ok) {
-        console.warn('Failed to stop AI bot activity monitoring')
-      }
-
+      console.log('✅ AI Trading Engine stopped successfully!', result)
       await fetchStatus()
       setPerformance(null)
     } catch (err) {
-      setError(err.message)
+      console.error('❌ Failed to stop AI Trading:', err)
+      setError(err instanceof Error ? err.message : 'Unknown error occurred')
     } finally {
       setLoading(false)
     }
@@ -323,7 +384,7 @@ export default function AITradingControl() {
           <CardContent>
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
               <AlertCircle className="h-4 w-4 text-red-500" />
-              <span className="text-red-700 text-sm">{error}</span>
+              <span className="text-red-700 text-sm">{error instanceof Error ? error.message : String(error || 'Unknown error')}</span>
             </div>
           </CardContent>
         )}

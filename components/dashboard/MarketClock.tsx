@@ -62,7 +62,7 @@ export function MarketClock({ variant = 'card', showDetails = true }: MarketCloc
           )}
         </div>
         {variant === 'card' && (
-          <p className="text-red-200 text-xs mt-1">{error}</p>
+          <p className="text-red-200 text-xs mt-1">{error instanceof Error ? error.message : String(error || 'Unknown error')}</p>
         )}
       </div>
     )

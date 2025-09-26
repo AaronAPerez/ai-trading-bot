@@ -583,7 +583,7 @@ export class AlpacaMarketDataService {
     }
 
     const basePrice = basePrices[symbol] || 100 + Math.random() * 200
-    
+
     // Add some realistic volatility
     const volatility = isUpdate ? 0.002 : 0.01 // Lower volatility for updates
     const priceChange = (Math.random() - 0.5) * volatility * basePrice
@@ -593,19 +593,27 @@ export class AlpacaMarketDataService {
     const bidPrice = currentPrice - spread / 2
     const askPrice = currentPrice + spread / 2
 
+    // Ensure all values are valid numbers before using toFixed
+    const safeBidPrice = isNaN(bidPrice) || !isFinite(bidPrice) ? basePrice - 0.1 : bidPrice
+    const safeAskPrice = isNaN(askPrice) || !isFinite(askPrice) ? basePrice + 0.1 : askPrice
+    const safeCurrentPrice = isNaN(currentPrice) || !isFinite(currentPrice) ? basePrice : currentPrice
+    const safeSpread = isNaN(spread) || !isFinite(spread) ? 0.001 : spread
+    const safePriceChange = isNaN(priceChange) || !isFinite(priceChange) ? 0 : priceChange
+    const safeBasePrice = isNaN(basePrice) || !isFinite(basePrice) ? 100 : basePrice
+
     return {
       symbol,
-      bidPrice: Number(bidPrice.toFixed(2)),
-      askPrice: Number(askPrice.toFixed(2)),
-      midPrice: Number(currentPrice.toFixed(2)),
-      spread: Number(spread.toFixed(2)),
+      bidPrice: Number(safeBidPrice.toFixed(2)),
+      askPrice: Number(safeAskPrice.toFixed(2)),
+      midPrice: Number(safeCurrentPrice.toFixed(2)),
+      spread: Number(safeSpread.toFixed(2)),
       bidSize: 100 + Math.floor(Math.random() * 900),
       askSize: 100 + Math.floor(Math.random() * 900),
-      lastPrice: Number(currentPrice.toFixed(2)),
+      lastPrice: Number(safeCurrentPrice.toFixed(2)),
       timestamp: new Date(),
       volume: Math.floor(1000000 + Math.random() * 9000000),
-      dayChange: Number(priceChange.toFixed(2)),
-      dayChangePercent: Number(((priceChange / basePrice) * 100).toFixed(2)),
+      dayChange: Number(safePriceChange.toFixed(2)),
+      dayChangePercent: Number(((safePriceChange / safeBasePrice) * 100).toFixed(2)),
       isMockData: true
     }
   }
@@ -651,19 +659,27 @@ export class AlpacaMarketDataService {
         const close = open + change
         const volume = Math.floor(100000 + Math.random() * 900000)
 
+        // Ensure all values are valid numbers before using toFixed
+        const safeOpen = isNaN(open) || !isFinite(open) ? currentPrice : open
+        const safeHigh = isNaN(high) || !isFinite(high) ? safeOpen * 1.01 : high
+        const safeLow = isNaN(low) || !isFinite(low) ? safeOpen * 0.99 : low
+        const safeClose = isNaN(close) || !isFinite(close) ? safeOpen : close
+        const safeChange = isNaN(change) || !isFinite(change) ? 0 : change
+        const safeVwap = (safeOpen + safeHigh + safeLow + safeClose) / 4
+
         bars.push({
           symbol,
           timestamp,
           timeframe: params.timeframe,
-          open: Number(open.toFixed(2)),
-          high: Number(high.toFixed(2)),
-          low: Number(low.toFixed(2)),
-          close: Number(close.toFixed(2)),
+          open: Number(safeOpen.toFixed(2)),
+          high: Number(safeHigh.toFixed(2)),
+          low: Number(safeLow.toFixed(2)),
+          close: Number(safeClose.toFixed(2)),
           volume,
-          vwap: Number(((open + high + low + close) / 4).toFixed(2)),
+          vwap: Number(safeVwap.toFixed(2)),
           tradeCount: Math.floor(100 + Math.random() * 400),
-          change: Number(change.toFixed(2)),
-          changePercent: Number(((change / open) * 100).toFixed(2))
+          change: Number(safeChange.toFixed(2)),
+          changePercent: Number(safeOpen > 0 ? ((safeChange / safeOpen) * 100).toFixed(2) : '0')
         })
 
         currentPrice = close
