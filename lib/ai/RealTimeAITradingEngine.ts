@@ -49,6 +49,9 @@ interface AITradingDecision {
 }
 
 export class RealTimeAITradingEngine {
+  getExecutionStats() {
+    throw new Error("Method not implemented.")
+  }
   stop() {
       throw new Error("Method not implemented.")
   }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAlpacaClient } from '@/lib/alpaca/server-client'
+import { AlpacaClient } from '@/lib/alpaca/client'
+import { YahooFinanceClient } from '@/lib/market-data/YahooFinanceClient'
+import { FreeMarketDataProvider } from '@/lib/marketData/FreeMarketDataProvider'
 
 interface BotActivityLog {
   id: string
@@ -26,6 +29,8 @@ interface BotMetrics {
   uptime: number
   totalProcessingTime: number
   errorCount: number
+  successfulTrades: number
+  failedTrades: number
 }
 
 // In-memory storage for bot activity (in production, this would use a database)
@@ -39,10 +44,12 @@ let botMetrics: BotMetrics = {
   currentSymbol: null,
   nextScanIn: 0,
   avgAnalysisTime: 2.5,
-  successRate: 87.5,
+  successRate: 0,
   uptime: 0,
   totalProcessingTime: 0,
-  errorCount: 0
+  errorCount: 0,
+  successfulTrades: 0,
+  failedTrades: 0
 }
 
 let botStartTime = new Date()
@@ -83,6 +90,9 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     return null
   }
 
+  let portfolioValue: number = 0
+  let positionValue: number = 0
+
   try {
     // Reset daily count if new day
     const today = new Date().toDateString()
@@ -114,14 +124,56 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     const isCrypto = symbol.includes('/USD') || symbol.includes('USD')
     console.log(`📊 Processing ${isCrypto ? 'crypto' : 'stock'} symbol: ${symbol}`)
 
+    // Skip crypto symbols as Alpaca doesn't support crypto in paper trading
+    if (isCrypto) {
+      console.log(`⚠️ Skipping crypto symbol ${symbol} - not supported in Alpaca paper trading`)
+      return null
+    }
+
     console.log(`🚀 Executing order for ${symbol} with ${confidence}% confidence`)
 
-    // Create Alpaca client
-    const alpacaClient = getAlpacaClient()
+    // Create Alpaca client with order creation capability
+    const apiKey = process.env.ALPACA_API_KEY_ID || process.env.APCA_API_KEY_ID
+    const secretKey = process.env.ALPACA_SECRET_KEY || process.env.APCA_API_SECRET_KEY
+
+    if (!apiKey || !secretKey) {
+      throw new Error('Alpaca API credentials not found in environment variables')
+    }
+
+    console.log(`🔑 Using API key: ${apiKey.substring(0, 8)}...`)
+
+    const alpacaClient = new AlpacaClient({
+      key: apiKey,
+      secret: secretKey,
+      paper: true,
+      baseUrl: 'https://paper-api.alpaca.markets'
+    })
+    console.log(`🔐 Alpaca client created for order execution`)
 
     // Get account information for position sizing
     const account = await alpacaClient.getAccount()
-    const portfolioValue = parseFloat(account.portfolio_value || '100000')
+
+    console.log(`🏦 Account data received:`, {
+      totalBalance: account.totalBalance,
+      cashBalance: account.cashBalance,
+      availableBuyingPower: account.availableBuyingPower,
+      tradingEnabled: account.tradingEnabled
+    })
+
+    // Use the correct field name from the AlpacaClient response
+    portfolioValue = account.totalBalance
+
+    console.log(`🔢 Portfolio value from totalBalance: ${portfolioValue}`)
+
+    if (!portfolioValue || portfolioValue <= 0 || isNaN(portfolioValue)) {
+      throw new Error(`Invalid portfolio value: ${portfolioValue}. Account may not be properly funded.`)
+    }
+
+    if (!account.tradingEnabled) {
+      throw new Error('Trading is disabled on this account')
+    }
+
+    console.log(`💰 Portfolio value: $${portfolioValue.toLocaleString()}`)
 
     // Calculate position size based on confidence and risk parameters
     const basePositionSize = Math.max(
@@ -129,18 +181,68 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       autoExecutionConfig.baseMinPositionValue
     )
     const confidenceMultiplier = Math.min(confidence / 100 * 1.5, 2.0) // Max 2x multiplier
-    let positionValue = basePositionSize * confidenceMultiplier
+    positionValue = basePositionSize * confidenceMultiplier
     positionValue = Math.min(positionValue, autoExecutionConfig.maxPositionSize)
+    positionValue = Math.round(positionValue * 100) / 100 // Round to 2 decimal places
 
-    // Get current market price
-    const quote = await alpacaClient.getLatestQuote({ symbols: symbol })
-    if (!quote.quotes?.[symbol]) {
-      console.log(`❌ No market data for ${symbol}`)
-      return null
+    // Get current market price with fallback to Yahoo Finance
+    let currentPrice: number | null = null
+    let priceSource = 'unknown'
+
+    try {
+      // Try Alpaca first
+      const quotes = await alpacaClient.getLatestQuotes([symbol])
+      console.log(`📊 Alpaca quote data for ${symbol}:`, quotes)
+
+      if (quotes && quotes[symbol]) {
+        const quoteData = quotes[symbol]
+        currentPrice = quoteData.midPrice
+        priceSource = 'Alpaca'
+        console.log(`💲 ${symbol} price from Alpaca: $${currentPrice.toFixed(2)} (bid: $${quoteData.bidPrice}, ask: $${quoteData.askPrice})`)
+      }
+    } catch (alpacaError) {
+      console.log(`⚠️ Alpaca quote failed for ${symbol}:`, alpacaError.message)
     }
 
-    const quoteData = quote.quotes[symbol]
-    const currentPrice = (quoteData.ask + quoteData.bid) / 2
+    // Fallback to Yahoo Finance if Alpaca failed
+    if (!currentPrice || currentPrice <= 0 || isNaN(currentPrice)) {
+      console.log(`🔄 Falling back to Yahoo Finance for ${symbol}`)
+      try {
+        const yahooClient = new YahooFinanceClient()
+        currentPrice = await yahooClient.getCurrentQuote(symbol)
+        priceSource = 'Yahoo Finance'
+
+        if (currentPrice) {
+          console.log(`💲 ${symbol} price from Yahoo Finance: $${currentPrice.toFixed(2)}`)
+        }
+      } catch (yahooError) {
+        console.log(`⚠️ Yahoo Finance quote failed for ${symbol}:`, yahooError.message)
+      }
+    }
+
+    // Third fallback to FreeMarketDataProvider
+    if (!currentPrice || currentPrice <= 0 || isNaN(currentPrice)) {
+      console.log(`🔄 Falling back to FreeMarketDataProvider for ${symbol}`)
+      try {
+        const freeProvider = new FreeMarketDataProvider()
+        const quotes = await freeProvider.getQuotes([symbol])
+
+        if (quotes[symbol]) {
+          currentPrice = quotes[symbol].midPrice
+          priceSource = 'Free Market Data'
+          console.log(`💲 ${symbol} price from Free Market Data: $${currentPrice.toFixed(2)}`)
+        }
+      } catch (freeError) {
+        console.log(`⚠️ Free Market Data quote failed for ${symbol}:`, freeError.message)
+      }
+    }
+
+    // Final validation
+    if (!currentPrice || currentPrice <= 0 || isNaN(currentPrice)) {
+      throw new Error(`No valid market price available for ${symbol} from any source`)
+    }
+
+    console.log(`✅ Using ${priceSource} price for ${symbol}: $${currentPrice.toFixed(2)}`)
 
     // Check if order value meets minimum threshold first
     if (positionValue < autoExecutionConfig.minOrderValue) {
@@ -196,55 +298,164 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     console.log(`🚀 Creating ${isCrypto ? 'crypto' : 'stock'} order:`, JSON.stringify(orderData, null, 2))
 
-    // Mock order creation since our simplified client doesn't have createOrder
-    const order = {
-      id: `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      qty: orderData.qty || (orderData.notional / currentPrice).toString(),
-      filled_avg_price: currentPrice.toString()
+    // Create real Alpaca paper trading order
+    console.log(`📋 Order details - Symbol: ${orderData.symbol}, Qty: ${orderData.qty}, Side: ${side}, Notional: ${orderData.notional}`)
+
+    // For expensive stocks, use fractional shares via notional orders
+    if (orderData.notional && !orderData.qty) {
+      // Use Alpaca's notional order system for fractional shares
+      console.log(`💰 Using notional order for fractional shares: $${orderData.notional.toFixed(2)}`)
+
+      if (orderData.notional < autoExecutionConfig.minOrderValue) {
+        throw new Error(`Notional amount $${orderData.notional.toFixed(2)} below minimum $${autoExecutionConfig.minOrderValue}`)
+      }
+
+      console.log(`📤 Sending notional order to Alpaca:`, {
+        symbol: orderData.symbol,
+        notional: orderData.notional,
+        side: side,
+        type: 'market',
+        time_in_force: 'day'
+      })
+
+      const order = await alpacaClient.createOrder({
+        symbol: orderData.symbol,
+        notional: Math.round(orderData.notional * 100) / 100,
+        side: side,
+        type: 'market',
+        time_in_force: 'day',
+        client_order_id: `AI_BOT_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
+      })
+
+      // Track the order
+      recentOrders.add(symbol)
+      dailyOrderCount++
+      orderExecutionMetrics.totalOrdersExecuted++
+      orderExecutionMetrics.successfulOrders++
+      orderExecutionMetrics.totalValue += orderData.notional
+      orderExecutionMetrics.lastExecutionTime = new Date()
+
+      // Set cooldown
+      setTimeout(() => {
+        recentOrders.delete(symbol)
+      }, autoExecutionConfig.orderCooldown)
+
+      // Parse real Alpaca order response for notional orders
+      const executedQty = order.quantity || (orderData.notional / currentPrice)
+      const executedPrice = order.price || currentPrice
+      const actualValue = order.filled_avg_price ? (executedQty * order.filled_avg_price) : orderData.notional
+
+      console.log(`✅ Real Alpaca notional order executed: ${side.toUpperCase()} $${orderData.notional.toFixed(2)} ${symbol} (${executedQty.toFixed(4)} shares @ $${executedPrice.toFixed(2)}) [Order ID: ${order.id}]`)
+
+      return {
+        orderId: order.id,
+        symbol: symbol,
+        side: side,
+        quantity: executedQty,
+        price: executedPrice,
+        value: actualValue,
+        confidence: confidence,
+        timestamp: new Date(),
+        assetType: 'stock'
+      }
     }
 
-    // Track the order
-    recentOrders.add(symbol)
-    dailyOrderCount++
-    orderExecutionMetrics.totalOrdersExecuted++
-    orderExecutionMetrics.successfulOrders++
-    orderExecutionMetrics.totalValue += positionValue
-    orderExecutionMetrics.lastExecutionTime = new Date()
+    // Traditional quantity-based orders (for crypto or when we have qty specified)
+    if (orderData.qty || isCrypto) {
+      const orderQty = orderData.qty ? parseFloat(orderData.qty) : Math.floor(orderData.notional / currentPrice)
+      console.log(`🔢 Calculated quantity: ${orderQty}`)
 
-    // Set cooldown
-    setTimeout(() => {
-      recentOrders.delete(symbol)
-    }, autoExecutionConfig.orderCooldown)
+      if (orderQty <= 0) {
+        throw new Error(`Invalid order quantity: ${orderQty}`)
+      }
 
-    // Safe parsing as recommended in improvements.txt
-    const executedQty = parseFloat(order.qty ?? '0')
-    const actualValue = isCrypto ? executedQty * currentPrice : orderValue
+      // Ensure whole shares for most stocks (Alpaca may require this for some symbols)
+      const finalQty = Math.max(1, Math.floor(orderQty))
+      console.log(`🔢 Final quantity (whole shares): ${finalQty}`)
 
-    console.log(`✅ Order executed: ${side.toUpperCase()} ${isCrypto ? executedQty : `$${orderValue.toFixed(2)} notional`} ${symbol} @ $${currentPrice.toFixed(isCrypto ? 4 : 2)} (Value: $${actualValue.toFixed(2)})`)
+      console.log(`📤 Sending quantity-based order to Alpaca:`, {
+        symbol: orderData.symbol,
+        qty: finalQty,
+        side: side,
+        type: 'market',
+        time_in_force: 'day'
+      })
 
-    return {
-      orderId: order.id,
-      symbol: symbol,
-      side: side,
-      quantity: executedQty,
-      price: currentPrice,
-      value: actualValue,
-      confidence: confidence,
-      timestamp: new Date(),
-      assetType: isCrypto ? 'crypto' : 'stock'
+      const order = await alpacaClient.createOrder({
+        symbol: orderData.symbol,
+        qty: finalQty,
+        side: side,
+        type: 'market',
+        time_in_force: 'day'
+      })
+
+      // Track the order
+      recentOrders.add(symbol)
+      dailyOrderCount++
+      orderExecutionMetrics.totalOrdersExecuted++
+      orderExecutionMetrics.successfulOrders++
+      orderExecutionMetrics.totalValue += positionValue
+      orderExecutionMetrics.lastExecutionTime = new Date()
+
+      // Set cooldown
+      setTimeout(() => {
+        recentOrders.delete(symbol)
+      }, autoExecutionConfig.orderCooldown)
+
+      // Parse real Alpaca order response
+      const executedQty = order.quantity
+      const executedPrice = order.price || currentPrice
+      const actualValue = executedQty * executedPrice
+
+      console.log(`✅ Real Alpaca quantity-based order executed: ${side.toUpperCase()} ${executedQty} ${symbol} @ $${executedPrice.toFixed(isCrypto ? 4 : 2)} (Value: $${actualValue.toFixed(2)}) [Order ID: ${order.id}]`)
+
+      return {
+        orderId: order.id,
+        symbol: symbol,
+        side: side,
+        quantity: executedQty,
+        price: executedPrice,
+        value: actualValue,
+        confidence: confidence,
+        timestamp: new Date(),
+        assetType: isCrypto ? 'crypto' : 'stock'
+      }
     }
+
+    // If we reach here, neither notional nor quantity-based order was created
+    throw new Error(`No valid order type determined for ${symbol}`)
 
   } catch (error) {
-    // Enhanced error handling as recommended in improvements.txt
-    if (error instanceof Error) {
-      console.error(`❌ Order execution failed for ${symbol}:`, error.stack || error.message)
+    // Enhanced error handling with detailed logging
+    console.error(`❌ Order execution failed for ${symbol}:`, error)
 
-      // Check for authentication errors
-      if (error.message.includes('401')) {
+    if (error instanceof Error) {
+      console.error(`📋 Error details:`, {
+        message: error.message,
+        stack: error.stack,
+        symbol: symbol,
+        confidence: confidence,
+        portfolioValue: portfolioValue || 'unknown',
+        positionValue: positionValue || 'unknown'
+      })
+
+      // Check for specific error types and provide solutions
+      if (error.message.includes('401') || error.message.includes('authentication')) {
         console.error('🚨 Authentication failed - check Alpaca API keys')
+        console.error('💡 Suggestion: Verify ALPACA_API_KEY_ID and ALPACA_SECRET_KEY environment variables')
       }
-    } else {
-      console.error(`❌ Order execution failed for ${symbol}:`, error)
+      if (error.message.includes('insufficient') || error.message.includes('buying_power')) {
+        console.error('💰 Insufficient buying power')
+        console.error('💡 Suggestion: Reduce position size or add more funds to paper account')
+      }
+      if (error.message.includes('not tradable') || error.message.includes('invalid symbol')) {
+        console.error('🚫 Symbol not tradable or invalid')
+        console.error('💡 Suggestion: Check if symbol is listed and tradable on Alpaca')
+      }
+      if (error.message.includes('No valid market price')) {
+        console.error('📊 Market data unavailable from all sources')
+        console.error('💡 Suggestion: Symbol may be delisted or market may be closed')
+      }
     }
 
     orderExecutionMetrics.failedOrders++
@@ -264,34 +475,38 @@ async function performRealBotActivity() {
   // Get real watchlist symbols from Alpaca
   const alpacaClient = getAlpacaClient()
 
-  // Expanded watchlist for more trading opportunities
+  // Reliable watchlist with high-volume, well-established symbols (filtered for market data reliability)
   let watchlistSymbols = [
-    // Large Cap Tech Stocks
-    'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'NFLX', 'NVDA', 'AMD', 'CRM', 'ORCL', 'CSCO', 'ADBE', 'INTC',
-    // Electric Vehicle & Clean Energy
-    'TSLA', 'NIO', 'RIVN', 'LCID', 'ENPH', 'SEDG', 'FSLR', 'PLUG', 'CHPT', 'QS', 'BLNK',
-    // Financial & Banking
-    'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'PYPL', 'SQ', 'WFC', 'C', 'AXP', 'BRK.B', 'KO', 'JNJ',
-    // Healthcare & Biotech
-    'JNJ', 'PFE', 'UNH', 'MRNA', 'BNTX', 'ABBV', 'LLY', 'TMO', 'DHR', 'ABT', 'BMY', 'MRK',
-    // ETFs & Index Funds (High Volume)
-    'SPY', 'QQQ', 'IWM', 'VTI', 'ARKK', 'TQQQ', 'SQQQ', 'XLF', 'XLK', 'XLE', 'GDX', 'EEM', 'FXI',
-    // Retail & Consumer
-    'WMT', 'TGT', 'COST', 'HD', 'DIS', 'SBUX', 'NKE', 'MCD', 'LOW', 'TJX', 'AMZN', 'EBAY',
-    // Energy & Commodities
-    'XOM', 'CVX', 'COP', 'GLD', 'USO', 'UCO', 'SLV', 'GDX', 'KMI', 'EOG', 'OKE', 'PSX',
-    // Communication & Media
-    'VZ', 'T', 'CMCSA', 'CHTR', 'TTWO', 'EA', 'ATVI', 'ROKU', 'SNAP', 'TWTR', 'PINS',
-    // Affordable High-Volume Stocks (Better execution rates)
-    'F', 'SOFI', 'PLTR', 'BB', 'WISH', 'CLOV', 'AMC', 'GME', 'NOK', 'SNDL', 'PTON', 'HOOD', 'COIN',
-    // Real Estate & REITs
-    'VNQ', 'O', 'AMT', 'PLD', 'CCI', 'EQIX', 'SPG', 'EXR', 'AVB', 'EQR',
-    // Industrials & Materials
-    'CAT', 'BA', 'GE', 'MMM', 'HON', 'UPS', 'FDX', 'RTX', 'LMT', 'DE',
-    // Major Cryptocurrencies (Note: Some may not be available in Alpaca)
-    'BTC/USD', 'ETH/USD', 'LTC/USD', 'BCH/USD', 'AAVE/USD', 'AVAX/USD',
-    'DOGE/USD', 'ADA/USD', 'SOL/USD', 'MATIC/USD', 'DOT/USD', 'UNI/USD'
+    // Large Cap Tech Stocks (Most Reliable - excellent market data)
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NFLX', 'NVDA', 'AMD', 'CRM', 'ORCL', 'CSCO', 'ADBE', 'INTC',
+    // Electric Vehicle & Clean Energy (Established - removed problematic symbols)
+    'TSLA', 'ENPH', 'FSLR',
+    // Financial & Banking (High Volume - proven market data)
+    'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'PYPL', 'SQ', 'WFC', 'C', 'AXP',
+    // Large Cap Consumer Staples (Very Reliable)
+    'KO', 'PEP', 'WMT', 'PG', 'JNJ', 'UNH',
+    // Healthcare & Biotech (Established - most reliable only)
+    'PFE', 'ABBV', 'LLY', 'TMO', 'DHR', 'ABT', 'BMY', 'MRK',
+    // ETFs & Index Funds (Most Liquid - guaranteed market data)
+    'SPY', 'QQQ', 'IWM', 'VTI', 'XLF', 'XLK', 'XLE',
+    // Retail & Consumer (Reliable - tested symbols)
+    'TGT', 'COST', 'HD', 'DIS', 'SBUX', 'NKE', 'MCD', 'LOW',
+    // Energy & Commodities (Established - major companies only)
+    'XOM', 'CVX', 'COP',
+    // Communication & Media (High Volume - verified)
+    'VZ', 'T', 'CMCSA',
+    // Transportation & Logistics (Blue Chip only)
+    'UPS', 'FDX',
+    // Industrials & Materials (Major companies - reliable data)
+    'CAT', 'BA', 'GE', 'MMM', 'HON', 'RTX', 'LMT', 'DE',
+    // Real Estate & REITs (Most liquid)
+    'VNQ', 'O', 'AMT', 'PLD', 'CCI',
+    // Additional Blue Chips with excellent market data
+    'IBM', 'F', 'GM'
   ]
+
+  // Note: Removed crypto and newer/smaller stocks that may have inconsistent market data
+  // Focus on S&P 500 and large-cap stocks with guaranteed Alpaca market data coverage
 
   try {
     // Get current positions to include them in monitoring
@@ -403,8 +618,8 @@ async function performRealBotActivity() {
           try {
             const account = await alpacaClient.getAccount()
             if (Math.random() > 0.5) {
-              const portfolioValue = parseFloat(account.portfolio_value || '100000')
-              const buyingPower = parseFloat(account.buying_power || '50000')
+              const portfolioValue = parseFloat(account.portfolio_value)
+              const buyingPower = parseFloat(account.buying_power)
               message = `Account status verified - Trading: ENABLED`
               details = `Portfolio Value: $${portfolioValue.toLocaleString()}, Buying Power: $${buyingPower.toLocaleString()}`
             } else {
@@ -443,19 +658,23 @@ async function performRealBotActivity() {
 
             botActivityLogs.unshift(tradeActivity)
             botMetrics.tradesExecuted++
+            botMetrics.successfulTrades++
 
             console.log('📈 Real trade executed and logged:', tradeActivity.message)
           } else if (orderExecutionEnabled) {
-            // Only log skipped orders when live trading is enabled
+            // Order execution attempted but failed - count as failed trade
+            botMetrics.failedTrades++
+
+            // Log failed order execution with detailed reason
             const tradeActivity: BotActivityLog = {
-              id: `order_skip_${Date.now()}_${Math.random()}`,
+              id: `order_fail_${Date.now()}_${Math.random()}`,
               timestamp: new Date(),
-              type: 'info',
+              type: 'error',
               symbol,
-              message: `Order execution conditions not met for ${symbol}`,
-              status: 'completed',
+              message: `Order execution failed for ${symbol}`,
+              status: 'failed',
               executionTime: 100,
-              details: `Confidence: ${confidence}%, Live Trading: ${orderExecutionEnabled ? 'ON' : 'OFF'}`
+              details: `Confidence: ${confidence}%, Live Trading: ${orderExecutionEnabled ? 'ON' : 'OFF'}, Reason: ${symbol.includes('/USD') || symbol.includes('USD') ? 'Crypto not supported in paper trading' : 'Order conditions not met or API error'}`
             }
 
             botActivityLogs.unshift(tradeActivity)
@@ -499,8 +718,8 @@ async function performRealBotActivity() {
       botMetrics.totalProcessingTime += executionTime
       botMetrics.avgAnalysisTime = botMetrics.totalProcessingTime / (botMetrics.analysisCompleted || 1)
 
-      const totalActivities = botMetrics.symbolsScanned + botMetrics.analysisCompleted + botMetrics.recommendationsGenerated
-      botMetrics.successRate = totalActivities > 0 ? ((totalActivities - botMetrics.errorCount) / totalActivities) * 100 : 87.5
+      const totalTrades = botMetrics.successfulTrades + botMetrics.failedTrades
+      botMetrics.successRate = totalTrades > 0 ? (botMetrics.successfulTrades / totalTrades) * 100 : 0
       botMetrics.uptime = (Date.now() - botStartTime.getTime()) / 1000 // seconds
     }
 
@@ -536,7 +755,9 @@ export async function GET(request: NextRequest) {
         currentSymbol: null,
         nextScanIn: 30,
         avgAnalysisTime: 2.5,
-        successRate: 87.5,
+        successRate: 0,
+        successfulTrades: 0,
+        failedTrades: 0,
         uptime: 0,
         totalProcessingTime: 0,
         errorCount: 0

@@ -22,45 +22,24 @@ export class AlpacaServerClient {
 
   async getAccount() {
     if (!this.client) {
-      console.warn('Alpaca client not available, returning mock account')
-      return {
-        portfolio_value: '100000',
-        cash: '50000',
-        buying_power: '50000'
-      }
+      throw new Error('Alpaca client not initialized. Check API credentials.')
     }
 
     try {
       return await this.client.getAccount()
     } catch (error) {
-      console.warn('Failed to get account from Alpaca, returning mock data:', error)
-      return {
-        portfolio_value: '100000',
-        cash: '50000',
-        buying_power: '50000'
-      }
+      console.error('Failed to get account from Alpaca:', error)
+      throw new Error(`Alpaca API error: ${error.message}`)
     }
   }
 
   async getLatestQuote(params: { symbols: string }) {
     if (!this.client) {
-      console.warn('Alpaca client not available, returning mock quote data')
-      const mockPrice = Math.random() * 200 + 100
-      return {
-        quotes: {
-          [params.symbols]: {
-            ask: mockPrice,
-            bid: mockPrice * 0.999,
-            askSize: 100,
-            bidSize: 100,
-            timestamp: new Date()
-          }
-        }
-      }
+      throw new Error('Alpaca client not initialized. Check API credentials.')
     }
 
     try {
-      // Try to get real data from Alpaca
+      // Get real data from Alpaca
       const quotes = await this.client.getLatestQuotes([params.symbols])
       if (quotes && quotes.size > 0) {
         const result = {}
@@ -75,29 +54,16 @@ export class AlpacaServerClient {
         })
         return { quotes: result }
       }
+      throw new Error(`No quote data available for ${params.symbols}`)
     } catch (error) {
-      console.warn(`Failed to get quote for ${params.symbols} from Alpaca:`, error)
-    }
-
-    // Fallback to mock data
-    const mockPrice = Math.random() * 200 + 100
-    return {
-      quotes: {
-        [params.symbols]: {
-          ask: mockPrice,
-          bid: mockPrice * 0.999,
-          askSize: 100,
-          bidSize: 100,
-          timestamp: new Date()
-        }
-      }
+      console.error(`Failed to get quote for ${params.symbols} from Alpaca:`, error)
+      throw new Error(`Alpaca quote API error: ${error.message}`)
     }
   }
 
   async getPositions() {
     if (!this.client) {
-      console.warn('Alpaca client not available, returning empty positions')
-      return []
+      throw new Error('Alpaca client not initialized. Check API credentials.')
     }
 
     try {
@@ -113,8 +79,8 @@ export class AlpacaServerClient {
         side: parseFloat(pos.qty) > 0 ? 'long' : 'short' as 'long' | 'short'
       }))
     } catch (error) {
-      console.warn('Failed to get positions from Alpaca:', error)
-      return []
+      console.error('Failed to get positions from Alpaca:', error)
+      throw new Error(`Alpaca positions API error: ${error.message}`)
     }
   }
 }

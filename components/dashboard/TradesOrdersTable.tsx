@@ -10,6 +10,7 @@ import {
   EyeIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline'
+import { CpuChipIcon } from '@heroicons/react/24/solid'
 import { useAlpacaTrades, useAlpacaOrders } from '@/hooks/api/useAlpacaData'
 
 interface Trade {
@@ -23,6 +24,7 @@ interface Trade {
   timestamp: Date
   type: 'market' | 'limit' | 'stop'
   fee?: number
+  client_order_id?: string
 }
 
 interface Order {
@@ -35,6 +37,7 @@ interface Order {
   type: 'market' | 'limit' | 'stop'
   timestamp: Date
   filledQuantity?: number
+  client_order_id?: string
 }
 
 interface TradesOrdersTableProps {
@@ -65,89 +68,40 @@ export default function TradesOrdersTable({
   const realTradesQuery = useAlpacaTrades()
   const realOrdersQuery = useAlpacaOrders()
 
-  // Mock data for demonstration - used when useRealData is false
-  const mockTrades: Trade[] = [
-    {
-      id: 'trade-1',
-      symbol: 'AAPL',
-      side: 'buy',
-      quantity: 10,
-      price: 185.23,
-      value: 1852.30,
-      status: 'filled',
-      timestamp: new Date(Date.now() - 5 * 60 * 1000),
-      type: 'market',
-      fee: 0.50
-    },
-    {
-      id: 'trade-2',
-      symbol: 'TSLA',
-      side: 'sell',
-      quantity: 5,
-      price: 242.15,
-      value: 1210.75,
-      status: 'filled',
-      timestamp: new Date(Date.now() - 12 * 60 * 1000),
-      type: 'limit',
-      fee: 0.25
-    },
-    {
-      id: 'trade-3',
-      symbol: 'BTC-USD',
-      side: 'buy',
-      quantity: 0.1,
-      price: 42850.00,
-      value: 4285.00,
-      status: 'filled',
-      timestamp: new Date(Date.now() - 25 * 60 * 1000),
-      type: 'market',
-      fee: 2.14
-    }
-  ]
+  // Always use real data from Alpaca API - no mock data
+  const displayTrades = realTradesQuery.data || []
+  const displayOrders = realOrdersQuery.data || []
+  const displayIsLoading = realTradesQuery.isLoading || realOrdersQuery.isLoading
+  const hasError = realTradesQuery.error || realOrdersQuery.error
 
-  const mockOrders: Order[] = [
-    {
-      id: 'order-1',
-      symbol: 'NVDA',
-      side: 'buy',
-      quantity: 20,
-      price: 875.50,
-      status: 'pending',
-      type: 'limit',
-      timestamp: new Date(Date.now() - 2 * 60 * 1000)
-    },
-    {
-      id: 'order-2',
-      symbol: 'ETH-USD',
-      side: 'sell',
-      quantity: 2.5,
-      status: 'filled',
-      type: 'market',
-      timestamp: new Date(Date.now() - 8 * 60 * 1000),
-      filledQuantity: 2.5
-    },
-    {
-      id: 'order-3',
-      symbol: 'MSFT',
-      side: 'buy',
-      quantity: 15,
-      price: 420.00,
-      status: 'partially_filled',
-      type: 'limit',
-      timestamp: new Date(Date.now() - 15 * 60 * 1000),
-      filledQuantity: 8
-    }
-  ]
+  // Use real data only - show empty state if no data or error
+  const finalTrades = displayTrades
+  const finalOrders = displayOrders
 
-  // Determine which data to use
-  const displayTrades = useRealData ? (realTradesQuery.data || []) : (trades.length > 0 ? trades : mockTrades)
-  const displayOrders = useRealData ? (realOrdersQuery.data || []) : (orders.length > 0 ? orders : mockOrders)
-  const displayIsLoading = useRealData ? (realTradesQuery.isLoading || realOrdersQuery.isLoading) : isLoading
-  const hasError = useRealData ? (realTradesQuery.error || realOrdersQuery.error) : false
+  // Helper function to check if order is from AI bot
+  const isBotOrder = (clientOrderId?: string) => {
+    return clientOrderId?.startsWith('AI_BOT_') || false
+  }
 
-  // If real data fails, fall back to mock data
-  const finalTrades = useRealData && hasError ? mockTrades : displayTrades
-  const finalOrders = useRealData && hasError ? mockOrders : displayOrders
+  // Helper function to calculate P&L for sell trades
+  const calculatePnL = (trade: Trade) => {
+    if (trade.side !== 'sell') return null
+
+    // Find the corresponding buy trade for the same symbol
+    const buyTrade = finalTrades.find(t =>
+      t.symbol === trade.symbol &&
+      t.side === 'buy' &&
+      new Date(t.timestamp) < new Date(trade.timestamp)
+    )
+
+    if (!buyTrade) return null
+
+    const buyValue = buyTrade.quantity * buyTrade.price
+    const sellValue = trade.quantity * trade.price
+    const pnl = sellValue - buyValue
+
+    return pnl
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -277,10 +231,24 @@ export default function TradesOrdersTable({
                       <span className={`text-sm font-medium ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
                         {trade.side.toUpperCase()}
                       </span>
+                      {isBotOrder(trade.client_order_id) && (
+                        <div className="flex items-center space-x-1 bg-blue-900/30 px-1.5 py-0.5 rounded text-xs">
+                          <CpuChipIcon className="w-3 h-3 text-blue-400" />
+                          <span className="text-blue-400 font-medium">BOT</span>
+                        </div>
+                      )}
                       {getStatusIcon(trade.status)}
                     </div>
                     <div className="text-xs text-gray-400">
                       {trade.quantity} @ ${trade.price.toFixed(2)} • {formatTime(trade.timestamp)}
+                      {trade.side === 'sell' && (() => {
+                        const pnl = calculatePnL(trade)
+                        return pnl !== null ? (
+                          <span className={`ml-2 font-medium ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} P&L
+                          </span>
+                        ) : null
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -334,6 +302,12 @@ export default function TradesOrdersTable({
                       <span className={`text-sm font-medium ${order.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
                         {order.side.toUpperCase()}
                       </span>
+                      {isBotOrder(order.client_order_id) && (
+                        <div className="flex items-center space-x-1 bg-blue-900/30 px-1.5 py-0.5 rounded text-xs">
+                          <CpuChipIcon className="w-3 h-3 text-blue-400" />
+                          <span className="text-blue-400 font-medium">BOT</span>
+                        </div>
+                      )}
                       {getStatusIcon(order.status)}
                     </div>
                     <div className="text-xs text-gray-400">

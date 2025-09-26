@@ -89,7 +89,8 @@ export class AlpacaClient {
   // Order methods
   async createOrder(orderData: {
     symbol: string
-    qty: number
+    qty?: number
+    notional?: number
     side: 'buy' | 'sell'
     type?: 'market' | 'limit' | 'stop'
     time_in_force?: 'day' | 'gtc'
@@ -101,6 +102,7 @@ export class AlpacaClient {
       const order = await this.client.createOrder({
         symbol: orderData.symbol,
         qty: orderData.qty,
+        notional: orderData.notional,
         side: orderData.side,
         type: orderData.type || 'market',
         time_in_force: orderData.time_in_force || 'day',

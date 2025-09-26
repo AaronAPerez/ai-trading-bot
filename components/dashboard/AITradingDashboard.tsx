@@ -9,6 +9,7 @@ import AIRecommendationsList from "./AIRecommendationsList"
 import AIBotActivity from "./AIBotActivity"
 import useAIBotActivity from "@/hooks/useAIBotActivity"
 import TradesOrdersTable from "./TradesOrdersTable"
+import AILiveTradesTable from "./AILiveTradesTable"
 
 import PortfolioOverview from "./PortfolioOverview"
 import DashboardLayout from "./DashboardLayout"
@@ -84,12 +85,12 @@ export default function AITradingDashboard() {
 
             {/* AI Trading Bot Button */}
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-6">
                 <div className={`flex items-center space-x-2`}>
                   <div className={`w-3 h-3 rounded-full ${
                     tradingBot.metrics.isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'
                   }`} />
-                  <span className={`text-sm font-medium ${
+                  <span className={`text-md font-medium ${
                     tradingBot.metrics.isRunning ? 'text-green-400' : 'text-gray-400'
                   }`}>
                     {tradingBot.metrics.isRunning ? 'Active' : 'Inactive'}
@@ -103,7 +104,7 @@ export default function AITradingDashboard() {
                       : 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500'
                   }`}
                 >
-                  AI Trading Bot - {tradingBot.metrics.isRunning ? 'Stop' : 'Start'}
+                  {tradingBot.metrics.isRunning ? 'Stop' : 'Start'} AI Bot
                 </button>
               </div>
             </div>
@@ -209,14 +210,12 @@ export default function AITradingDashboard() {
               </div>
             </div>
 
-            {/* Trading Activity Table */}
+            {/* AI Live Trades Table */}
             <div>
-              <TradesOrdersTable
+              <AILiveTradesTable
                 maxItems={8}
                 compact={true}
-                showTrades={true}
-                showOrders={true}
-                useRealData={true}
+                showHeader={true}
               />
             </div>
           </div>
@@ -231,6 +230,26 @@ export default function AITradingDashboard() {
           isLoading={account.isLoading || positions.isLoading}
           error={account.error || positions.error}
         />
+      </div>
+
+      {/* All Trades and Orders Section */}
+      <div className="mb-8">
+        <div className="bg-gray-900/40 rounded-lg border border-gray-700/50 p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z"/>
+            </svg>
+            <h3 className="text-lg font-semibold text-white">All Trading Activity</h3>
+            <span className="text-xs text-gray-500">(Manual + AI Trades)</span>
+          </div>
+          <TradesOrdersTable
+            maxItems={15}
+            compact={false}
+            showTrades={true}
+            showOrders={true}
+            useRealData={true}
+          />
+        </div>
       </div>
 
       <AIRecommendationsList

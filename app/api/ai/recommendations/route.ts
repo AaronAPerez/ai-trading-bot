@@ -241,40 +241,42 @@ class AIRecommendationEngine {
   }
 
   /**
-   * Get market data for symbol
+   * Get real market data from Alpaca API for symbol analysis
    */
   private async getMarketData(symbol: string): Promise<MarketData[] | null> {
     try {
-      // Generate mock market data since our simplified client doesn't have getBars
-      console.log(`📊 Generating mock market data for ${symbol}`)
+      console.log(`📊 Fetching real market data for ${symbol} from Alpaca`)
 
-      const mockData: MarketData[] = []
-      const basePrice = Math.random() * 200 + 100
-      let currentPrice = basePrice
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(endDate.getDate() - 50) // 50 days of historical data
 
-      // Generate 50 days of mock data
-      for (let i = 50; i >= 0; i--) {
-        const change = (Math.random() - 0.5) * 0.05 // -2.5% to +2.5% daily change
-        currentPrice = currentPrice * (1 + change)
+      const bars = await this.alpacaClient.getBarsV2(symbol, {
+        start: startDate.toISOString(),
+        end: endDate.toISOString(),
+        timeframe: '1Day'
+      })
 
-        const timestamp = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-
-        mockData.push({
-          symbol,
-          timestamp,
-          open: currentPrice * (1 + (Math.random() - 0.5) * 0.02),
-          high: currentPrice * (1 + Math.random() * 0.03),
-          low: currentPrice * (1 - Math.random() * 0.03),
-          close: currentPrice,
-          volume: Math.floor(Math.random() * 10000000 + 1000000)
-        })
+      if (!bars || bars.length === 0) {
+        throw new Error(`No market data available for ${symbol}`)
       }
 
-      return mockData
+      const marketData: MarketData[] = bars.map(bar => ({
+        symbol,
+        timestamp: new Date(bar.t),
+        open: bar.o,
+        high: bar.h,
+        low: bar.l,
+        close: bar.c,
+        volume: bar.v
+      }))
+
+      console.log(`✅ Retrieved ${marketData.length} days of real market data for ${symbol}`)
+      return marketData
 
     } catch (error) {
-      console.error(`Error generating market data for ${symbol}:`, error)
-      return null
+      console.error(`Error fetching real market data for ${symbol}:`, error)
+      throw new Error(`Failed to fetch market data for ${symbol}: ${error.message}`)
     }
   }
 

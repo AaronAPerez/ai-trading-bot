@@ -615,13 +615,6 @@ export interface PortfolioOverviewProps {
   error?: string
 }
 
-export interface AIRecommendationsListProps {
-  recommendations: AIRecommendation[]
-  onExecuteRecommendation: (recommendation: AIRecommendation) => Promise<void>
-  isLoading?: boolean
-  error?: string
-}
-
 // ===============================================
 // HOOK TYPES
 // ===============================================

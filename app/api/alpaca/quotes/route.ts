@@ -73,13 +73,12 @@ export async function GET(request: NextRequest) {
             t: quote.timestamp || quote.t || new Date().toISOString()
           };
         } else {
-          // Generate realistic mock data for this symbol
-          quotes[symbol] = generateMockQuote(symbol);
+          throw new Error(`No quote data available for ${symbol}`);
         }
-        
+
       } catch (symbolError) {
-        console.log(`Error getting quote for ${symbol}, using mock:`, symbolError.message);
-        quotes[symbol] = generateMockQuote(symbol);
+        console.error(`Error getting quote for ${symbol}:`, symbolError.message);
+        throw symbolError;
       }
     }
     
@@ -105,67 +104,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       quotes: formattedQuotes,
-      note: 'Mix of real and mock data - market data access may be limited on paper trading accounts'
+      note: 'Real-time quotes from Alpaca API'
     });
 
   } catch (error) {
     console.error('Quotes API error:', error);
-    
-    // Return pure mock data as fallback
-    const symbols = new URL(request.url).searchParams.get('symbols')?.split(',') || ['AAPL'];
-    const mockQuotes: Record<string, any> = {};
-    
-    symbols.forEach(symbol => {
-      const mockQuote = generateMockQuote(symbol);
-      mockQuotes[symbol] = {
-        symbol,
-        bidPrice: mockQuote.bp,
-        askPrice: mockQuote.ap,
-        bidSize: mockQuote.bs,
-        askSize: mockQuote.as,
-        timestamp: new Date(mockQuote.t),
-        spread: mockQuote.ap - mockQuote.bp,
-        midPrice: (mockQuote.bp + mockQuote.ap) / 2
-      };
-    });
-    
+
     return NextResponse.json({
-      success: true,
-      quotes: mockQuotes,
-      note: 'Using mock data due to API error'
-    });
+      success: false,
+      error: 'Failed to fetch real quotes from Alpaca API',
+      details: error.message
+    }, { status: 500 });
   }
 }
 
-function generateMockQuote(symbol: string) {
-  const basePrices: Record<string, number> = {
-    'AAPL': 178.25,
-    'GOOGL': 142.10,
-    'MSFT': 350.75,
-    'TSLA': 200.45,
-    'NVDA': 450.20,
-    'AMZN': 145.80,
-    'META': 320.15,
-    'SPY': 430.50,
-    'QQQ': 380.25
-  };
-  
-  const basePrice = basePrices[symbol] || (150 + Math.random() * 100);
-  
-  // Add some realistic price movement (±2%)
-  const priceMovement = (Math.random() - 0.5) * 0.04; // ±2%
-  const currentPrice = basePrice * (1 + priceMovement);
-  
-  const spread = currentPrice * 0.001; // 0.1% spread
-  const bidPrice = currentPrice - spread / 2;
-  const askPrice = currentPrice + spread / 2;
-  
-  return {
-    bp: parseFloat(bidPrice.toFixed(2)),
-    ap: parseFloat(askPrice.toFixed(2)),
-    bs: Math.floor(Math.random() * 10) + 1,
-    as: Math.floor(Math.random() * 10) + 1,
-    t: new Date().toISOString()
-  };
-}
 

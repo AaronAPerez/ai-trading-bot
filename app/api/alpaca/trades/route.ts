@@ -66,30 +66,53 @@ export async function GET(request: NextRequest) {
     console.log('✅ Trades fetched successfully:', tradesData.length, 'trades')
 
     // Enhanced trades data with calculated fields
-    const enhancedTrades = tradesData.map((trade: any) => ({
-      // Original trade data
-      ...trade,
+    const enhancedTrades = await Promise.all(tradesData.map(async (trade: any) => {
+      let clientOrderId = null
 
-      // Enhanced fields for frontend compatibility
-      id: trade.id,
-      symbol: trade.symbol,
-      side: trade.side,
-      quantity: parseFloat(trade.qty || 0),
-      price: parseFloat(trade.price || 0),
-      value: parseFloat(trade.qty || 0) * parseFloat(trade.price || 0),
-      status: 'filled', // Trades are always filled
-      type: trade.type || 'market',
-      timestamp: new Date(trade.transaction_time),
-      fee: parseFloat(trade.commission || 0),
+      // Try to fetch order details to get client_order_id
+      if (trade.order_id) {
+        try {
+          const orderResponse = await fetch(`https://paper-api.alpaca.markets/v2/orders/${trade.order_id}`, {
+            headers: {
+              'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+              'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!
+            }
+          })
+          if (orderResponse.ok) {
+            const orderData = await orderResponse.json()
+            clientOrderId = orderData.client_order_id
+          }
+        } catch (error) {
+          console.log(`Could not fetch order details for ${trade.order_id}`)
+        }
+      }
 
-      // Display formatting
-      displaySide: trade.side?.toUpperCase(),
-      displayType: (trade.type || 'market').toUpperCase(),
-      displayValue: `${trade.side?.toUpperCase()} ${trade.qty} ${trade.symbol} @ $${parseFloat(trade.price || 0).toFixed(2)}`,
+      return {
+        // Original trade data
+        ...trade,
 
-      // API source
-      source: 'alpaca_paper',
-      paperTrading: true
+        // Enhanced fields for frontend compatibility
+        id: trade.id,
+        symbol: trade.symbol,
+        side: trade.side,
+        quantity: parseFloat(trade.qty || 0),
+        price: parseFloat(trade.price || 0),
+        value: parseFloat(trade.qty || 0) * parseFloat(trade.price || 0),
+        status: 'filled', // Trades are always filled
+        type: trade.type || 'market',
+        timestamp: new Date(trade.transaction_time),
+        fee: parseFloat(trade.commission || 0),
+        client_order_id: clientOrderId,
+
+        // Display formatting
+        displaySide: trade.side?.toUpperCase(),
+        displayType: (trade.type || 'market').toUpperCase(),
+        displayValue: `${trade.side?.toUpperCase()} ${trade.qty} ${trade.symbol} @ $${parseFloat(trade.price || 0).toFixed(2)}`,
+
+        // API source
+        source: 'alpaca_paper',
+        paperTrading: true
+      }
     }))
 
     return NextResponse.json({
