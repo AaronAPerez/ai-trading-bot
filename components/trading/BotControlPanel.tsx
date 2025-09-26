@@ -90,12 +90,12 @@ export function BotControlPanel({ status, onStart, onStop }: BotControlPanelProp
       </div>
 
       {/* Primary Action Buttons */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 w-80">
         <Button
           onClick={handleStart}
           disabled={status === 'running' || isLoading}
           variant="success"
-          className={`flex-1 py-4 text-lg font-semibold ${
+          className={`flex-1 py-4 text-md font-semibold ${
             status !== 'running' ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-lg transform hover:scale-105 transition-all duration-200' : ''
           }`}
         >
@@ -106,9 +106,9 @@ export function BotControlPanel({ status, onStart, onStop }: BotControlPanelProp
             </div>
           ) : (
             <div className="flex items-center space-x-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {/* <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1M9 16v-6a2 2 0 012-2h2a2 2 0 012 2v6M12 8V6a2 2 0 00-2-2H8a2 2 0 00-2 2v2h8z"/>
-              </svg>
+              </svg> */}
               <span>Start AI Trading</span>
             </div>
           )}
@@ -118,13 +118,13 @@ export function BotControlPanel({ status, onStart, onStop }: BotControlPanelProp
           onClick={onStop}
           disabled={status === 'stopped'}
           variant="danger"
-          className="flex-1 py-4 text-lg font-semibold"
+          className="flex-1 py-4 text-md font-semibold"
         >
           <div className="flex items-center space-x-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 10h6v4H9z"/>
-            </svg>
+            </svg> */}
             <span>Stop Trading</span>
           </div>
         </Button>

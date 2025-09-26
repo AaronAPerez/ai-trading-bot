@@ -8,6 +8,7 @@ import { BotControlPanel } from "../trading/BotControlPanel"
 import AIRecommendationsList from "./AIRecommendationsList"
 import AIBotActivity from "./AIBotActivity"
 import useAIBotActivity from "@/hooks/useAIBotActivity"
+import TradesOrdersTable from "./TradesOrdersTable"
 
 import PortfolioOverview from "./PortfolioOverview"
 import DashboardLayout from "./DashboardLayout"
@@ -53,7 +54,7 @@ export default function AITradingDashboard() {
         <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border border-blue-700/50 rounded-xl p-6 shadow-2xl">
           {/* Header with Engine Info and Controls */}
           <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
+            {/* <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
@@ -63,7 +64,7 @@ export default function AITradingDashboard() {
                 <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
                 <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
               </div>
-            </div>
+            </div> */}
             <BotControlPanel
               status={tradingBot.status}
               onStart={handleStart}
@@ -133,22 +134,39 @@ export default function AITradingDashboard() {
             </div>
           </div>
 
-          {/* Integrated AI Bot Activity Feed */}
-          <div className="bg-gray-900/30 rounded-lg p-4">
-            {aiActivity.activities.length > 0 || aiActivity.isSimulating ? (
-              <AIBotActivity
-                refreshInterval={5000}
-                maxActivities={8}
-                showControls={false}
-                compact={true}
-              />
-            ) : (
-              <div className="text-center py-4">
-                <div className="text-gray-400 text-sm">
-                  Activity feed will appear here when AI Trading is started
-                </div>
+          {/* Integrated AI Bot Activity Feed and Trading Activity */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* AI Bot Activity Feed */}
+            <div className="bg-gray-900/30 rounded-lg p-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                <h4 className="text-sm font-semibold text-gray-300">AI Bot Activity</h4>
               </div>
-            )}
+              {aiActivity.activities.length > 0 || aiActivity.isSimulating ? (
+                <AIBotActivity
+                  refreshInterval={5000}
+                  maxActivities={6}
+                  showControls={false}
+                  compact={true}
+                />
+              ) : (
+                <div className="text-center py-4">
+                  <div className="text-gray-400 text-sm">
+                    Activity feed will appear here when AI Trading is started
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Trading Activity Table */}
+            <div>
+              <TradesOrdersTable
+                maxItems={8}
+                compact={true}
+                showTrades={true}
+                showOrders={true}
+              />
+            </div>
           </div>
         </div>
       </div>

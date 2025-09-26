@@ -147,7 +147,103 @@ export const STOCK_SYMBOLS = {
     'OPEN',   // Opendoor Technologies Inc.
     'WISH',   // ContextLogic Inc.
     'CLOV',   // Clover Health Investments Corp.
-    'SPCE'    // Virgin Galactic Holdings Inc.
+    'SPCE',   // Virgin Galactic Holdings Inc.
+    'PATH',   // UiPath Inc.
+    'DKNG',   // DraftKings Inc.
+    'PENN',   // Penn Entertainment Inc.
+    'UBER',   // Uber Technologies Inc.
+    'LYFT',   // Lyft Inc.
+    'ABNB',   // Airbnb Inc.
+    'DOCU',   // DocuSign Inc.
+    'ZM',     // Zoom Video Communications Inc.
+    'PINS',   // Pinterest Inc.
+    'SNAP'    // Snap Inc.
+  ],
+
+  // AI & Machine Learning
+  ai_ml: [
+    'AI',     // C3.ai Inc.
+    'PLTR',   // Palantir Technologies Inc.
+    'SMCI',   // Super Micro Computer Inc.
+    'AMD',    // Advanced Micro Devices Inc.
+    'INTC',   // Intel Corporation
+    'MU',     // Micron Technology Inc.
+    'QCOM',   // Qualcomm Inc.
+    'AVGO',   // Broadcom Inc.
+    'MRVL',   // Marvell Technology Inc.
+    'LRCX',   // Lam Research Corporation
+    'KLAC',   // KLA Corporation
+    'AMAT',   // Applied Materials Inc.
+    'TXN',    // Texas Instruments Inc.
+    'NXPI'    // NXP Semiconductors NV
+  ],
+
+  // Cloud Computing & SaaS
+  cloud_saas: [
+    'CRM',    // Salesforce Inc.
+    'OKTA',   // Okta Inc.
+    'WDAY',   // Workday Inc.
+    'VEEV',   // Veeva Systems Inc.
+    'ZS',     // Zscaler Inc.
+    'CRWD',   // CrowdStrike Holdings Inc.
+    'DDOG',   // Datadog Inc.
+    'MDB',    // MongoDB Inc.
+    'SNOW',   // Snowflake Inc.
+    'NET',    // Cloudflare Inc.
+    'TWLO',   // Twilio Inc.
+    'ZM',     // Zoom Video Communications Inc.
+    'TEAM',   // Atlassian Corporation
+    'SLACK'   // Slack Technologies Inc.
+  ],
+
+  // Electric Vehicles & Clean Energy
+  ev_clean_energy: [
+    'TSLA',   // Tesla Inc.
+    'RIVN',   // Rivian Automotive Inc.
+    'LCID',   // Lucid Group Inc.
+    'NIO',    // NIO Inc.
+    'XPEV',   // XPeng Inc.
+    'LI',     // Li Auto Inc.
+    'ENPH',   // Enphase Energy Inc.
+    'SEDG',   // SolarEdge Technologies Inc.
+    'FSLR',   // First Solar Inc.
+    'NEE',    // NextEra Energy Inc.
+    'BEP',    // Brookfield Renewable Partners LP
+    'ICLN',   // iShares Global Clean Energy ETF
+    'QCLN',   // First Trust NASDAQ Clean Edge Green Energy Index Fund
+    'PBW'     // Invesco WilderHill Clean Energy ETF
+  ],
+
+  // Biotech & Pharmaceuticals
+  biotech: [
+    'GILD',   // Gilead Sciences Inc.
+    'BIIB',   // Biogen Inc.
+    'REGN',   // Regeneron Pharmaceuticals Inc.
+    'VRTX',   // Vertex Pharmaceuticals Inc.
+    'ILMN',   // Illumina Inc.
+    'MRNA',   // Moderna Inc.
+    'BNTX',   // BioNTech SE
+    'NVAX',   // Novavax Inc.
+    'SGEN',   // Seagen Inc.
+    'ALNY',   // Alnylam Pharmaceuticals Inc.
+    'IONS',   // Ionis Pharmaceuticals Inc.
+    'BMRN',   // BioMarin Pharmaceutical Inc.
+    'EXAS',   // Exact Sciences Corporation
+    'ISRG'    // Intuitive Surgical Inc.
+  ],
+
+  // Aerospace & Defense
+  aerospace_defense: [
+    'BA',     // Boeing Company
+    'LMT',    // Lockheed Martin Corporation
+    'RTX',    // Raytheon Technologies Corp.
+    'NOC',    // Northrop Grumman Corporation
+    'GD',     // General Dynamics Corporation
+    'HWM',    // Howmet Aerospace Inc.
+    'TXT',    // Textron Inc.
+    'LHX',    // L3Harris Technologies Inc.
+    'CW',     // Curtiss-Wright Corporation
+    'KTOS'    // Kratos Defense & Security Solutions Inc.
   ]
 } as const
 
@@ -242,7 +338,43 @@ export const CRYPTO_SYMBOLS = {
     'PEPE-USD',  // Pepe
     'BABYDOGE-USD', // Baby Doge Coin
     'SAFEMOON-USD', // SafeMoon
-    'INU-USD'    // Shiba Predator
+    'INU-USD',   // Shiba Predator
+    'BONK-USD',  // Bonk
+    'WIF-USD',   // dogwifhat
+    'POPCAT-USD' // Popcat
+  ],
+
+  // AI & Machine Learning Tokens
+  ai_tokens: [
+    'FET-USD',   // Fetch.ai
+    'OCEAN-USD', // Ocean Protocol
+    'AGIX-USD',  // SingularityNET
+    'RLC-USD',   // iExec RLC
+    'NMR-USD',   // Numeraire
+    'RNDR-USD',  // Render Token
+    'GRT-USD',   // The Graph
+    'ARKM-USD'   // Arkham
+  ],
+
+  // Real World Assets (RWA)
+  rwa_tokens: [
+    'MKR-USD',   // Maker
+    'RWA-USD',   // Real World Assets
+    'ONDO-USD',  // Ondo Finance
+    'CFG-USD',   // Centrifuge
+    'TRU-USD'    // TrueFi
+  ],
+
+  // New Layer 1 Blockchains
+  new_layer1: [
+    'SUI-USD',   // Sui
+    'APT-USD',   // Aptos
+    'SEI-USD',   // Sei
+    'INJ-USD',   // Injective
+    'TIA-USD',   // Celestia
+    'STRK-USD',  // Starknet
+    'JTO-USD',   // Jito
+    'JUP-USD'    // Jupiter
   ],
 
   // Enterprise & Corporate Crypto
@@ -416,8 +548,21 @@ export function getTrendingSymbols(): {
   crypto: string[]
 } {
   return {
-    stocks: ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'GOOGL', 'META', 'SPY'],
-    crypto: ['BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'ADA-USD', 'DOGE-USD']
+    stocks: ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'GOOGL', 'META', 'SPY', 'AI', 'PLTR', 'SMCI', 'RIVN'],
+    crypto: ['BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'ADA-USD', 'DOGE-USD', 'SUI-USD', 'APT-USD', 'INJ-USD', 'TIA-USD']
+  }
+}
+
+/**
+ * Get high-volume trading symbols for more opportunities
+ */
+export function getHighVolumeSymbols(): {
+  stocks: string[]
+  crypto: string[]
+} {
+  return {
+    stocks: ['SPY', 'QQQ', 'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'AMD', 'INTC', 'UBER', 'COIN'],
+    crypto: ['BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD', 'AVAX-USD', 'DOGE-USD', 'MATIC-USD', 'DOT-USD']
   }
 }
 
