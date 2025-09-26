@@ -10,6 +10,7 @@ import {
   EyeIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline'
+import { useAlpacaTrades, useAlpacaOrders } from '@/hooks/api/useAlpacaData'
 
 interface Trade {
   id: string
@@ -44,6 +45,7 @@ interface TradesOrdersTableProps {
   showOrders?: boolean
   maxItems?: number
   compact?: boolean
+  useRealData?: boolean
 }
 
 export default function TradesOrdersTable({
@@ -53,12 +55,17 @@ export default function TradesOrdersTable({
   showTrades = true,
   showOrders = true,
   maxItems = 20,
-  compact = false
+  compact = false,
+  useRealData = true
 }: TradesOrdersTableProps) {
   const [activeTab, setActiveTab] = useState<'trades' | 'orders'>('trades')
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
 
-  // Mock data for demonstration - remove when real data is available
+  // Fetch real data when useRealData is true
+  const realTradesQuery = useAlpacaTrades()
+  const realOrdersQuery = useAlpacaOrders()
+
+  // Mock data for demonstration - used when useRealData is false
   const mockTrades: Trade[] = [
     {
       id: 'trade-1',
@@ -132,9 +139,15 @@ export default function TradesOrdersTable({
     }
   ]
 
-  // Use mock data if no real data provided
-  const displayTrades = trades.length > 0 ? trades : mockTrades
-  const displayOrders = orders.length > 0 ? orders : mockOrders
+  // Determine which data to use
+  const displayTrades = useRealData ? (realTradesQuery.data || []) : (trades.length > 0 ? trades : mockTrades)
+  const displayOrders = useRealData ? (realOrdersQuery.data || []) : (orders.length > 0 ? orders : mockOrders)
+  const displayIsLoading = useRealData ? (realTradesQuery.isLoading || realOrdersQuery.isLoading) : isLoading
+  const hasError = useRealData ? (realTradesQuery.error || realOrdersQuery.error) : false
+
+  // If real data fails, fall back to mock data
+  const finalTrades = useRealData && hasError ? mockTrades : displayTrades
+  const finalOrders = useRealData && hasError ? mockOrders : displayOrders
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -168,8 +181,9 @@ export default function TradesOrdersTable({
     }
   }
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', {
+  const formatTime = (date: Date | string | number) => {
+    const dateObj = new Date(date)
+    return dateObj.toLocaleTimeString('en-US', {
       hour12: false,
       hour: '2-digit',
       minute: '2-digit',
@@ -194,7 +208,7 @@ export default function TradesOrdersTable({
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  Trades ({displayTrades.length})
+                  Trades ({finalTrades.length})
                 </button>
               )}
               {showOrders && (
@@ -206,27 +220,44 @@ export default function TradesOrdersTable({
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  Orders ({displayOrders.length})
+                  Orders ({finalOrders.length})
                 </button>
               )}
             </div>
           </div>
-          <div className="text-xs text-gray-400">
-            Live Trading Activity
+          <div className="flex items-center space-x-2 text-xs text-gray-400">
+            {useRealData && !hasError && (
+              <>
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span>Live Data</span>
+              </>
+            )}
+            {useRealData && hasError && (
+              <>
+                <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                <span>Demo Data (API Error)</span>
+              </>
+            )}
+            {!useRealData && (
+              <>
+                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                <span>Demo Data</span>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="p-4">
-        {isLoading ? (
+        {displayIsLoading ? (
           <div className="flex items-center justify-center py-8">
             <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
             <span className="ml-2 text-gray-400">Loading trading data...</span>
           </div>
         ) : (
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {activeTab === 'trades' && displayTrades.slice(0, maxItems).map((trade) => (
+            {activeTab === 'trades' && finalTrades.slice(0, maxItems).map((trade) => (
               <div
                 key={trade.id}
                 className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800/70 transition-colors cursor-pointer"
@@ -283,7 +314,7 @@ export default function TradesOrdersTable({
               </div>
             ))}
 
-            {activeTab === 'orders' && displayOrders.slice(0, maxItems).map((order) => (
+            {activeTab === 'orders' && finalOrders.slice(0, maxItems).map((order) => (
               <div
                 key={order.id}
                 className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800/70 transition-colors cursor-pointer"
@@ -322,8 +353,8 @@ export default function TradesOrdersTable({
               </div>
             ))}
 
-            {((activeTab === 'trades' && displayTrades.length === 0) ||
-              (activeTab === 'orders' && displayOrders.length === 0)) && (
+            {((activeTab === 'trades' && finalTrades.length === 0) ||
+              (activeTab === 'orders' && finalOrders.length === 0)) && (
               <div className="text-center py-8">
                 <EyeIcon className="w-12 h-12 text-gray-600 mx-auto mb-3" />
                 <p className="text-gray-400">

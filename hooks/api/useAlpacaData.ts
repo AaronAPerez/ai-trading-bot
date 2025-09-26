@@ -7,6 +7,7 @@ export const alpacaQueryKeys = {
   account: ['alpaca', 'account'] as const,
   positions: ['alpaca', 'positions'] as const,
   orders: ['alpaca', 'orders'] as const,
+  trades: ['alpaca', 'trades'] as const,
   marketData: (symbol: string) => ['alpaca', 'marketData', symbol] as const,
 }
 
@@ -50,6 +51,20 @@ export function useAlpacaOrders() {
   })
 }
 
+export function useAlpacaTrades() {
+  return useQuery({
+    queryKey: alpacaQueryKeys.trades,
+    queryFn: async () => {
+      const response = await fetch('/api/alpaca/trades')
+      if (!response.ok) throw new Error('Failed to fetch trades')
+      const data = await response.json()
+      return data.trades
+    },
+    refetchInterval: 10000, // Refetch every 10 seconds
+    staleTime: 5000, // Data is fresh for 5 seconds
+  })
+}
+
 export function useMarketData(symbol: string) {
   return useQuery({
     queryKey: alpacaQueryKeys.marketData(symbol),
@@ -80,6 +95,7 @@ export function useExecuteOrder() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: alpacaQueryKeys.orders })
+      queryClient.invalidateQueries({ queryKey: alpacaQueryKeys.trades })
       queryClient.invalidateQueries({ queryKey: alpacaQueryKeys.positions })
       queryClient.invalidateQueries({ queryKey: alpacaQueryKeys.account })
     },

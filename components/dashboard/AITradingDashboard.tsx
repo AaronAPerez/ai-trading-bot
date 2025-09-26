@@ -13,6 +13,25 @@ import TradesOrdersTable from "./TradesOrdersTable"
 import PortfolioOverview from "./PortfolioOverview"
 import DashboardLayout from "./DashboardLayout"
 
+// Default bot configuration
+const defaultBotConfig = {
+  alpaca: {
+    baseUrl: 'https://paper-api.alpaca.markets',
+    apiKey: process.env.NEXT_PUBLIC_ALPACA_API_KEY || '',
+    secretKey: process.env.NEXT_PUBLIC_ALPACA_SECRET_KEY || ''
+  },
+  trading: {
+    maxPositionSize: 10,
+    riskLevel: 0.02
+  },
+  mode: 'BALANCED' as const,
+  maxPositionSize: 10,
+  stopLossPercent: 5,
+  takeProfitPercent: 15,
+  minimumConfidence: 75,
+  watchlistSymbols: ['AAPL', 'MSFT', 'GOOGL', 'TSLA']
+}
+
 export default function AITradingDashboard() {
   const tradingBot = useTradingBot()
   const autoExecution = useAutoExecution(tradingBot.engine)
@@ -49,12 +68,9 @@ export default function AITradingDashboard() {
       onToggleMode={() => {}}
       botStatus="STOPPED"
     >
-      {/* AI Trading Bot Control with Portfolio Metrics and Activity Feed */}
-      <div className="mb-8">
-        <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border border-blue-700/50 rounded-xl p-6 shadow-2xl">
-          {/* Header with Engine Info and Controls */}
+         {/* AI Trading Controls */}
           <div className="flex items-center justify-between mb-6">
-            {/* <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
@@ -64,13 +80,39 @@ export default function AITradingDashboard() {
                 <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
                 <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
               </div>
-            </div> */}
-            <BotControlPanel
-              status={tradingBot.status}
-              onStart={handleStart}
-              onStop={handleStop}
-            />
+            </div>
+
+            {/* AI Trading Bot Button */}
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
+                <div className={`flex items-center space-x-2`}>
+                  <div className={`w-3 h-3 rounded-full ${
+                    tradingBot.metrics.isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'
+                  }`} />
+                  <span className={`text-sm font-medium ${
+                    tradingBot.metrics.isRunning ? 'text-green-400' : 'text-gray-400'
+                  }`}>
+                    {tradingBot.metrics.isRunning ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <button
+                  onClick={tradingBot.metrics.isRunning ? handleStop : () => handleStart(defaultBotConfig)}
+                  className={`px-6 py-2 rounded-lg font-semibold text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+                    tradingBot.metrics.isRunning
+                      ? 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500'
+                      : 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500'
+                  }`}
+                >
+                  AI Trading Bot - {tradingBot.metrics.isRunning ? 'Stop' : 'Start'}
+                </button>
+              </div>
+            </div>
           </div>
+
+
+      {/* AI Trading Bot Control with Portfolio Metrics and Activity Feed */}
+      <div className="mb-8">
+        <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border border-blue-700/50 rounded-xl p-6 shadow-2xl">
 
           {/* Key Financial Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -134,28 +176,37 @@ export default function AITradingDashboard() {
             </div>
           </div>
 
+     
+
           {/* Integrated AI Bot Activity Feed and Trading Activity */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* AI Bot Activity Feed */}
-            <div className="bg-gray-900/30 rounded-lg p-4">
-              <div className="flex items-center space-x-2 mb-3">
-                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                <h4 className="text-sm font-semibold text-gray-300">AI Bot Activity</h4>
-              </div>
-              {aiActivity.activities.length > 0 || aiActivity.isSimulating ? (
-                <AIBotActivity
-                  refreshInterval={5000}
-                  maxActivities={6}
-                  showControls={false}
-                  compact={true}
-                />
-              ) : (
-                <div className="text-center py-4">
-                  <div className="text-gray-400 text-sm">
-                    Activity feed will appear here when AI Trading is started
-                  </div>
+            <div className="bg-gray-900/30 rounded-lg border border-gray-700/50 h-96">
+              <div className="p-4 border-b border-gray-700/50">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                  <h4 className="text-lg font-semibold text-white">AI Bot Activity</h4>
                 </div>
-              )}
+              </div>
+              <div className="p-4 h-80 overflow-y-auto">
+                {aiActivity.activities.length > 0 || aiActivity.isSimulating ? (
+                  <AIBotActivity
+                    refreshInterval={5000}
+                    maxActivities={6}
+                    showControls={false}
+                    compact={true}
+                  />
+                ) : (
+                  <div className="text-center py-8">
+                    <svg className="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+                    </svg>
+                    <div className="text-gray-400 text-sm">
+                      Activity feed will appear here when AI Trading is started
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Trading Activity Table */}
@@ -165,6 +216,7 @@ export default function AITradingDashboard() {
                 compact={true}
                 showTrades={true}
                 showOrders={true}
+                useRealData={true}
               />
             </div>
           </div>
