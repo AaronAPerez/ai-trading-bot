@@ -5,8 +5,9 @@ import { EnhancedAutoTradeExecutor } from '../executors/AutoTradeExecutor'
 import { AILearningSystem } from '../ml/AILearningSystem'
 import { SentimentAnalyzer } from '../analyzers/SentimentAnalyzer'
 import { TechnicalAnalyzer } from '../analyzers/TechnicalAnalyzer'
-import { AlpacaServerClient } from '../../alpaca/server-client'
-import { TradingEngineConfig, EngineType, TradingMode } from '../../../types/trading'
+import { AlpacaServerClient } from '@/lib/alpaca/server-client'
+import { EngineType, TradingMode } from '@/types/trading'
+
 
 export interface EngineCreationOptions {
   type: EngineType

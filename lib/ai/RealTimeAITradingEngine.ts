@@ -5,6 +5,8 @@ import { AdvancedRiskManager } from './AdvancedRiskManager'
 import { PortfolioOptimizer } from './PortfolioOptimizer'
 import { AutoTradeExecutor, ExecutionConfig } from './AutoTradeExecutor'
 import { MarketData, TradeSignal, Portfolio, Position, TradeOrder } from '@/types/trading'
+import { ConfigValidator } from '@/lib/config/ConfigValidator'
+import { PositionSizingManager } from './PositionSizingManager'
 
 interface AITradingConfig {
   maxPositionsCount: number
@@ -75,6 +77,17 @@ export class RealTimeAITradingEngine {
   private tradingIntervals = new Map<string, NodeJS.Timeout>()
 
   constructor(alpacaClient: AlpacaClient, config: AITradingConfig) {
+    // ENHANCED: Validate configuration before initialization
+    console.log('🔧 Validating AI Trading Engine configuration...')
+    const validation = ConfigValidator.validateEnvironment()
+    ConfigValidator.logValidationResult(validation)
+
+    if (!validation.valid) {
+      console.error('❌ Configuration validation failed. Trading engine may not function properly.')
+      console.log('📋 Recommended environment variables:')
+      console.log(ConfigValidator.getRecommendedEnvironmentVariables())
+    }
+
     this.alpacaClient = alpacaClient
     this.symbolManager = new AlpacaSymbolManager(alpacaClient)
     this.mlEngine = new MLPredictionEngine()
@@ -83,9 +96,18 @@ export class RealTimeAITradingEngine {
 
     // Initialize auto trade executor with default config if not provided
     const executionConfig = config.autoExecution || this.getDefaultExecutionConfig()
+
+    // Validate trading configuration
+    const tradingConfigIssues = ConfigValidator.validateTradingConfig(executionConfig)
+    if (tradingConfigIssues.length > 0) {
+      console.warn('⚠️ Trading configuration issues:', tradingConfigIssues)
+    }
+
     this.autoTradeExecutor = new AutoTradeExecutor(executionConfig)
 
     this.config = config
+
+    console.log('✅ AI Trading Engine initialized with enhanced configuration validation')
   }
 
   private getDefaultExecutionConfig(): ExecutionConfig {

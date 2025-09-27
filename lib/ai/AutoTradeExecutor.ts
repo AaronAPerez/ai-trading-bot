@@ -1,5 +1,7 @@
 import { TradeSignal, Portfolio, MarketData } from '@/types/trading'
 import { AILearningSystem, TradeOutcome } from './AILearningSystem'
+import { PositionSizingManager, PositionSizeResult } from './PositionSizingManager'
+import { getAlpacaClient } from '@/lib/alpaca/server-client'
 
 export interface ExecutionConfig {
   autoExecuteEnabled: boolean
@@ -77,10 +79,20 @@ export class AutoTradeExecutor {
   private isExecutionEnabled = true
   private learningSystem: AILearningSystem
   private openTrades = new Map<string, { tradeId: string, entryPrice: number, entryTime: Date, symbol: string, action: 'BUY' | 'SELL' }>()
+  private positionSizingManager: PositionSizingManager
+  private alpacaClient = getAlpacaClient()
 
   constructor(config: ExecutionConfig) {
     this.config = config
     this.learningSystem = new AILearningSystem()
+    this.positionSizingManager = new PositionSizingManager({
+      maxPositionPercent: config.positionSizing.maxSize,
+      basePositionPercent: config.positionSizing.baseSize,
+      minOrderValue: 25,
+      maxOrderValue: 1000,
+      buyingPowerBuffer: 0.05,
+      conservativeMode: true // Enable conservative mode from quick_fix_patch for extra safety
+    })
     this.resetDailyCounters()
   }
 
@@ -345,56 +357,116 @@ export class AutoTradeExecutor {
 
     const symbol = marketData[0].symbol
     const currentPrice = marketData[marketData.length - 1].close
-    const notionalAmount = portfolio.totalValue * decision.positionSize
 
-    // Use minimum $1 for notional orders (Alpaca requirement)
-    if (notionalAmount < 1) {
-      throw new Error(`Notional amount too small: $${notionalAmount.toFixed(2)} (minimum $1)`)
+    // ENHANCED: Get account info for accurate buying power validation
+    console.log('💳 Getting current account information for buying power validation...')
+    const accountInfo = await this.alpacaClient.getAccount()
+    if (!accountInfo) {
+      throw new Error('Failed to get account information')
+    }
+
+    const availableBuyingPower = parseFloat(accountInfo.availableBuyingPower.toString()) || 0
+    console.log(`💰 Available buying power: $${availableBuyingPower}`)
+
+    // ENHANCED: Use advanced position sizing with buying power validation
+    const positionSizeResult = this.positionSizingManager.calculatePositionSize(
+      signal.confidence * 100, // Convert to percentage
+      symbol,
+      availableBuyingPower,
+      currentPrice
+    )
+
+    if (!positionSizeResult.withinLimits) {
+      throw new Error(`Position sizing failed: ${positionSizeResult.reasoning}`)
+    }
+
+    const notionalAmount = positionSizeResult.positionSize
+    console.log(`📏 Enhanced position sizing: $${notionalAmount} (${(positionSizeResult.positionPercent * 100).toFixed(1)}% of buying power)`)
+
+    // Final validation
+    const validation = this.positionSizingManager.validatePositionSize(notionalAmount, availableBuyingPower, symbol)
+    if (!validation.valid) {
+      throw new Error(`Position validation failed: ${validation.reason}`)
+    }
+
+    // EXTRA SAFETY CHECK: Ensure position doesn't exceed 95% of buying power (from quick_fix_patch)
+    if (notionalAmount > availableBuyingPower * 0.95) {
+      throw new Error(`Position size $${notionalAmount} exceeds 95% of buying power $${availableBuyingPower}`)
+    }
+
+    // ENHANCED: Get current market price for validation
+    console.log('📊 Getting current market price for validation...')
+    try {
+      const priceInfo = await this.getCurrentPrice(symbol)
+      if (priceInfo && Math.abs(priceInfo.price - currentPrice) / currentPrice > 0.05) {
+        console.log(`⚠️ Price difference detected: cached $${currentPrice} vs current $${priceInfo.price}`)
+      }
+    } catch (error) {
+      console.warn('Could not validate current price:', error.message)
     }
 
     const startTime = Date.now()
 
-    // Create order payload for direct API call using notional orders
+    // Clean symbol for Alpaca API (remove crypto suffixes)
+    const cleanSymbol = symbol.replace('-USD', '').replace('/USD', '')
+
+    // Create enhanced order payload
     const orderPayload = {
-      symbol,
+      symbol: cleanSymbol,
       notional: Math.round(notionalAmount * 100) / 100, // Round to 2 decimal places
       side: signal.action.toLowerCase(), // buy/sell
       type: 'market', // Use market orders for immediate execution
       time_in_force: 'day',
-      client_order_id: `ai_auto_${symbol}_${Date.now()}`
+      client_order_id: `ai_auto_${cleanSymbol}_${Date.now()}`
     }
 
-    console.log(`🚀 Executing order via direct API:`, orderPayload)
-
-    // Direct fetch to our orders API endpoint
-    const baseUrl = process.env.NODE_ENV === 'production'
-      ? 'https://ai-trading-bot-nextjs.vercel.app'
-      : 'http://localhost:3000'
-
-    const response = await fetch(`${baseUrl}/api/alpaca/orders`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(orderPayload)
+    console.log('📝 Placing order with enhanced validation:', {
+      ...orderPayload,
+      currentPrice,
+      estimatedShares: (notionalAmount / currentPrice).toFixed(4),
+      buyingPowerUsed: `${(positionSizeResult.positionPercent * 100).toFixed(1)}%`,
+      buyingPowerRemaining: `$${(availableBuyingPower - notionalAmount).toFixed(2)}`
     })
 
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(`Order execution failed: ${errorData.error || response.statusText}`)
+    // Execute order using server-side Alpaca client for better error handling
+    let orderResult
+    try {
+      // Try using server-side client first (better error handling)
+      orderResult = await this.executeOrderWithAlpaca(orderPayload)
+    } catch (serverError) {
+      console.warn('Server-side execution failed, trying API endpoint:', serverError.message)
+
+      // Fallback to API endpoint
+      const baseUrl = process.env.NODE_ENV === 'production'
+        ? 'https://ai-trading-bot-nextjs.vercel.app'
+        : 'http://localhost:3000'
+
+      const response = await fetch(`${baseUrl}/api/alpaca/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderPayload)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(`Order execution failed: ${errorData.error || response.statusText}`)
+      }
+
+      const result = await response.json()
+      if (!result.success) {
+        throw new Error(`Order execution failed: ${result.error || 'Unknown error'}`)
+      }
+
+      orderResult = { success: true, data: result.order }
     }
 
-    const result = await response.json()
     const executionTime = Date.now() - startTime
-
-    if (!result.success) {
-      throw new Error(`Order execution failed: ${result.error || 'Unknown error'}`)
-    }
-
-    const order = result.order
+    const order = orderResult.data
 
     // Calculate slippage (if order filled)
-    const filledPrice = order.filledPrice || order.filled_avg_price || currentPrice
+    const filledPrice = order.filledPrice || order.filled_avg_price || order.avg_fill_price || currentPrice
     const slippage = Math.abs(filledPrice - currentPrice) / currentPrice
 
     // Calculate actual quantity from notional amount and fill price
@@ -402,11 +474,11 @@ export class AutoTradeExecutor {
 
     // Create execution record
     const execution: TradeExecution = {
-      symbol,
-      action: signal.action === 'HOLD' ? 'BUY' : signal.action, // Default to 'BUY' if 'HOLD' (or handle as needed)
+      symbol: cleanSymbol,
+      action: signal.action === 'HOLD' ? 'BUY' : signal.action,
       quantity: actualQuantity,
       price: filledPrice,
-      orderId: order.orderId || order.id,
+      orderId: order.orderId || order.id || order.client_order_id,
       timestamp: new Date(),
       confidence: signal.confidence,
       aiScore: 0, // Will be updated by caller
@@ -425,8 +497,10 @@ export class AutoTradeExecutor {
       await this.setAutomatedStopLossAndTakeProfit(execution, signal, marketData)
     }
 
-    console.log(`✅ AUTO-EXECUTED: ${signal.action} $${notionalAmount.toFixed(2)} ${symbol} @ $${filledPrice.toFixed(2)} (${actualQuantity.toFixed(4)} shares)`)
-    console.log(`   Execution Time: ${executionTime}ms, Slippage: ${(slippage * 100).toFixed(3)}%`)
+    console.log(`✅ ENHANCED AUTO-EXECUTED: ${signal.action} $${notionalAmount.toFixed(2)} ${cleanSymbol} @ $${filledPrice.toFixed(2)} (${actualQuantity.toFixed(4)} shares)`)
+    console.log(`   Position sizing: ${positionSizeResult.reasoning}`)
+    console.log(`   Execution time: ${executionTime}ms, Slippage: ${(slippage * 100).toFixed(3)}%`)
+    console.log(`   Buying power used: ${(positionSizeResult.positionPercent * 100).toFixed(1)}%, Remaining: $${(availableBuyingPower - notionalAmount).toFixed(2)}`)
 
     return execution
   }
@@ -832,5 +906,46 @@ export class AutoTradeExecutor {
     }
 
     return Math.max(0.5, Math.min(1.5, healthMultiplier)) // Cap between 50% and 150%
+  }
+
+  // ENHANCED: Direct Alpaca order execution with better error handling
+  private async executeOrderWithAlpaca(orderData: any): Promise<{ success: boolean; data: any }> {
+    try {
+      console.log('📤 Placing order via server-side Alpaca client')
+      const orderResult = await this.alpacaClient.createOrder(orderData)
+      return {
+        success: true,
+        data: orderResult
+      }
+    } catch (error: any) {
+      console.error('❌ Server-side order execution failed:', error)
+
+      // Handle specific Alpaca error codes
+      if (error.message.includes('40310000')) {
+        throw new Error('Insufficient buying power for this trade')
+      } else if (error.message.includes('403')) {
+        throw new Error('Account not authorized for trading this symbol')
+      } else if (error.message.includes('422')) {
+        throw new Error('Invalid order parameters')
+      }
+
+      throw new Error(`Order execution failed: ${error.message}`)
+    }
+  }
+
+  // ENHANCED: Get current price for validation
+  private async getCurrentPrice(symbol: string): Promise<{ success: boolean; price: number } | null> {
+    try {
+      const quotes = await this.alpacaClient.getLatestQuotes([symbol])
+      if (quotes && quotes[symbol]) {
+        const quote = quotes[symbol]
+        const price = (quote.askPrice + quote.bidPrice) / 2 // Mid price
+        return { success: true, price }
+      }
+      return null
+    } catch (error) {
+      console.warn(`Could not get current price for ${symbol}:`, error.message)
+      return null
+    }
   }
 }

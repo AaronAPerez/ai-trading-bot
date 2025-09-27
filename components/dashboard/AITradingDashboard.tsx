@@ -63,11 +63,24 @@ export default function AITradingDashboard() {
   const totalPnL = positions.data ? positions.data.reduce((total, pos) => total + (parseFloat(pos.unrealized_pl) || 0), 0) : 0
   const dayPnL = account.data ? parseFloat(account.data.portfolio_value || '0') - parseFloat(account.data.last_equity || '0') : 0
 
+  // Create proper BotMetrics object
+  const botMetrics = {
+    isRunning: tradingBot.metrics.isRunning || false,
+    uptime: tradingBot.metrics.uptime || 0,
+    tradesExecuted: tradingBot.metrics.tradesExecuted || 0,
+    recommendationsGenerated: tradingBot.metrics.recommendationsGenerated || 0,
+    successRate: tradingBot.metrics.successRate || 0,
+    totalPnL: totalPnL,
+    dailyPnL: dayPnL,
+    riskScore: tradingBot.metrics.riskScore || 0,
+    lastActivity: tradingBot.metrics.lastActivity
+  }
+
   return (
     <DashboardLayout
       isLiveTrading={false}
       onToggleMode={() => {}}
-      botStatus="STOPPED"
+      botStatus={botMetrics}
     >
          {/* AI Trading Controls */}
           <div className="flex items-center justify-between mb-6">
@@ -117,24 +130,7 @@ export default function AITradingDashboard() {
 
           {/* Key Financial Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
-              <div className="flex items-center space-x-2 mb-2">
-                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
-                </svg>
-                <span className="text-gray-300 text-sm font-medium">Total Balance</span>
-              </div>
-              <div className="text-2xl font-bold text-white">
-                {account.isLoading ? (
-                  <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
-                ) : (
-                  `$${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                )}
-              </div>
-              <div className="text-xs text-gray-400 mt-1">
-                Buying Power: ${buyingPower.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-              </div>
-            </div>
+
 
             <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
               <div className="flex items-center space-x-2 mb-2">
@@ -175,6 +171,27 @@ export default function AITradingDashboard() {
                 Today: {dayPnL >= 0 ? '+' : ''}${dayPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
+
+            <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
+              <div className="flex items-center space-x-2 mb-2">
+                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
+                </svg>
+                <span className="text-gray-300 text-sm font-medium">Total Balance</span>
+              </div>
+              <div className="text-2xl font-bold text-white">
+                {account.isLoading ? (
+                  <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
+                ) : (
+                  `$${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                )}
+              </div>
+              <div className="text-xs text-green-400 mt-1">
+                Buying Power: ${buyingPower.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </div>
+            </div>
+
+
           </div>
 
      
@@ -189,7 +206,7 @@ export default function AITradingDashboard() {
                   <h4 className="text-lg font-semibold text-white">AI Bot Activity</h4>
                 </div>
               </div>
-              <div className="p-4 h-80 overflow-y-auto">
+              <div className="p-4 h-90 overflow-y-auto">
                 {aiActivity.activities.length > 0 || aiActivity.isSimulating ? (
                   <AIBotActivity
                     refreshInterval={5000}
@@ -223,7 +240,7 @@ export default function AITradingDashboard() {
       </div>
 
       {/* Dashboard Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 gap-6 mb-8">
         <PortfolioOverview
           portfolio={account.data}
           positions={positions.data}

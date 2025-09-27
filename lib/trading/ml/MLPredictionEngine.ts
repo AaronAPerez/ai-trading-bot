@@ -1,5 +1,5 @@
 import { MarketData } from "@/lib/market-data/YahooFinanceClient";
-import { AIConfig } from "@/types/trading";
+
 
 export class MLPredictionEngine {
   constructor(private config: AIConfig) {}

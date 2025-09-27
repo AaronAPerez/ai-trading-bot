@@ -133,8 +133,8 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     console.log(`🚀 Executing order for ${symbol} with ${confidence}% confidence`)
 
     // Create Alpaca client with order creation capability
-    const apiKey = process.env.ALPACA_API_KEY_ID || process.env.APCA_API_KEY_ID
-    const secretKey = process.env.ALPACA_SECRET_KEY || process.env.APCA_API_SECRET_KEY
+    const apiKey = process.env.APCA_API_KEY_ID
+    const secretKey = process.env.APCA_API_SECRET_KEY
 
     if (!apiKey || !secretKey) {
       throw new Error('Alpaca API credentials not found in environment variables')

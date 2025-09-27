@@ -5,7 +5,7 @@ import { AutoTradeExecutor } from '../executors/AutoTradeExecutor'
 import { RiskManagementEngine } from './RiskManagementEngine'
 import { AILearningSystem } from '../ml/AILearningSystem'
 import { AlpacaClient } from '../../alpaca/AlpacaClient'
-import { TradingEngineConfig, TradingCycleResult, ExecutionResult, AIRecommendation, TradeSignal } from '@/types/trading'
+import { ExecutionResult, AIRecommendation, TradeSignal } from '@/types/trading'
 
 export class RealTimeAITradingEngine {
   private recommendationEngine: AIRecommendationEngine

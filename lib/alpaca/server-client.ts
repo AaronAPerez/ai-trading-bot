@@ -6,13 +6,27 @@ export class AlpacaServerClient {
   constructor() {
     if (typeof window === 'undefined') {
       try {
+        const apiKey = process.env.APCA_API_KEY_ID
+        const secretKey = process.env.APCA_API_SECRET_KEY
+        const paperMode = process.env.NEXT_PUBLIC_TRADING_MODE === 'paper'
+
+        console.log('🔧 AlpacaServerClient initializing with:', {
+          apiKeyExists: !!apiKey,
+          apiKeyPreview: apiKey ? `${apiKey.substring(0, 8)}...` : 'missing',
+          secretExists: !!secretKey,
+          secretPreview: secretKey ? `${secretKey.substring(0, 8)}...` : 'missing',
+          paperMode
+        })
+
         this.client = new Alpaca({
           credentials: {
-            key: process.env.ALPACA_API_KEY_ID || process.env.APCA_API_KEY_ID,
-            secret: process.env.ALPACA_SECRET_KEY || process.env.APCA_API_SECRET_KEY,
-            paper: process.env.NEXT_PUBLIC_TRADING_MODE === 'paper'
+            key: apiKey,
+            secret: secretKey,
+            paper: paperMode
           }
         })
+
+        console.log('✅ AlpacaServerClient initialized successfully - Ready for API calls')
       } catch (error) {
         console.warn('Failed to initialize Alpaca client:', error)
         // Continue with null client - will use mock data
@@ -27,8 +41,15 @@ export class AlpacaServerClient {
 
     try {
       return await this.client.getAccount()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to get account from Alpaca:', error)
+      console.error('Account API error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        headers: error.config?.headers
+      })
       throw new Error(`Alpaca API error: ${error.message}`)
     }
   }
@@ -78,8 +99,15 @@ export class AlpacaServerClient {
         unrealizedPnLPercent: parseFloat(pos.unrealized_plpc) * 100,
         side: parseFloat(pos.qty) > 0 ? 'long' : 'short' as 'long' | 'short'
       }))
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to get positions from Alpaca:', error)
+      console.error('Positions API error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        headers: error.config?.headers
+      })
       throw new Error(`Alpaca positions API error: ${error.message}`)
     }
   }

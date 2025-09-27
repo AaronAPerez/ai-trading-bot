@@ -263,7 +263,17 @@ export const CRYPTO_SYMBOLS = {
     'SOL-USD',   // Solana
     'TRX-USD',   // TRON
     'DOT-USD',   // Polkadot
-    'MATIC-USD'  // Polygon
+    'MATIC-USD', // Polygon
+    'LTC-USD',   // Litecoin
+    'BCH-USD',   // Bitcoin Cash
+    'LINK-USD',  // Chainlink
+    'UNI-USD',   // Uniswap
+    'ATOM-USD',  // Cosmos
+    'XLM-USD',   // Stellar
+    'VET-USD',   // VeChain
+    'FIL-USD',   // Filecoin
+    'ETC-USD',   // Ethereum Classic
+    'MANA-USD'   // Decentraland
   ],
 
   // DeFi (Decentralized Finance) Tokens
@@ -277,7 +287,17 @@ export const CRYPTO_SYMBOLS = {
     'YFI-USD',   // yearn.finance
     'CAKE-USD',  // PancakeSwap
     'ALPHA-USD', // Alpha Finance Lab
-    'RUNE-USD'   // THORChain
+    'RUNE-USD',  // THORChain
+    'SNX-USD',   // Synthetix
+    '1INCH-USD', // 1inch
+    'BAL-USD',   // Balancer
+    'LDO-USD',   // Lido DAO
+    'CVX-USD',   // Convex Finance
+    'FXS-USD',   // Frax Share
+    'SPELL-USD', // Spell Token
+    'QI-USD',    // Benqi
+    'JOE-USD',   // TraderJoe
+    'GMX-USD'    // GMX
   ],
 
   // Layer 1 Blockchain Protocols
@@ -291,7 +311,17 @@ export const CRYPTO_SYMBOLS = {
     'HBAR-USD',  // Hedera
     'ICP-USD',   // Internet Computer
     'FLOW-USD',  // Flow
-    'ROSE-USD'   // Oasis Network
+    'ROSE-USD',  // Oasis Network
+    'ONE-USD',   // Harmony
+    'LUNA-USD',  // Terra Luna
+    'KLAY-USD',  // Klaytn
+    'KSM-USD',   // Kusama
+    'WAVES-USD', // Waves
+    'ZIL-USD',   // Zilliqa
+    'QTUM-USD',  // Qtum
+    'ICX-USD',   // ICON
+    'ONT-USD',   // Ontology
+    'IOST-USD'   // IOST
   ],
 
   // Layer 2 Scaling Solutions
@@ -341,7 +371,17 @@ export const CRYPTO_SYMBOLS = {
     'INU-USD',   // Shiba Predator
     'BONK-USD',  // Bonk
     'WIF-USD',   // dogwifhat
-    'POPCAT-USD' // Popcat
+    'POPCAT-USD', // Popcat
+    'MEME-USD',  // Memecoin
+    'WOJAK-USD', // Wojak
+    'MOG-USD',   // Mog Coin
+    'BRETT-USD', // Brett
+    'TURBO-USD', // Turbo
+    'MYRO-USD',  // Myro
+    'BOME-USD',  // Book of Meme
+    'SLERF-USD', // Slerf
+    'SMOG-USD',  // Smog
+    'PONKE-USD'  // Ponke
   ],
 
   // AI & Machine Learning Tokens
@@ -374,7 +414,19 @@ export const CRYPTO_SYMBOLS = {
     'TIA-USD',   // Celestia
     'STRK-USD',  // Starknet
     'JTO-USD',   // Jito
-    'JUP-USD'    // Jupiter
+    'JUP-USD',   // Jupiter
+    'WLD-USD',   // Worldcoin
+    'PYTH-USD',  // Pyth Network
+    'DYM-USD',   // Dymension
+    'ALT-USD',   // AltLayer
+    'MANTA-USD', // Manta Network
+    'AEVO-USD',  // Aevo
+    'PIXEL-USD', // Pixels
+    'PORTAL-USD', // Portal
+    'ETHFI-USD', // Ether.fi
+    'REZ-USD',   // Renzo
+    'SAGA-USD',  // Saga
+    'TAO-USD'    // Bittensor
   ],
 
   // Enterprise & Corporate Crypto
@@ -397,6 +449,64 @@ export const CRYPTO_SYMBOLS = {
     'XVG-USD',   // Verge
     'BEAM-USD',  // Beam
     'GRIN-USD'   // Grin
+  ],
+
+  // High-Volume 24/7 Trading Opportunities
+  high_volume_24_7: [
+    'BTC-USD',   // Bitcoin - Highest volume
+    'ETH-USD',   // Ethereum - Second highest
+    'BNB-USD',   // Binance Coin - Exchange token
+    'XRP-USD',   // Ripple - High volatility
+    'SOL-USD',   // Solana - Popular alt
+    'DOGE-USD',  // Dogecoin - Meme popularity
+    'ADA-USD',   // Cardano - Active trading
+    'MATIC-USD', // Polygon - L2 leader
+    'DOT-USD',   // Polkadot - Interoperability
+    'AVAX-USD',  // Avalanche - Fast L1
+    'SHIB-USD',  // Shiba Inu - Meme volume
+    'LTC-USD',   // Litecoin - Classic alt
+    'UNI-USD',   // Uniswap - DeFi leader
+    'LINK-USD',  // Chainlink - Oracle leader
+    'ATOM-USD',  // Cosmos - IBC ecosystem
+    'NEAR-USD',  // NEAR Protocol - Developer activity
+    'FTM-USD',   // Fantom - Low fees
+    'ALGO-USD',  // Algorand - Fast consensus
+    'VET-USD',   // VeChain - Enterprise adoption
+    'MANA-USD',  // Decentraland - Metaverse
+    'SAND-USD',  // The Sandbox - Gaming
+    'AXS-USD',   // Axie Infinity - Gaming
+    'APE-USD',   // ApeCoin - NFT ecosystem
+    'INJ-USD',   // Injective - DeFi focused
+    'SUI-USD',   // Sui - New L1 with hype
+    'APT-USD',   // Aptos - Move language
+    'TIA-USD',   // Celestia - Modular blockchain
+    'SEI-USD',   // Sei - Trading focused
+    'WLD-USD',   // Worldcoin - AI narrative
+    'PEPE-USD'   // Pepe - Meme volatility
+  ],
+
+  // Regional Popular Coins (Different timezone activity)
+  regional_popular: [
+    'TRX-USD',   // TRON - Popular in Asia
+    'ETC-USD',   // Ethereum Classic - Mining community
+    'BCH-USD',   // Bitcoin Cash - P2P payments
+    'FIL-USD',   // Filecoin - Storage narrative
+    'HBAR-USD',  // Hedera - Enterprise partnerships
+    'ICP-USD',   // Internet Computer - Web3 narrative
+    'FLOW-USD',  // Flow - NFT ecosystem
+    'ONE-USD',   // Harmony - Bridging focus
+    'WAVES-USD', // Waves - Russian community
+    'KLAY-USD',  // Klaytn - Korean ecosystem
+    'ICX-USD',   // ICON - Korean blockchain
+    'ONT-USD',   // Ontology - Chinese focus
+    'ZIL-USD',   // Zilliqa - Sharding pioneer
+    'QTUM-USD',  // Qtum - Smart contracts
+    'XLM-USD',   // Stellar - Cross-border payments
+    'IOTA-USD',  // IOTA - IoT focus
+    'THETA-USD', // Theta - Video streaming
+    'CHZ-USD',   // Chiliz - Sports tokens
+    'ENJ-USD',   // Enjin - Gaming tokens
+    'BAT-USD'    // Basic Attention Token - Browser integration
   ]
 } as const
 
@@ -549,7 +659,7 @@ export function getTrendingSymbols(): {
 } {
   return {
     stocks: ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'GOOGL', 'META', 'SPY', 'AI', 'PLTR', 'SMCI', 'RIVN'],
-    crypto: ['BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'ADA-USD', 'DOGE-USD', 'SUI-USD', 'APT-USD', 'INJ-USD', 'TIA-USD']
+    crypto: CRYPTO_SYMBOLS.high_volume_24_7.slice(0, 15) // Top 15 high-volume 24/7 cryptos
   }
 }
 
@@ -562,7 +672,37 @@ export function getHighVolumeSymbols(): {
 } {
   return {
     stocks: ['SPY', 'QQQ', 'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'AMD', 'INTC', 'UBER', 'COIN'],
-    crypto: ['BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD', 'AVAX-USD', 'DOGE-USD', 'MATIC-USD', 'DOT-USD']
+    crypto: CRYPTO_SYMBOLS.high_volume_24_7 // All high-volume 24/7 trading cryptos
+  }
+}
+
+/**
+ * Get 24/7 trading symbols specifically for round-the-clock opportunities
+ */
+export function get24_7TradingSymbols(): string[] {
+  return [
+    ...CRYPTO_SYMBOLS.high_volume_24_7,
+    ...CRYPTO_SYMBOLS.regional_popular,
+    ...CRYPTO_SYMBOLS.major,
+    ...CRYPTO_SYMBOLS.defi.slice(0, 10), // Top 10 DeFi tokens
+    ...CRYPTO_SYMBOLS.new_layer1.slice(0, 10) // Top 10 new L1s
+  ]
+}
+
+/**
+ * Get symbols by trading activity (optimized for different time zones)
+ */
+export function getSymbolsByTimeZone(): {
+  americas: string[]
+  europe_africa: string[]
+  asia_pacific: string[]
+  global_24_7: string[]
+} {
+  return {
+    americas: [...STOCK_SYMBOLS.mega_cap_tech, ...STOCK_SYMBOLS.large_cap_growth, 'BTC-USD', 'ETH-USD', 'SOL-USD'],
+    europe_africa: ['BTC-USD', 'ETH-USD', 'BNB-USD', 'DOT-USD', 'MATIC-USD', 'UNI-USD', 'LINK-USD'],
+    asia_pacific: ['BTC-USD', 'ETH-USD', 'TRX-USD', 'BNB-USD', 'KLAY-USD', 'ICX-USD', 'ONT-USD', 'WAVES-USD'],
+    global_24_7: CRYPTO_SYMBOLS.high_volume_24_7
   }
 }
 

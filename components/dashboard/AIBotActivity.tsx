@@ -129,7 +129,7 @@ export default function AIBotActivity({
 
   if (compact) {
     return (
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-gray-800 border-gray-700 p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <Bot className="w-5 h-5 text-blue-400" />

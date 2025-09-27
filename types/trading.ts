@@ -141,6 +141,7 @@ export interface ExecutionMetadata {
 }
 
 export interface AIRecommendation {
+  maxSafeAmount: number | undefined
   id: string
   symbol: string
   action: TradeAction

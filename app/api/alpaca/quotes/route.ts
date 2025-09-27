@@ -7,8 +7,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const symbols = searchParams.get('symbols')?.split(',') || ['AAPL'];
     
-    const apiKey = process.env.ALPACA_API_KEY || process.env.ALPACA_API_KEY_ID;
-    const secretKey = process.env.ALPACA_SECRET_KEY || process.env.ALPACA_API_SECRET_KEY;
+    const apiKey = process.env.APCA_API_KEY_ID;
+    const secretKey = process.env.APCA_API_SECRET_KEY;
 
     if (!apiKey || !secretKey) {
       return NextResponse.json({

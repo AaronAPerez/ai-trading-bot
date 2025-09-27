@@ -27,8 +27,17 @@ class AIRecommendationEngine {
     'V', 'PG', 'JPM', 'HD', 'MA', 'NFLX', 'DIS', 'PYPL', 'ADBE', 'CRM',
     // High-growth tech stocks
     'PLTR', 'RBLX', 'SNOW', 'CRWD', 'ZM', 'ROKU', 'SQ', 'SHOP', 'TWLO', 'OKTA',
-    // Crypto pairs
-    'BTCUSD', 'ETHUSD', 'ADAUSD', 'SOLUSD', 'DOGEUSD'
+    // Major Crypto pairs (24/7 trading)
+    'BTCUSD', 'ETHUSD', 'BNBUSD', 'XRPUSD', 'SOLUSD', 'DOGEUSD', 'ADAUSD', 'MATICUSD',
+    // High-volume crypto for round-the-clock opportunities
+    'DOTUSD', 'AVAXUSD', 'SHIBUSD', 'LTCUSD', 'UNIUSD', 'LINKUSD', 'ATOMUSD', 'NEARUSD',
+    'FTMUSD', 'ALGOUSD', 'VETUSD', 'MANAUSD', 'SANDUSD', 'AXSUSD', 'APEUSD', 'INJUSD',
+    // New Layer 1s with high volatility
+    'SUIUSD', 'APTUSD', 'TIAUSD', 'SEIUSD', 'WLDUSD', 'PYTHUSD',
+    // DeFi tokens with volume
+    'AAVEUSD', 'MKRUSD', 'SNXUSD', 'GMXUSD', 'LDOUSD',
+    // Meme coins for volatility trading
+    'PEPEUSD', 'FLOKIUSD', 'BONKUSD'
   ]
 
   private mlModels = {

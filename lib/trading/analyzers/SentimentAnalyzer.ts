@@ -1,4 +1,5 @@
-import { MarketData, SentimentData, NewsArticle, SocialMediaPost } from '../../../types/trading'
+import { SentimentData, NewsArticle } from "@/types/trading"
+
 
 interface SentimentConfig {
   newsApiKey?: string

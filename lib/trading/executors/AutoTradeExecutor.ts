@@ -45,6 +45,9 @@ interface EnhancedExecutionConfig {
 }
 
 interface ExecutionDecision {
+  success: any
+  orderId: string
+  executionPrice: number
   shouldExecute: boolean
   positionSize: number
   adjustedSize?: number

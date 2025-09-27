@@ -14,10 +14,12 @@ export class AlpacaClient {
   constructor(config: AlpacaConfig) {
     this.config = config
     this.client = new Alpaca({
-      key: config.key,
-      secret: config.secret,
-      paper: config.paper,
-      baseUrl: config.baseUrl
+      credentials: {
+        key: config.key,
+        secret: config.secret,
+        paper: config.paper
+      },
+      ...(config.baseUrl && { baseUrl: config.baseUrl })
     })
   }
 
@@ -119,9 +121,19 @@ export class AlpacaClient {
         filledAt: order.filled_at ? new Date(order.filled_at) : null,
         filledPrice: order.filled_avg_price ? parseFloat(order.filled_avg_price) : null
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Alpaca order creation error:', error)
-      throw new Error('Failed to create order with Alpaca')
+      console.error('Error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers
+        }
+      })
+      throw new Error(`Failed to create order with Alpaca: ${error.response?.status} ${error.response?.statusText}`)
     }
   }
 
