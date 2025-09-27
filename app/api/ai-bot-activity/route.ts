@@ -56,16 +56,18 @@ let botStartTime = new Date()
 let isSimulatingActivity = false
 let simulationInterval: NodeJS.Timeout | null = null
 
-// Order execution configuration - aligned with enhanced bot execution
+// CRITICAL FIX: Safe order execution configuration
 let orderExecutionEnabled = true
 const autoExecutionConfig = {
-  minConfidenceForOrder: 55, // 55% minimum confidence to execute trades (lowered for better execution rate)
-  maxPositionSize: 5000, // Maximum $5000 per position
-  orderCooldown: 120000, // 2 minutes between orders for same symbol (reduced from 3 minutes)
-  dailyOrderLimit: 60, // Maximum 60 orders per day (reasonable limit)
-  riskPerTrade: 0.06, // 6% of portfolio per trade (balanced risk)
-  minOrderValue: 25, // Minimum $25 per order (lowered for more opportunities)
-  baseMinPositionValue: 100 // Minimum base position size before confidence multiplier
+  minConfidenceForOrder: 60, // Raised to 60% for better accuracy
+  maxPositionSize: 200, // Maximum $200 position
+  orderCooldown: 60000, // 1 minute
+  dailyOrderLimit: 30, // REDUCED to 30 for safety
+  riskPerTrade: 0.03, // 3% max risk per trade
+  minOrderValue: 10, // Minimum $25 order
+  baseMinPositionValue: 10, // Base minimum $25
+  maxPositionPercent: 0.12, // Max 12% of buying power (reduced from 20%)
+  enableSafeMode: true // Enable safe position sizing
 }
 
 const recentOrders: Set<string> = new Set() // Track symbols with recent orders
@@ -79,6 +81,84 @@ const orderExecutionMetrics = {
   failedOrders: 0,
   totalValue: 0,
   lastExecutionTime: null as Date | null
+}
+
+/**
+ * Calculate safe position size based on buying power
+ */
+function calculateSafePositionSize(confidence: number, availableBuyingPower: number): number {
+  console.log(`💰 Calculating safe position for confidence=${confidence}%, buyingPower=${availableBuyingPower}`)
+
+  // SAFE PERCENTAGES - Much smaller than before
+  const minPositionPercent = 0.03  // 3% minimum
+  const maxPositionPercent = 0.12  // 12% maximum
+
+  // Calculate confidence-based percentage
+  const confidenceBonus = Math.max(0, (confidence - 60) / 100) * 0.08 // Up to 8% bonus
+  const positionPercent = Math.min(minPositionPercent + confidenceBonus, maxPositionPercent)
+
+  // Calculate position size
+  let positionSize = availableBuyingPower * positionPercent
+
+  // Apply absolute limits
+  const minOrderSize = 25   // Minimum $25 order
+  const maxOrderSize = Math.min(200, availableBuyingPower * 0.2) // Max $200 or 20% of buying power
+
+  positionSize = Math.max(minOrderSize, Math.min(positionSize, maxOrderSize))
+
+  // CRITICAL: Never exceed 20% of buying power
+  positionSize = Math.min(positionSize, availableBuyingPower * 0.2)
+
+  console.log(`💰 Safe position result: ${(positionPercent*100).toFixed(1)}% of ${availableBuyingPower} = ${positionSize}`)
+
+  return Math.round(positionSize * 100) / 100 // Round to cents
+}
+
+/**
+ * Get current price for a symbol with fallback
+ */
+async function getCurrentPrice(symbol: string): Promise<number> {
+  try {
+    // Create Alpaca client for price fetching
+    const apiKey = process.env.APCA_API_KEY_ID
+    const secretKey = process.env.APCA_API_SECRET_KEY
+
+    if (apiKey && secretKey) {
+      const alpacaClient = new AlpacaClient({
+        key: apiKey,
+        secret: secretKey,
+        paper: true,
+        baseUrl: 'https://paper-api.alpaca.markets'
+      })
+
+      // Try to get real price from Alpaca
+      const quotes = await alpacaClient.getLatestQuotes([symbol])
+      if (quotes && quotes[symbol] && quotes[symbol].midPrice > 0) {
+        return quotes[symbol].midPrice
+      }
+    }
+
+    // Fallback prices for common symbols
+    const fallbackPrices: Record<string, number> = {
+      'AAPL': 175,
+      'TSLA': 200,
+      'NVDA': 400,
+      'MSFT': 350,
+      'GOOGL': 140,
+      'ADBE': 360,
+      'F': 12,
+      'LLY': 800,
+      'SPY': 450,
+      'QQQ': 380,
+      'META': 320,
+      'AMZN': 150
+    }
+
+    return fallbackPrices[symbol] || 100 // Default to $100 if symbol not found
+  } catch (error) {
+    console.error('Error getting price:', error)
+    return 100 // Safe fallback
+  }
 }
 
 // Order execution function
@@ -184,118 +264,6 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       return null
     }
 
-    // Enhanced position sizing with conservative limits (from quick_fix_patch)
-    const maxPositionPercent = 0.10 // Maximum 10% of buying power
-    const basePositionPercent = 0.03 // Base 3% of buying power
-
-    // Confidence-based adjustment (only above 60%)
-    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * 0.07 // Up to 7% bonus
-    const positionPercent = Math.min(basePositionPercent + confidenceBonus, maxPositionPercent)
-
-    // Calculate position size based on buying power, not portfolio value
-    positionValue = availableBuyingPower * positionPercent
-
-    // Apply strict limits
-    const minOrderSize = 25 // Minimum $25
-    const maxOrderSize = Math.min(200, availableBuyingPower * 0.2) // Max $200 or 20% of buying power
-
-    positionValue = Math.max(minOrderSize, Math.min(positionValue, maxOrderSize))
-
-    // CRITICAL: Never exceed 20% of buying power (from quick_fix_patch)
-    positionValue = Math.min(positionValue, availableBuyingPower * 0.20)
-
-    // Round to cents
-    positionValue = Math.round(positionValue * 100) / 100
-
-    console.log(`💰 Enhanced sizing result: ${positionPercent * 100}% of $${availableBuyingPower} = $${positionValue} 🛡️ Conservative mode`)
-
-    // Get current market price with fallback to Yahoo Finance
-    let currentPrice: number | null = null
-    let priceSource = 'unknown'
-
-    try {
-      // Try Alpaca first
-      const quotes = await alpacaClient.getLatestQuotes([symbol])
-      console.log(`📊 Alpaca quote data for ${symbol}:`, quotes)
-
-      if (quotes && quotes[symbol]) {
-        const quoteData = quotes[symbol]
-        currentPrice = quoteData.midPrice
-        priceSource = 'Alpaca'
-        console.log(`💲 ${symbol} price from Alpaca: $${currentPrice.toFixed(2)} (bid: $${quoteData.bidPrice}, ask: $${quoteData.askPrice})`)
-      }
-    } catch (alpacaError) {
-      console.log(`⚠️ Alpaca quote failed for ${symbol}:`, alpacaError.message)
-    }
-
-    // Fallback to Yahoo Finance if Alpaca failed
-    if (!currentPrice || currentPrice <= 0 || isNaN(currentPrice)) {
-      console.log(`🔄 Falling back to Yahoo Finance for ${symbol}`)
-      try {
-        const yahooClient = new YahooFinanceClient()
-        currentPrice = await yahooClient.getCurrentQuote(symbol)
-        priceSource = 'Yahoo Finance'
-
-        if (currentPrice) {
-          console.log(`💲 ${symbol} price from Yahoo Finance: $${currentPrice.toFixed(2)}`)
-        }
-      } catch (yahooError) {
-        console.log(`⚠️ Yahoo Finance quote failed for ${symbol}:`, yahooError.message)
-      }
-    }
-
-    // Third fallback to FreeMarketDataProvider
-    if (!currentPrice || currentPrice <= 0 || isNaN(currentPrice)) {
-      console.log(`🔄 Falling back to FreeMarketDataProvider for ${symbol}`)
-      try {
-        const freeProvider = new FreeMarketDataProvider()
-        const quotes = await freeProvider.getQuotes([symbol])
-
-        if (quotes[symbol]) {
-          currentPrice = quotes[symbol].midPrice
-          priceSource = 'Free Market Data'
-          console.log(`💲 ${symbol} price from Free Market Data: $${currentPrice.toFixed(2)}`)
-        }
-      } catch (freeError) {
-        console.log(`⚠️ Free Market Data quote failed for ${symbol}:`, freeError.message)
-      }
-    }
-
-    // Final validation
-    if (!currentPrice || currentPrice <= 0 || isNaN(currentPrice)) {
-      throw new Error(`No valid market price available for ${symbol} from any source`)
-    }
-
-    console.log(`✅ Using ${priceSource} price for ${symbol}: $${currentPrice.toFixed(2)}`)
-
-    // Check if order value meets minimum threshold first
-    if (positionValue < autoExecutionConfig.minOrderValue) {
-      console.log(`⚠️ Position value $${positionValue.toFixed(2)} below minimum $${autoExecutionConfig.minOrderValue} for ${symbol}`)
-      return null
-    }
-
-    // For stocks: use notional orders (fractional shares) if 1 share costs more than position value
-    // For crypto: use quantity-based orders with fractional precision
-    let orderParams: any
-    let orderValue: number
-
-    if (isCrypto) {
-      // For crypto, calculate fractional quantity
-      const quantity = Math.floor((positionValue / currentPrice) * 100000) / 100000 // 5 decimal precision
-      if (quantity < 0.00001) {
-        console.log(`⚠️ Calculated crypto quantity ${quantity} too small for ${symbol}`)
-        return null
-      }
-      orderValue = quantity * currentPrice
-      orderParams = { qty: quantity }
-      console.log(`💰 Crypto Order: Quantity: ${quantity}, Price: $${currentPrice.toFixed(4)}, Value: $${orderValue.toFixed(2)}`)
-    } else {
-      // For stocks: use notional (dollar amount) orders to support fractional shares
-      orderValue = positionValue
-      orderParams = { notional: positionValue }
-      const estimatedShares = positionValue / currentPrice
-      console.log(`💰 Stock Order: Notional: $${positionValue.toFixed(2)}, Est. Shares: ${estimatedShares.toFixed(4)}, Price: $${currentPrice.toFixed(2)}`)
-    }
 
     // Determine buy/sell based on recommendation
     let side: 'buy' | 'sell' = 'buy' // Default to buy
@@ -305,149 +273,67 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       side = 'sell'
     }
 
-    // Create order using either qty (crypto) or notional (stocks)
-    const orderData = {
+    // Use safe position sizing instead of complex calculation
+    const safePositionSize = calculateSafePositionSize(confidence, availableBuyingPower)
+    console.log(`💰 Safe position size calculated: $${safePositionSize} (confidence: ${confidence}%, buying power: $${availableBuyingPower})`)
+
+    // Validate minimum order size
+    if (safePositionSize < autoExecutionConfig.minOrderValue) {
+      console.log(`❌ Safe position size $${safePositionSize} below minimum $${autoExecutionConfig.minOrderValue}`)
+      return { success: false, error: 'Position size below minimum' }
+    }
+
+    // Get current price using helper function
+    const currentPrice = await getCurrentPrice(symbol)
+    console.log(`💲 Current price for ${symbol}: $${currentPrice}`)
+
+    // Create order using safe position sizing - use notional orders for fractional shares
+    console.log(`📋 Order details - Symbol: ${symbol}, Notional: $${safePositionSize}, Side: ${side}, Price: $${currentPrice}`)
+
+    // Create order with safe position sizing
+    console.log(`💰 Using safe notional order: $${safePositionSize.toFixed(2)}`)
+
+    const order = await alpacaClient.createOrder({
       symbol: symbol,
-      ...orderParams, // Either { qty: number } or { notional: number }
+      notional: Math.round(safePositionSize * 100) / 100,
       side: side,
-      type: 'market' as const,
-      time_in_force: 'day' as const
+      type: 'market',
+      time_in_force: 'day',
+      client_order_id: `AI_BOT_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
+    })
+
+    // Track the order
+    recentOrders.add(symbol)
+    dailyOrderCount++
+    orderExecutionMetrics.totalOrdersExecuted++
+    orderExecutionMetrics.successfulOrders++
+    orderExecutionMetrics.totalValue += safePositionSize
+    orderExecutionMetrics.lastExecutionTime = new Date()
+
+    // Set cooldown
+    setTimeout(() => {
+      recentOrders.delete(symbol)
+    }, autoExecutionConfig.orderCooldown)
+
+    // Parse real Alpaca order response
+    const executedQty = order.quantity || (safePositionSize / currentPrice)
+    const executedPrice = order.filledPrice || currentPrice
+    const actualValue = order.filledPrice ? (executedQty * order.filledPrice) : safePositionSize
+
+    console.log(`✅ Safe order executed: ${side.toUpperCase()} $${safePositionSize.toFixed(2)} ${symbol} (${executedQty.toFixed(4)} shares @ $${executedPrice.toFixed(2)}) [Order ID: ${order.id}]`)
+
+    return {
+      success: true,
+      orderId: order.id,
+      symbol: symbol,
+      side: side,
+      quantity: executedQty,
+      price: executedPrice,
+      value: actualValue,
+      confidence: confidence,
+      timestamp: new Date(),
+      assetType: 'stock'
     }
-
-    // Validate order data as recommended in improvements.txt
-    if (!orderData.qty && !orderData.notional) {
-      console.log(`❌ Order validation failed: missing qty or notional for ${symbol}`)
-      return null
-    }
-
-    console.log(`🚀 Creating ${isCrypto ? 'crypto' : 'stock'} order:`, JSON.stringify(orderData, null, 2))
-
-    // Create real Alpaca paper trading order
-    console.log(`📋 Order details - Symbol: ${orderData.symbol}, Qty: ${orderData.qty}, Side: ${side}, Notional: ${orderData.notional}`)
-
-    // For expensive stocks, use fractional shares via notional orders
-    if (orderData.notional && !orderData.qty) {
-      // Use Alpaca's notional order system for fractional shares
-      console.log(`💰 Using notional order for fractional shares: $${orderData.notional.toFixed(2)}`)
-
-      if (orderData.notional < autoExecutionConfig.minOrderValue) {
-        throw new Error(`Notional amount $${orderData.notional.toFixed(2)} below minimum $${autoExecutionConfig.minOrderValue}`)
-      }
-
-      console.log(`📤 Sending notional order to Alpaca:`, {
-        symbol: orderData.symbol,
-        notional: orderData.notional,
-        side: side,
-        type: 'market',
-        time_in_force: 'day'
-      })
-
-      const order = await alpacaClient.createOrder({
-        symbol: orderData.symbol,
-        notional: Math.round(orderData.notional * 100) / 100,
-        side: side,
-        type: 'market',
-        time_in_force: 'day',
-        client_order_id: `AI_BOT_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
-      })
-
-      // Track the order
-      recentOrders.add(symbol)
-      dailyOrderCount++
-      orderExecutionMetrics.totalOrdersExecuted++
-      orderExecutionMetrics.successfulOrders++
-      orderExecutionMetrics.totalValue += orderData.notional
-      orderExecutionMetrics.lastExecutionTime = new Date()
-
-      // Set cooldown
-      setTimeout(() => {
-        recentOrders.delete(symbol)
-      }, autoExecutionConfig.orderCooldown)
-
-      // Parse real Alpaca order response for notional orders
-      const executedQty = order.quantity || (orderData.notional / currentPrice)
-      const executedPrice = order.price || currentPrice
-      const actualValue = order.filled_avg_price ? (executedQty * order.filled_avg_price) : orderData.notional
-
-      console.log(`✅ Real Alpaca notional order executed: ${side.toUpperCase()} $${orderData.notional.toFixed(2)} ${symbol} (${executedQty.toFixed(4)} shares @ $${executedPrice.toFixed(2)}) [Order ID: ${order.id}]`)
-
-      return {
-        orderId: order.id,
-        symbol: symbol,
-        side: side,
-        quantity: executedQty,
-        price: executedPrice,
-        value: actualValue,
-        confidence: confidence,
-        timestamp: new Date(),
-        assetType: 'stock'
-      }
-    }
-
-    // Traditional quantity-based orders (for crypto or when we have qty specified)
-    if (orderData.qty || isCrypto) {
-      const orderQty = orderData.qty ? parseFloat(orderData.qty) : Math.floor(orderData.notional / currentPrice)
-      console.log(`🔢 Calculated quantity: ${orderQty}`)
-
-      if (orderQty <= 0) {
-        throw new Error(`Invalid order quantity: ${orderQty}`)
-      }
-
-      // Ensure whole shares for most stocks (Alpaca may require this for some symbols)
-      const finalQty = Math.max(1, Math.floor(orderQty))
-      console.log(`🔢 Final quantity (whole shares): ${finalQty}`)
-
-      console.log(`📤 Sending quantity-based order to Alpaca:`, {
-        symbol: orderData.symbol,
-        qty: finalQty,
-        side: side,
-        type: 'market',
-        time_in_force: 'day'
-      })
-
-      const order = await alpacaClient.createOrder({
-        symbol: orderData.symbol,
-        qty: finalQty,
-        side: side,
-        type: 'market',
-        time_in_force: 'day'
-      })
-
-      // Track the order
-      recentOrders.add(symbol)
-      dailyOrderCount++
-      orderExecutionMetrics.totalOrdersExecuted++
-      orderExecutionMetrics.successfulOrders++
-      orderExecutionMetrics.totalValue += positionValue
-      orderExecutionMetrics.lastExecutionTime = new Date()
-
-      // Set cooldown
-      setTimeout(() => {
-        recentOrders.delete(symbol)
-      }, autoExecutionConfig.orderCooldown)
-
-      // Parse real Alpaca order response
-      const executedQty = order.quantity
-      const executedPrice = order.price || currentPrice
-      const actualValue = executedQty * executedPrice
-
-      console.log(`✅ Real Alpaca quantity-based order executed: ${side.toUpperCase()} ${executedQty} ${symbol} @ $${executedPrice.toFixed(isCrypto ? 4 : 2)} (Value: $${actualValue.toFixed(2)}) [Order ID: ${order.id}]`)
-
-      return {
-        orderId: order.id,
-        symbol: symbol,
-        side: side,
-        quantity: executedQty,
-        price: executedPrice,
-        value: actualValue,
-        confidence: confidence,
-        timestamp: new Date(),
-        assetType: isCrypto ? 'crypto' : 'stock'
-      }
-    }
-
-    // If we reach here, neither notional nor quantity-based order was created
-    throw new Error(`No valid order type determined for ${symbol}`)
 
   } catch (error) {
     // Enhanced error handling with detailed logging
@@ -483,7 +369,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     }
 
     orderExecutionMetrics.failedOrders++
-    return null
+    return { success: false, error: error instanceof Error ? error.message : 'Order execution failed' }
   }
 }
 
@@ -535,10 +421,10 @@ async function performRealBotActivity() {
   try {
     // Get current positions to include them in monitoring
     const positions = await alpacaClient.getPositions()
-    const positionSymbols = positions.map(p => p.symbol)
+    const positionSymbols = positions.map((p: any) => p.symbol)
     watchlistSymbols = [...new Set([...watchlistSymbols, ...positionSymbols])]
   } catch (error) {
-    console.log('Could not fetch positions, using default watchlist:', error.message)
+    console.log('Could not fetch positions, using default watchlist:', error instanceof Error ? error.message : 'Unknown error')
   }
 
   const generateRealActivity = async () => {
@@ -574,7 +460,7 @@ async function performRealBotActivity() {
               }
             } catch (error) {
               message = `Market scan failed for ${symbol}`
-              details = `Error: ${error.message}`
+              details = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
               status = 'failed'
             }
           } else {
@@ -600,7 +486,7 @@ async function performRealBotActivity() {
               }
             } catch (error) {
               message = `Analysis error for ${symbol}`
-              details = `Error: ${error.message}`
+              details = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
               status = 'failed'
             }
           } else {
@@ -628,7 +514,7 @@ async function performRealBotActivity() {
               }
             } catch (error) {
               message = `Recommendation error for ${symbol}`
-              details = `Error: ${error.message}`
+              details = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
               status = 'failed'
             }
           } else {

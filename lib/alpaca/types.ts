@@ -691,15 +691,15 @@ export type {
 // Default Export for Convenience
 // =============================================================================
 
-export default {
-  // Re-export commonly used types
-  type AlpacaAccount,
-  type AlpacaPosition,
-  type AlpacaOrder,
-  type AlpacaQuote,
-  type AlpacaBar,
-  type CreateOrderRequest,
-  type AlpacaConfig,
-  type ConnectionStatus
+// Re-export commonly used types for convenience
+export type {
+  AlpacaAccount,
+  AlpacaPosition,
+  AlpacaOrder,
+  AlpacaQuote,
+  AlpacaBar,
+  CreateOrderRequest,
+  AlpacaConfig,
+  ConnectionStatus
 }
   

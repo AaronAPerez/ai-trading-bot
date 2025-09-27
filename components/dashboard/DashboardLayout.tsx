@@ -8,10 +8,7 @@ import { useRouter } from 'next/navigation'
 import {
   Menu,
   X,
-  Activity,
-  TrendingUp,
   Settings,
-  HelpCircle,
   AlertTriangle,
   Wifi,
   WifiOff,
@@ -19,9 +16,8 @@ import {
   Shield,
   PieChart,
   BarChart3,
-  Home
 } from 'lucide-react'
-import type { DashboardLayoutProps, BotMetrics } from '@/types/trading'
+import type { DashboardLayoutProps } from '@/types/trading'
 
 /**
  * Main dashboard layout component providing responsive navigation,
@@ -40,11 +36,9 @@ const DashboardLayout = ({
 
   // Navigation menu items with icons and labels
   const navigationItems = [
-    { id: 'trading', label: 'Trading', icon: Bot, path: '/trading' },
     { id: 'positions', label: 'Positions', icon: PieChart, path: '/positions' },
     { id: 'orders', label: 'Orders', icon: BarChart3, path: '/orders' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
-    { id: 'test', label: 'Test Fix', icon: AlertTriangle, path: '/test' }
   ]
 
   /**
