@@ -49,6 +49,7 @@ interface TradesOrdersTableProps {
   maxItems?: number
   compact?: boolean
   useRealData?: boolean
+  defaultTab?: 'trades' | 'orders'
 }
 
 export default function TradesOrdersTable({
@@ -59,9 +60,10 @@ export default function TradesOrdersTable({
   showOrders = true,
   maxItems = 20,
   compact = false,
-  useRealData = true
+  useRealData = true,
+  defaultTab = 'trades'
 }: TradesOrdersTableProps) {
-  const [activeTab, setActiveTab] = useState<'trades' | 'orders'>('trades')
+  const [activeTab, setActiveTab] = useState<'trades' | 'orders'>(defaultTab)
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
 
   // Fetch real data when useRealData is true

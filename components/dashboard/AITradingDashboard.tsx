@@ -107,191 +107,177 @@ export default function AITradingDashboard() {
       onToggleMode={() => {}}
       botStatus={botMetrics}
     >
-         {/* AI Trading Controls */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
-                <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
-              </div>
+         {/* AI Trading Engine Header */}
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+              </svg>
             </div>
-
-            {/* AI Trading Bot Button */}
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-6">
-                <div className={`flex items-center space-x-2`}>
-                  <div className={`w-3 h-3 rounded-full ${
-                    tradingBot.metrics.isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'
-                  }`} />
-                  <span className={`text-md font-medium ${
-                    tradingBot.metrics.isRunning ? 'text-green-400' : 'text-gray-400'
-                  }`}>
-                    {tradingBot.metrics.isRunning ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <button
-                  onClick={tradingBot.metrics.isRunning ? handleStop : () => handleStart(defaultBotConfig)}
-                  className={`px-6 py-2 rounded-lg font-semibold text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${
-                    tradingBot.metrics.isRunning
-                      ? 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500'
-                      : 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500'
-                  }`}
-                >
-                  {tradingBot.metrics.isRunning ? 'Stop' : 'Start'} AI Bot
-                </button>
-              </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
+              <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
             </div>
           </div>
 
 
-      {/* AI Trading Bot Control with Portfolio Metrics and Activity Feed */}
-      <div className="mb-8">
-        <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border border-blue-700/50 rounded-xl p-6 shadow-2xl">
+      {/* Main Dashboard Layout with Right Sidebar */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-8">
 
-          {/* Key Financial Metrics */}
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Portfolio Overview</h3>
-            <div className="flex items-center space-x-2 text-xs text-gray-400">
-              <div className={`w-2 h-2 rounded-full ${account.isLoading || positions.isLoading ? 'bg-yellow-400 animate-pulse' : account.error || positions.error ? 'bg-red-400' : 'bg-green-400'}`}></div>
-              <span>
-                {account.isLoading || positions.isLoading ? 'Updating...' :
-                 account.error || positions.error ? 'Connection error' :
-                 'Live data connected'}
-              </span>
-              <span className="text-gray-500">•</span>
-              <span>Refreshes every 5s</span>
-              <span className="text-gray-500">•</span>
-              <span>Last updated: {formatLastUpdated()}</span>
+        {/* Main Content Area (3 columns) */}
+        <div className="xl:col-span-3">
+          {/* AI Trading Bot Control with Portfolio Metrics and Trading Activity */}
+          <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border border-blue-700/50 rounded-xl p-6 shadow-2xl">
+
+            {/* Key Financial Metrics */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Portfolio Overview</h3>
+              <div className="flex items-center space-x-2 text-xs text-gray-400">
+                <div className={`w-2 h-2 rounded-full ${account.isLoading || positions.isLoading ? 'bg-yellow-400 animate-pulse' : account.error || positions.error ? 'bg-red-400' : 'bg-green-400'}`}></div>
+                <span>
+                  {account.isLoading || positions.isLoading ? 'Updating...' :
+                   account.error || positions.error ? 'Connection error' :
+                   'Live data connected'}
+                </span>
+                <span className="text-gray-500">•</span>
+                <span>Refreshes every 5s</span>
+                <span className="text-gray-500">•</span>
+                <span>Last updated: {formatLastUpdated()}</span>
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
-
-            <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${positions.isLoading ? 'ring-2 ring-blue-500/50' : ''}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-2">
-                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                  </svg>
-                  <span className="text-gray-300 text-sm font-medium">Invested Amount</span>
+              <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${positions.isLoading ? 'ring-2 ring-blue-500/50' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                    </svg>
+                    <span className="text-gray-300 text-sm font-medium">Invested Amount</span>
+                  </div>
+                  {positions.isLoading && (
+                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                  )}
                 </div>
-                {positions.isLoading && (
-                  <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                )}
-              </div>
-              <div className="text-2xl font-bold text-white">
-                {positions.isLoading ? (
-                  <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
-                ) : positions.error ? (
-                  <span className="text-red-400 text-sm">Error loading</span>
-                ) : (
-                  formatCurrency(investedAmount)
-                )}
-              </div>
-              <div className="text-xs text-gray-400 mt-1">
-                {positions.isLoading ? 'Loading...' : positions.data ? `${positions.data.length} active positions` : 'No positions'}
-              </div>
-            </div>
-
-            <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${(positions.isLoading || account.isLoading) ? 'ring-2 ring-yellow-500/50' : ''}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-2">
-                  <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z"/>
-                  </svg>
-                  <span className="text-gray-300 text-sm font-medium">Total P&L</span>
+                <div className="text-2xl font-bold text-white">
+                  {positions.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
+                  ) : positions.error ? (
+                    <span className="text-red-400 text-sm">Error loading</span>
+                  ) : (
+                    formatCurrency(investedAmount)
+                  )}
                 </div>
-                {(positions.isLoading || account.isLoading) && (
-                  <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
-                )}
-              </div>
-              <div className="text-2xl font-bold">
-                {positions.isLoading || account.isLoading ? (
-                  <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
-                ) : (positions.error || account.error) ? (
-                  <span className="text-red-400 text-sm">Error loading</span>
-                ) : (
-                  <span className={totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}>
-                    {totalPnL >= 0 ? '+' : ''}{formatCurrency(totalPnL)}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-gray-400 mt-1">
-                {account.isLoading ? 'Loading daily P&L...' : `Today: ${dayPnL >= 0 ? '+' : ''}${formatCurrency(dayPnL)}`}
-              </div>
-            </div>
-
-            <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${account.isLoading ? 'ring-2 ring-green-500/50' : ''}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-2">
-                  <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
-                  </svg>
-                  <span className="text-gray-300 text-sm font-medium">Total Balance</span>
+                <div className="text-xs text-gray-400 mt-1">
+                  {positions.isLoading ? 'Loading...' : positions.data ? `${positions.data.length} active positions` : 'No positions'}
                 </div>
-                {account.isLoading && (
-                  <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
-                )}
               </div>
-              <div className="text-2xl font-bold text-white">
-                {account.isLoading ? (
-                  <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
-                ) : account.error ? (
-                  <span className="text-red-400 text-sm">Error loading</span>
-                ) : (
-                  formatCurrency(totalBalance)
-                )}
+
+              <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${(positions.isLoading || account.isLoading) ? 'ring-2 ring-yellow-500/50' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z"/>
+                    </svg>
+                    <span className="text-gray-300 text-sm font-medium">Total P&L</span>
+                  </div>
+                  {(positions.isLoading || account.isLoading) && (
+                    <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+                  )}
+                </div>
+                <div className="text-2xl font-bold">
+                  {positions.isLoading || account.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
+                  ) : (positions.error || account.error) ? (
+                    <span className="text-red-400 text-sm">Error loading</span>
+                  ) : (
+                    <span className={totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}>
+                      {totalPnL >= 0 ? '+' : ''}{formatCurrency(totalPnL)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  {account.isLoading ? 'Loading daily P&L...' : `Today: ${dayPnL >= 0 ? '+' : ''}${formatCurrency(dayPnL)}`}
+                </div>
               </div>
-              <div className="text-xs text-green-400 mt-1">
-                {account.isLoading ? 'Loading buying power...' : `Buying Power: ${formatCurrency(buyingPower)}`}
+
+              <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${account.isLoading ? 'ring-2 ring-green-500/50' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
+                    </svg>
+                    <span className="text-gray-300 text-sm font-medium">Total Balance</span>
+                  </div>
+                  {account.isLoading && (
+                    <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
+                  )}
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {account.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
+                  ) : account.error ? (
+                    <span className="text-red-400 text-sm">Error loading</span>
+                  ) : (
+                    formatCurrency(totalBalance)
+                  )}
+                </div>
+                <div className="text-xs text-green-400 mt-1">
+                  {account.isLoading ? 'Loading buying power...' : `Buying Power: ${formatCurrency(buyingPower)}`}
+                </div>
               </div>
             </div>
 
-
-          </div>
-
-     
-
-          {/* Integrated AI Bot Activity Feed and Trading Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* AI Bot Activity Feed */}
-            <div className="bg-gray-900/30 rounded-lg border border-gray-700/50 h-96">
+            {/* All Trading Activity (Manual + AI Trades) */}
+            <div className="bg-gray-900/30 rounded-lg border border-gray-700/50">
               <div className="p-4 border-b border-gray-700/50">
                 <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                  <h4 className="text-lg font-semibold text-white">AI Bot Activity</h4>
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z"/>
+                  </svg>
+                  <h4 className="text-lg font-semibold text-white">All Trading Activity</h4>
+                  <span className="text-xs text-gray-500">(Manual + AI Trades)</span>
                 </div>
               </div>
-              <div className="p-4 h-90 overflow-y-auto">
-                {aiActivity.activities.length > 0 || aiActivity.isSimulating ? (
-                  <AIBotActivity
-                    refreshInterval={5000}
-                    maxActivities={6}
-                    showControls={false}
-                    compact={true}
-                  />
-                ) : (
-                  <div className="text-center py-8">
-                    <svg className="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
-                    </svg>
-                    <div className="text-gray-400 text-sm">
-                      Activity feed will appear here when AI Trading is started
-                    </div>
-                  </div>
-                )}
+              <div className="p-4">
+                <TradesOrdersTable
+                  maxItems={10}
+                  compact={true}
+                  showTrades={true}
+                  showOrders={true}
+                  useRealData={true}
+                  defaultTab="orders"
+                />
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* AI Live Trades Table */}
-            <div>
+        {/* Right Sidebar (1 column) - AI Bot Activity */}
+        <div className="xl:col-span-1">
+          <div className="bg-gray-900/40 rounded-lg border border-gray-700/50 h-fit sticky top-4">
+            <div className="p-4 border-b border-gray-700/50">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                <h4 className="text-lg font-semibold text-white">AI Bot Activity</h4>
+              </div>
+            </div>
+            <div className="p-4">
+              <AIBotActivity
+                refreshInterval={5000}
+                maxActivities={12}
+                showControls={true}
+                compact={true}
+                botIsRunning={tradingBot.metrics.isRunning}
+                onStartBot={() => handleStart(defaultBotConfig)}
+                onStopBot={handleStop}
+              />
+            </div>
+
+            {/* AI Live Trades in Sidebar */}
+            <div className="border-t border-gray-700/50">
               <AILiveTradesTable
-                maxItems={8}
+                maxItems={6}
                 compact={true}
                 showHeader={true}
               />
@@ -308,26 +294,6 @@ export default function AITradingDashboard() {
           isLoading={account.isLoading || positions.isLoading}
           error={account.error || positions.error}
         />
-      </div>
-
-      {/* All Trades and Orders Section */}
-      <div className="mb-8">
-        <div className="bg-gray-900/40 rounded-lg border border-gray-700/50 p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z"/>
-            </svg>
-            <h3 className="text-lg font-semibold text-white">All Trading Activity</h3>
-            <span className="text-xs text-gray-500">(Manual + AI Trades)</span>
-          </div>
-          <TradesOrdersTable
-            maxItems={15}
-            compact={false}
-            showTrades={true}
-            showOrders={true}
-            useRealData={true}
-          />
-        </div>
       </div>
 
       <AIRecommendationsList

@@ -8,8 +8,8 @@ import {
   CheckCircleIcon,
   BoltIcon,
   EyeIcon,
-  TrendingUpIcon,
-  TrendingDownIcon
+  ChevronUpIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline'
 import { useAlpacaTrades, useAlpacaPositions, useMarketData } from '@/hooks/api/useAlpacaData'
 import { useRealTimeMarketData } from '@/hooks/useRealTimeMarketData'
@@ -106,6 +106,15 @@ export default function AILiveTradesTable({
     const positions = positionsQuery.data || []
     const activities = aiActivity.activities || []
 
+    // Debug logging to see what data we're getting
+    console.log('AILiveTradesTable Debug:', {
+      tradesCount: trades.length,
+      positionsCount: positions.length,
+      activitiesCount: activities.length,
+      tradesData: trades.slice(0, 2), // Show first 2 trades for debugging
+      positionsData: positions.slice(0, 2) // Show first 2 positions for debugging
+    })
+
     // Get trade activities from AI bot
     const tradeActivities = activities.filter(activity => activity.type === 'trade')
 
@@ -115,14 +124,8 @@ export default function AILiveTradesTable({
       positionMap.set(position.symbol, position)
     })
 
-    // Show all recent trades and current positions
+    // Show all trades - removed any filtering to display all available data
     const filteredTrades = trades
-      .filter((trade: any) => {
-        // Show all recent trades (last 24 hours) when we have data
-        const tradeTime = new Date(trade.timestamp).getTime()
-        const now = Date.now()
-        return (now - tradeTime) < 86400000 // Within last 24 hours
-      })
       .map((trade: any) => {
         const relatedActivity = tradeActivities.find(activity =>
           activity.symbol === trade.symbol &&
@@ -154,22 +157,22 @@ export default function AILiveTradesTable({
           id: trade.id,
           symbol: trade.symbol,
           side: trade.side,
-          quantity: trade.quantity,
-          price: trade.price,
-          value: trade.value,
-          status: 'filled',
-          timestamp: new Date(trade.timestamp),
-          type: trade.type || 'market',
+          quantity: parseFloat(trade.quantity || trade.qty || '0'),
+          price: parseFloat(trade.price || trade.filled_avg_price || '0'),
+          value: parseFloat(trade.value || (trade.quantity * trade.price) || '0'),
+          status: trade.status || 'filled',
+          timestamp: new Date(trade.timestamp || trade.submitted_at || trade.created_at),
+          type: trade.type || trade.order_type || 'market',
           confidence: relatedActivity?.confidence,
-          aiGenerated: !!relatedActivity || aiActivity.isSimulating,
+          aiGenerated: !!relatedActivity, // Only mark as AI if actually linked to AI activity
           activityId: relatedActivity?.id,
           // Enhanced live data
           currentPrice: livePrice,
           unrealizedPnL,
           unrealizedPnLPercent,
           marketValue,
-          dayChange: livePrice - trade.price,
-          dayChangePercent: livePrice > 0 ? (livePrice - trade.price) / trade.price : 0
+          dayChange: livePrice - (parseFloat(trade.price || trade.filled_avg_price || '0')),
+          dayChangePercent: livePrice > 0 ? (livePrice - parseFloat(trade.price || trade.filled_avg_price || '0')) / parseFloat(trade.price || trade.filled_avg_price || '1') : 0
         }
       })
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -237,11 +240,18 @@ export default function AILiveTradesTable({
           <div className="text-center py-8">
             <BoltIcon className="w-12 h-12 text-gray-600 mx-auto mb-3" />
             <div className="text-gray-400 text-sm">
-              No trading positions found
+              No trading data available
             </div>
             <div className="text-gray-500 text-xs mt-1">
-              Execute some trades to see live position data with P&L
+              {realTradesQuery.error ? 'Error loading trades' :
+               realTradesQuery.isLoading ? 'Loading trades...' :
+               'No trades found in your Alpaca account'}
             </div>
+            {realTradesQuery.error && (
+              <div className="text-red-400 text-xs mt-2">
+                {String(realTradesQuery.error)}
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -311,9 +321,9 @@ export default function AILiveTradesTable({
                         trade.dayChange >= 0 ? 'text-green-400' : 'text-red-400'
                       }`}>
                         {trade.dayChange >= 0 ? (
-                          <TrendingUpIcon className="w-3 h-3 mr-1" />
+                          <ChevronUpIcon className="w-3 h-3 mr-1" />
                         ) : (
-                          <TrendingDownIcon className="w-3 h-3 mr-1" />
+                          <ChevronDownIcon className="w-3 h-3 mr-1" />
                         )}
                         {formatCurrency(Math.abs(trade.dayChange))}
                       </div>

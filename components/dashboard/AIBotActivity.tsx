@@ -39,13 +39,20 @@ interface AIBotActivityProps {
   maxActivities?: number
   showControls?: boolean
   compact?: boolean
+  // AI Bot Control Props
+  botIsRunning?: boolean
+  onStartBot?: () => void
+  onStopBot?: () => void
 }
 
 export default function AIBotActivity({
   refreshInterval = 5000,
   maxActivities = 15,
   showControls = true,
-  compact = false
+  compact = false,
+  botIsRunning = false,
+  onStartBot,
+  onStopBot
 }: AIBotActivityProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
@@ -134,19 +141,34 @@ export default function AIBotActivity({
           <div className="flex items-center space-x-2">
             <Bot className="w-5 h-5 text-blue-400" />
             {/* <span className="font-semibold text-white">AI Bot Activity</span> */}
-            <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
+            <div className={`w-2 h-2 rounded-full ${botIsRunning || isSimulating ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
           </div>
-          <Button
+          {/* <Button
             onClick={() => setIsCollapsed(!isCollapsed)}
             variant="ghost"
             size="sm"
           >
             {isCollapsed ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-          </Button>
+          </Button> */}
         </div>
 
         {!isCollapsed && (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {/* AI Bot Control Button for Compact Mode */}
+            {(onStartBot || onStopBot) && (
+              <div className="flex items-center justify-center">
+                <Button
+                  onClick={botIsRunning ? onStopBot : onStartBot}
+                  variant={botIsRunning ? "danger" : "primary"}
+                  size="sm"
+                  className="w-full"
+                >
+                  {botIsRunning ? <Square className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                  {botIsRunning ? 'Stop' : 'Start'} AI Bot
+                </Button>
+              </div>
+            )}
+
             {metrics && (
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -183,9 +205,9 @@ export default function AIBotActivity({
           <div>
             <h3 className="text-lg font-semibold text-white">AI Bot Activity Monitor</h3>
             <div className="flex items-center space-x-2 text-sm">
-              <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
+              <div className={`w-2 h-2 rounded-full ${botIsRunning || isSimulating ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
               <span className="text-gray-400">
-                {isSimulating ? 'Active' : 'Inactive'}
+                {botIsRunning || isSimulating ? 'Active' : 'Inactive'}
                 {metrics && ` • Uptime: ${formatUptime(metrics.uptime)}`}
               </span>
             </div>
@@ -193,35 +215,53 @@ export default function AIBotActivity({
         </div>
 
         {showControls && (
-          <div className="flex items-center space-x-2">
-            <Button
-              onClick={refreshActivity}
-              variant="ghost"
-              size="sm"
-              disabled={isLoading}
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
+          <div className="flex flex-col space-y-2">
+            {/* AI Bot Control Button */}
+            {(onStartBot || onStopBot) && (
+              <div className="flex items-center justify-center">
+                <Button
+                  onClick={botIsRunning ? onStopBot : onStartBot}
+                  variant={botIsRunning ? "danger" : "primary"}
+                  size="sm"
+                  className="w-full"
+                >
+                  {botIsRunning ? <Square className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                  {botIsRunning ? 'Stop' : 'Start'} AI Bot
+                </Button>
+              </div>
+            )}
 
-            <Button
-              onClick={toggleOrderExecution}
-              variant={orderExecution?.enabled ? "danger" : "success"}
-              size="sm"
-              disabled={isLoading}
-            >
-              <Settings className="w-4 h-4" />
-              {orderExecution?.enabled ? 'Disable Trades' : 'Enable Trades'}
-            </Button>
+            {/* Activity Controls */}
+            <div className="flex items-center space-x-2">
+              <Button
+                onClick={refreshActivity}
+                variant="ghost"
+                size="sm"
+                disabled={isLoading}
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </Button>
 
-            <Button
-              onClick={isSimulating ? stopSimulation : startSimulation}
-              variant={isSimulating ? "danger" : "success"}
-              size="sm"
-              disabled={isLoading}
-            >
-              {isSimulating ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              {isSimulating ? 'Stop' : 'Start'}
-            </Button>
+              <Button
+                onClick={toggleOrderExecution}
+                variant={orderExecution?.enabled ? "danger" : "primary"}
+                size="sm"
+                disabled={isLoading}
+              >
+                <Settings className="w-4 h-4" />
+                {orderExecution?.enabled ? 'Disable Trades' : 'Enable Trades'}
+              </Button>
+
+              <Button
+                onClick={isSimulating ? stopSimulation : startSimulation}
+                variant={isSimulating ? "danger" : "primary"}
+                size="sm"
+                disabled={isLoading}
+              >
+                {isSimulating ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                {isSimulating ? 'Stop' : 'Start'}
+              </Button>
+            </div>
           </div>
         )}
       </div>
