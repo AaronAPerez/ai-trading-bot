@@ -56,12 +56,37 @@ export default function AITradingDashboard() {
     await aiActivity.stopSimulation()
   }
 
-  // Calculate financial metrics
-  const totalBalance = account.data ? parseFloat(account.data.equity) : 0
-  const buyingPower = account.data ? parseFloat(account.data.buying_power) : 0
-  const investedAmount = positions.data ? positions.data.reduce((total, pos) => total + (parseFloat(pos.market_value) || 0), 0) : 0
-  const totalPnL = positions.data ? positions.data.reduce((total, pos) => total + (parseFloat(pos.unrealized_pl) || 0), 0) : 0
-  const dayPnL = account.data ? parseFloat(account.data.portfolio_value || '0') - parseFloat(account.data.last_equity || '0') : 0
+  // Calculate financial metrics with proper error handling
+  const totalBalance = account.data ? parseFloat(account.data.equity || account.data.portfolio_value || '0') : 0
+  const buyingPower = account.data ? parseFloat(account.data.buying_power || '0') : 0
+  const investedAmount = positions.data ? positions.data.reduce((total, pos) => total + (parseFloat(pos.market_value || pos.marketValue || '0')), 0) : 0
+  const totalPnL = positions.data ? positions.data.reduce((total, pos) => total + (parseFloat(pos.unrealized_pl || pos.unrealizedPnL || '0')), 0) : 0
+  const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
+
+  // Format currency helper
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value || 0)
+  }
+
+  // Format percentage helper
+  const formatPercentage = (value: number) => {
+    return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(2)}%`
+  }
+
+  // Format last updated time
+  const formatLastUpdated = () => {
+    return new Date().toLocaleTimeString('en-US', {
+      hour12: true,
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  }
 
   // Create proper BotMetrics object
   const botMetrics = {
@@ -129,65 +154,101 @@ export default function AITradingDashboard() {
         <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border border-blue-700/50 rounded-xl p-6 shadow-2xl">
 
           {/* Key Financial Metrics */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Portfolio Overview</h3>
+            <div className="flex items-center space-x-2 text-xs text-gray-400">
+              <div className={`w-2 h-2 rounded-full ${account.isLoading || positions.isLoading ? 'bg-yellow-400 animate-pulse' : account.error || positions.error ? 'bg-red-400' : 'bg-green-400'}`}></div>
+              <span>
+                {account.isLoading || positions.isLoading ? 'Updating...' :
+                 account.error || positions.error ? 'Connection error' :
+                 'Live data connected'}
+              </span>
+              <span className="text-gray-500">•</span>
+              <span>Refreshes every 5s</span>
+              <span className="text-gray-500">•</span>
+              <span>Last updated: {formatLastUpdated()}</span>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
 
-            <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
-              <div className="flex items-center space-x-2 mb-2">
-                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                </svg>
-                <span className="text-gray-300 text-sm font-medium">Invested Amount</span>
+            <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${positions.isLoading ? 'ring-2 ring-blue-500/50' : ''}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                  </svg>
+                  <span className="text-gray-300 text-sm font-medium">Invested Amount</span>
+                </div>
+                {positions.isLoading && (
+                  <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                )}
               </div>
               <div className="text-2xl font-bold text-white">
                 {positions.isLoading ? (
                   <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
+                ) : positions.error ? (
+                  <span className="text-red-400 text-sm">Error loading</span>
                 ) : (
-                  `$${investedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  formatCurrency(investedAmount)
                 )}
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                {positions.data ? `${positions.data.length} positions` : 'No positions'}
+                {positions.isLoading ? 'Loading...' : positions.data ? `${positions.data.length} active positions` : 'No positions'}
               </div>
             </div>
 
-            <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
-              <div className="flex items-center space-x-2 mb-2">
-                <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z"/>
-                </svg>
-                <span className="text-gray-300 text-sm font-medium">Total P&L</span>
+            <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${(positions.isLoading || account.isLoading) ? 'ring-2 ring-yellow-500/50' : ''}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z"/>
+                  </svg>
+                  <span className="text-gray-300 text-sm font-medium">Total P&L</span>
+                </div>
+                {(positions.isLoading || account.isLoading) && (
+                  <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+                )}
               </div>
               <div className="text-2xl font-bold">
                 {positions.isLoading || account.isLoading ? (
                   <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
+                ) : (positions.error || account.error) ? (
+                  <span className="text-red-400 text-sm">Error loading</span>
                 ) : (
                   <span className={totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}>
-                    {totalPnL >= 0 ? '+' : ''}${totalPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {totalPnL >= 0 ? '+' : ''}{formatCurrency(totalPnL)}
                   </span>
                 )}
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                Today: {dayPnL >= 0 ? '+' : ''}${dayPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {account.isLoading ? 'Loading daily P&L...' : `Today: ${dayPnL >= 0 ? '+' : ''}${formatCurrency(dayPnL)}`}
               </div>
             </div>
 
-            <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
-              <div className="flex items-center space-x-2 mb-2">
-                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
-                </svg>
-                <span className="text-gray-300 text-sm font-medium">Total Balance</span>
+            <div className={`bg-gray-900/40 rounded-lg p-4 border border-gray-700/50 transition-all duration-300 ${account.isLoading ? 'ring-2 ring-green-500/50' : ''}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
+                  </svg>
+                  <span className="text-gray-300 text-sm font-medium">Total Balance</span>
+                </div>
+                {account.isLoading && (
+                  <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
+                )}
               </div>
               <div className="text-2xl font-bold text-white">
                 {account.isLoading ? (
                   <div className="animate-pulse bg-gray-600 h-8 w-24 rounded"></div>
+                ) : account.error ? (
+                  <span className="text-red-400 text-sm">Error loading</span>
                 ) : (
-                  `$${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  formatCurrency(totalBalance)
                 )}
               </div>
               <div className="text-xs text-green-400 mt-1">
-                Buying Power: ${buyingPower.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                {account.isLoading ? 'Loading buying power...' : `Buying Power: ${formatCurrency(buyingPower)}`}
               </div>
             </div>
 

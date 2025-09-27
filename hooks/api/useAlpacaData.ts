@@ -17,11 +17,11 @@ export function useAlpacaAccount() {
     queryFn: async () => {
       const response = await fetch('/api/alpaca/account')
       if (!response.ok) throw new Error('Failed to fetch account')
-      const data = await response.json()
-      return data || {}
+      const result = await response.json()
+      return result.success ? result.data : {}
     },
-    refetchInterval: 10000, // Refetch every 10 seconds
-    staleTime: 5000, // Data is fresh for 5 seconds
+    refetchInterval: 5000, // Refetch every 5 seconds for more real-time data
+    staleTime: 2000, // Data is fresh for 2 seconds
   })
 }
 
@@ -44,10 +44,11 @@ export function useAlpacaOrders() {
     queryFn: async () => {
       const response = await fetch('/api/alpaca/orders')
       if (!response.ok) throw new Error('Failed to fetch orders')
-      const data = await response.json()
-      return data.orders
+      const result = await response.json()
+      return result.success ? result.orders : []
     },
-    refetchInterval: 5000,
+    refetchInterval: 3000, // More frequent updates for orders
+    staleTime: 1000,
   })
 }
 
@@ -57,11 +58,11 @@ export function useAlpacaTrades() {
     queryFn: async () => {
       const response = await fetch('/api/alpaca/trades')
       if (!response.ok) throw new Error('Failed to fetch trades')
-      const data = await response.json()
-      return data.trades
+      const result = await response.json()
+      return result.success ? result.trades : []
     },
-    refetchInterval: 10000, // Refetch every 10 seconds
-    staleTime: 5000, // Data is fresh for 5 seconds
+    refetchInterval: 5000, // Refetch every 5 seconds
+    staleTime: 2000, // Data is fresh for 2 seconds
   })
 }
 

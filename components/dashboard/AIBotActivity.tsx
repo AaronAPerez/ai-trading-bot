@@ -133,7 +133,7 @@ export default function AIBotActivity({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <Bot className="w-5 h-5 text-blue-400" />
-            <span className="font-semibold text-white">AI Bot Activity</span>
+            {/* <span className="font-semibold text-white">AI Bot Activity</span> */}
             <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
           </div>
           <Button
@@ -176,7 +176,7 @@ export default function AIBotActivity({
   }
 
   return (
-    <Card className="bg-gray-800 border-gray-700">
+    <Card className="bg-blue/40 border-gray-700">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-3">
           <Bot className="w-6 h-6 text-blue-400" />
