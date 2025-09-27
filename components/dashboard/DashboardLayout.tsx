@@ -43,7 +43,8 @@ const DashboardLayout = ({
     { id: 'trading', label: 'Trading', icon: Bot, path: '/trading' },
     { id: 'positions', label: 'Positions', icon: PieChart, path: '/positions' },
     { id: 'orders', label: 'Orders', icon: BarChart3, path: '/orders' },
-    { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' }
+    { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
+    { id: 'test', label: 'Test Fix', icon: AlertTriangle, path: '/test' }
   ]
 
   /**

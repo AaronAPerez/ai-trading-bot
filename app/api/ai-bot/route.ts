@@ -110,31 +110,69 @@ const orderExecutionMetrics = {
 }
 
 // ===============================================
-// ENHANCED POSITION SIZING FUNCTION
+// ENHANCED POSITION SIZING FUNCTION WITH BUYING POWER VALIDATION
 // ===============================================
 
-function calculatePositionSize(confidence: number, symbol: string): number {
-  // Base position size
-  let baseSize = autoExecutionConfig.baseMinPositionValue
+async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: string): Promise<number> {
+  console.log(`💰 Enhanced position sizing for ${symbol}: confidence=${confidence}%`)
 
-  // Confidence multiplier (1.0 to 2.0)
-  const confidenceMultiplier = 1.0 + (confidence - 60) / 100
+  try {
+    // Get current buying power from Alpaca account
+    const alpacaUrl = process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
+    const accountResponse = await fetch(`${alpacaUrl}/v2/account`, {
+      headers: {
+        'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
+        'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
+        'Content-Type': 'application/json'
+      }
+    })
 
-  // Symbol-specific adjustments
-  if (symbol.includes('-USD') || symbol.includes('/USD')) {
-    // Crypto - slightly smaller positions due to volatility
-    baseSize *= 0.8
+    if (!accountResponse.ok) {
+      console.log('⚠️ Could not fetch buying power, using conservative fallback')
+      return Math.min(25, autoExecutionConfig.maxPositionSize) // Conservative fallback
+    }
+
+    const account = await accountResponse.json()
+    const availableBuyingPower = parseFloat(account.buying_power || '0')
+
+    console.log(`💳 Available buying power: $${availableBuyingPower}`)
+
+    if (availableBuyingPower < 25) {
+      console.log(`❌ Insufficient buying power: $${availableBuyingPower}`)
+      return 0 // Not enough to trade
+    }
+
+    // Enhanced position sizing with conservative limits (from quick_fix_patch)
+    const maxPositionPercent = 0.10 // Maximum 10% of buying power
+    const basePositionPercent = 0.03 // Base 3% of buying power
+
+    // Confidence-based adjustment (only above 60%)
+    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * 0.07 // Up to 7% bonus
+    const positionPercent = Math.min(basePositionPercent + confidenceBonus, maxPositionPercent)
+
+    // Calculate position size
+    let positionSize = availableBuyingPower * positionPercent
+
+    // Apply strict limits
+    const minOrderSize = 25 // Minimum $25
+    const maxOrderSize = Math.min(200, availableBuyingPower * 0.2) // Max $200 or 20% of buying power
+
+    positionSize = Math.max(minOrderSize, Math.min(positionSize, maxOrderSize))
+
+    // CRITICAL: Never exceed 20% of buying power
+    positionSize = Math.min(positionSize, availableBuyingPower * 0.20)
+
+    // Round to cents
+    positionSize = Math.round(positionSize * 100) / 100
+
+    console.log(`💰 Enhanced sizing result: ${positionPercent * 100}% of $${availableBuyingPower} = $${positionSize} 🛡️ Conservative mode`)
+
+    return positionSize
+
+  } catch (error) {
+    console.error('Error in position sizing:', error)
+    return Math.min(25, autoExecutionConfig.maxPositionSize) // Conservative fallback
   }
-
-  // Calculate final position size
-  const positionSize = baseSize * confidenceMultiplier
-
-  // Enforce limits
-  const finalSize = Math.min(positionSize, autoExecutionConfig.maxPositionSize)
-  
-  console.log(`💰 Position sizing for ${symbol}: base=${baseSize}, confidence=${confidence}%, multiplier=${confidenceMultiplier.toFixed(2)}, final=$${finalSize}`)
-  
-  return finalSize
 }
 
 // ===============================================
@@ -175,16 +213,21 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     return { success: false, reason: 'Symbol in cooldown period' }
   }
 
-  // Check 5: Environment variables
-  if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_SECRET_KEY) {
-    console.log('❌ Missing Alpaca API credentials')
+  // Check 5: Environment variables (using correct APCA_ prefix)
+  if (!process.env.APCA_API_KEY_ID || !process.env.APCA_API_SECRET_KEY) {
+    console.log('❌ Missing Alpaca API credentials (need APCA_API_KEY_ID and APCA_API_SECRET_KEY)')
     return { success: false, reason: 'Missing API credentials' }
   }
 
   try {
-    // Calculate position size
-    const positionSize = calculatePositionSize(confidence, symbol)
-    
+    // Calculate position size with buying power validation
+    const positionSize = await calculatePositionSizeWithBuyingPower(confidence, symbol)
+
+    if (positionSize <= 0) {
+      console.log(`❌ Insufficient buying power for any trade`)
+      return { success: false, reason: 'Insufficient buying power' }
+    }
+
     if (positionSize < autoExecutionConfig.minOrderValue) {
       console.log(`❌ Position size too small: $${positionSize} < $${autoExecutionConfig.minOrderValue}`)
       return { success: false, reason: 'Position size too small' }
@@ -203,13 +246,13 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     console.log('📝 Placing order:', orderData)
 
-    // Execute order via Alpaca API
+    // Execute order via Alpaca API (using correct environment variables)
     const alpacaUrl = process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
     const orderResponse = await fetch(`${alpacaUrl}/v2/orders`, {
       method: 'POST',
       headers: {
-        'APCA-API-KEY-ID': process.env.ALPACA_API_KEY,
-        'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY,
+        'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
+        'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(orderData)

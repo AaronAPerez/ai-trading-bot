@@ -175,15 +175,39 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     console.log(`💰 Portfolio value: $${portfolioValue.toLocaleString()}`)
 
-    // Calculate position size based on confidence and risk parameters
-    const basePositionSize = Math.max(
-      portfolioValue * autoExecutionConfig.riskPerTrade,
-      autoExecutionConfig.baseMinPositionValue
-    )
-    const confidenceMultiplier = Math.min(confidence / 100 * 1.5, 2.0) // Max 2x multiplier
-    positionValue = basePositionSize * confidenceMultiplier
-    positionValue = Math.min(positionValue, autoExecutionConfig.maxPositionSize)
-    positionValue = Math.round(positionValue * 100) / 100 // Round to 2 decimal places
+    // ENHANCED: Use buying power instead of portfolio value for position sizing
+    const availableBuyingPower = parseFloat(account.availableBuyingPower.toString()) || 0
+    console.log(`💳 Available buying power: $${availableBuyingPower}`)
+
+    if (availableBuyingPower < 25) {
+      console.log(`❌ Insufficient buying power: $${availableBuyingPower}`)
+      return null
+    }
+
+    // Enhanced position sizing with conservative limits (from quick_fix_patch)
+    const maxPositionPercent = 0.10 // Maximum 10% of buying power
+    const basePositionPercent = 0.03 // Base 3% of buying power
+
+    // Confidence-based adjustment (only above 60%)
+    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * 0.07 // Up to 7% bonus
+    const positionPercent = Math.min(basePositionPercent + confidenceBonus, maxPositionPercent)
+
+    // Calculate position size based on buying power, not portfolio value
+    positionValue = availableBuyingPower * positionPercent
+
+    // Apply strict limits
+    const minOrderSize = 25 // Minimum $25
+    const maxOrderSize = Math.min(200, availableBuyingPower * 0.2) // Max $200 or 20% of buying power
+
+    positionValue = Math.max(minOrderSize, Math.min(positionValue, maxOrderSize))
+
+    // CRITICAL: Never exceed 20% of buying power (from quick_fix_patch)
+    positionValue = Math.min(positionValue, availableBuyingPower * 0.20)
+
+    // Round to cents
+    positionValue = Math.round(positionValue * 100) / 100
+
+    console.log(`💰 Enhanced sizing result: ${positionPercent * 100}% of $${availableBuyingPower} = $${positionValue} 🛡️ Conservative mode`)
 
     // Get current market price with fallback to Yahoo Finance
     let currentPrice: number | null = null

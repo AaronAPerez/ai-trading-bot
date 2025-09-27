@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Check if we have valid API credentials
     if (!process.env.APCA_API_KEY_ID || !process.env.APCA_API_SECRET_KEY) {
       return NextResponse.json(
-        { error: 'Authentication failed: Check your Alpaca API keys in .env.local' },
+        { success: false, error: 'Authentication failed: Check your Alpaca API keys in .env.local' },
         { status: 500 }
       )
     }
@@ -121,7 +121,10 @@ export async function GET(request: NextRequest) {
       totalPnL: enhancedAccount.totalPnL
     })
 
-    return NextResponse.json(enhancedAccount)
+    return NextResponse.json({
+      success: true,
+      data: enhancedAccount
+    })
 
   } catch (error) {
     console.error('Account API error:', error)
@@ -129,20 +132,21 @@ export async function GET(request: NextRequest) {
     // Provide specific error messages
     if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
       return NextResponse.json(
-        { error: 'Authentication failed: Check your Alpaca API keys in .env.local' },
+        { success: false, error: 'Authentication failed: Check your Alpaca API keys in .env.local' },
         { status: 500 }
       )
     }
 
     if (error.message?.includes('403') || error.message?.includes('Forbidden')) {
       return NextResponse.json(
-        { error: 'Access forbidden: Check your Alpaca account permissions' },
+        { success: false, error: 'Access forbidden: Check your Alpaca account permissions' },
         { status: 500 }
       )
     }
 
     return NextResponse.json(
       {
+        success: false,
         error: 'Failed to fetch account data',
         details: error.message,
         isConnected: false
