@@ -1,4 +1,4 @@
-import { tradingStorage } from '@/lib/database/tradingStorage'
+import { supabaseService } from '@/lib/database/supabase-utils'
 
 export enum ErrorSeverity {
   LOW = 'LOW',
@@ -455,7 +455,7 @@ export class ErrorRecoverySystem {
 
       // Log to database if available and error is significant
       if (error.severity === ErrorSeverity.HIGH || error.severity === ErrorSeverity.CRITICAL) {
-        await tradingStorage.logBotActivity({
+        await supabaseService.logBotActivity({
           user_id: error.context.userId || 'system',
           timestamp: error.timestamp.toISOString(),
           type: 'error',

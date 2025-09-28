@@ -5,6 +5,7 @@ import { patternRecognitionEngine } from './PatternRecognitionEngine'
 import { marketRegimeDetector, MarketRegime } from './MarketRegimeDetector'
 import { tradeFeedbackSystem } from './TradeFeedbackSystem'
 import { newsApiService } from '@/lib/sentiment/newsApiService'
+import { sentimentAnalyzer } from '@/lib/sentiment/SentimentAnalyzer'
 import { socialMediaService } from '@/lib/sentiment/socialMediaService'
 import { errorRecoverySystem, ErrorCategory, ErrorSeverity, withErrorHandling } from '@/lib/error/ErrorRecoverySystem'
 

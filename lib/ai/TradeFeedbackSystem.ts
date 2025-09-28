@@ -1,4 +1,4 @@
-import { tradingStorage } from '@/lib/database/tradingStorage'
+import { supabaseService } from '@/lib/database/supabase-utils'
 import { newsApiService } from '@/lib/sentiment/newsApiService'
 import { MarketData } from '@/types/trading'
 
@@ -42,7 +42,7 @@ export class TradeFeedbackSystem {
       const technicalIndicators = this.calculateTechnicalIndicators(tradeResult.marketConditionsAtEntry)
 
       // Store learning data
-      await tradingStorage.saveAILearningData({
+      await supabaseService.saveAILearningData({
         user_id: userId,
         trade_id: tradeResult.tradeId,
         symbol: tradeResult.symbol,
@@ -71,7 +71,7 @@ export class TradeFeedbackSystem {
 
   async getLearningMetrics(userId: string, symbol?: string): Promise<LearningMetrics> {
     try {
-      const learningData = await tradingStorage.getAILearningData(userId, symbol)
+      const learningData = await supabaseService.getAILearningData(userId, symbol)
 
       if (learningData.length === 0) {
         return {
@@ -125,7 +125,7 @@ export class TradeFeedbackSystem {
 
   async getStrategyPerformance(userId: string): Promise<Record<string, LearningMetrics>> {
     try {
-      const learningData = await tradingStorage.getAILearningData(userId)
+      const learningData = await supabaseService.getAILearningData(userId)
       const strategies = [...new Set(learningData.map(d => d.strategy_used))]
 
       const performance: Record<string, LearningMetrics> = {}
@@ -148,7 +148,7 @@ export class TradeFeedbackSystem {
     recommendedAdjustment: string
   }> {
     try {
-      const learningData = await tradingStorage.getAILearningData(userId, symbol)
+      const learningData = await supabaseService.getAILearningData(userId, symbol)
 
       if (learningData.length < 10) {
         return {

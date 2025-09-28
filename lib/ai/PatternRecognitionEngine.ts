@@ -1,5 +1,5 @@
 import { MarketData } from '@/types/trading'
-import { tradingStorage } from '@/lib/database/tradingStorage'
+import { supabaseService } from '@/lib/database/supabase-utils'
 
 interface TechnicalPattern {
   name: string
@@ -64,7 +64,7 @@ export class PatternRecognitionEngine {
 
   async learnFromTradeOutcomes(userId: string): Promise<void> {
     try {
-      const learningData = await tradingStorage.getAILearningData(userId)
+      const learningData = await supabaseService.getAILearningData(userId)
 
       // Group by symbol
       const symbolData = new Map<string, any[]>()

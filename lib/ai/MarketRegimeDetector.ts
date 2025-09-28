@@ -1,5 +1,5 @@
 import { MarketData } from '@/types/trading'
-import { tradingStorage } from '@/lib/database/tradingStorage'
+import { supabaseService } from '@/lib/database/supabase-utils'
 
 export type MarketRegime = 'BULL' | 'BEAR' | 'SIDEWAYS' | 'VOLATILE' | 'TRANSITION'
 
@@ -405,7 +405,7 @@ export class MarketRegimeDetector {
   private async getHistoricalRegimePerformance(regime: MarketRegime, userId: string): Promise<any> {
     try {
       // Get learning data filtered by regime
-      const learningData = await tradingStorage.getAILearningData(userId)
+      const learningData = await supabaseService.getAILearningData(userId)
       const regimeData = learningData.filter(d => {
         const marketConditions = d.market_conditions
         return marketConditions.regime === regime
