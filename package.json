@@ -12,7 +12,14 @@
     "type-check": "tsc --noEmit",
     "alpaca:test": "node scripts/test-alpaca-connection.js",
     "db:migrate": "prisma migrate dev",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "supabase:test": "node scripts/test-supabase-connection.js",
+    "supabase:setup": "node scripts/setup-database.js",
+    "supabase:migrate": "supabase db push",
+    "supabase:migration:new": "supabase migration new",
+    "supabase:migration:apply": "node scripts/create-tables-api.js",
+    "supabase:reset": "supabase db reset",
+    "supabase:link": "supabase link"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.3",

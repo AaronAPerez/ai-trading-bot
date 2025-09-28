@@ -559,7 +559,7 @@ export class RealTimeAITradingEngine {
 
     try {
       // Generate ML prediction with enhanced parameters
-      const mlPrediction = await this.mlEngine.predict(marketData, 24)
+      const mlPrediction = await this.mlEngine.predict(marketData, symbol, 24)
 
       // More lenient signal generation
       const signal: TradeSignal = {
@@ -909,7 +909,7 @@ export class RealTimeAITradingEngine {
       for (const symbol of this.config.watchlist) {
         const marketData = this.marketDataCache.get(symbol)
         if (marketData && marketData.length >= 50) {
-          const prediction = await this.mlEngine.predict(marketData, 24)
+          const prediction = await this.mlEngine.predict(marketData, symbol, 24)
           signals.set(symbol, {
             action: prediction.direction === 'UP' ? 'BUY' : prediction.direction === 'DOWN' ? 'SELL' : 'HOLD',
             confidence: prediction.confidence,

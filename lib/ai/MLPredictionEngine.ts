@@ -1,4 +1,5 @@
 import { MarketData, TradeSignal } from '@/types/trading'
+import { newsApiService } from '@/lib/sentiment/newsApiService'
 
 interface MLFeatures {
   price_momentum: number
@@ -68,12 +69,12 @@ export class MLPredictionEngine {
     this.modelWeights.set('random_forest', 0.25)
   }
 
-  async predict(marketData: MarketData[], horizon: number = 24): Promise<MLPrediction> {
+  async predict(marketData: MarketData[], symbol: string, horizon: number = 24): Promise<MLPrediction> {
     if (marketData.length < this.minDataPoints) {
       throw new Error(`Insufficient data: need at least ${this.minDataPoints} points`)
     }
 
-    const features = this.extractFeatures(marketData)
+    const features = await this.extractFeatures(marketData, symbol)
     const predictions: MLPrediction[] = []
 
     // Get predictions from all models
@@ -90,7 +91,7 @@ export class MLPredictionEngine {
     return this.ensemblePrediction(predictions, features)
   }
 
-  private extractFeatures(marketData: MarketData[]): MLFeatures {
+  private async extractFeatures(marketData: MarketData[], symbol: string): Promise<MLFeatures> {
     const prices = marketData.map(d => d.close)
     const volumes = marketData.map(d => d.volume)
     const currentPrice = prices[prices.length - 1]
@@ -100,7 +101,7 @@ export class MLPredictionEngine {
       volatility: this.calculateVolatility(prices),
       volume_trend: this.calculateVolumeTrend(volumes),
       technical_indicators: this.calculateTechnicalFeatures(marketData),
-      market_sentiment: this.calculateMarketSentiment(marketData),
+      market_sentiment: await this.calculateMarketSentiment(marketData, symbol),
       time_features: this.extractTimeFeatures(marketData[marketData.length - 1])
     }
   }
@@ -169,7 +170,7 @@ export class MLPredictionEngine {
     return [rsi, macd, signal, bb, stoch, williamsR, roc]
   }
 
-  private calculateMarketSentiment(marketData: MarketData[]): number {
+  private async calculateMarketSentiment(marketData: MarketData[], symbol: string): Promise<number> {
     // Composite sentiment score combining multiple factors
     const prices = marketData.map(d => d.close)
     const volumes = marketData.map(d => d.volume)
@@ -183,7 +184,24 @@ export class MLPredictionEngine {
     // Volatility sentiment (fear/greed indicator)
     const volatilitySentiment = this.calculateVolatilitySentiment(prices)
 
-    return (trendStrength * 0.4 + volumeSentiment * 0.35 + volatilitySentiment * 0.25)
+    // Technical sentiment (combination of price, volume, volatility)
+    const technicalSentiment = (trendStrength * 0.4 + volumeSentiment * 0.35 + volatilitySentiment * 0.25)
+
+    // Get real news sentiment data
+    let newsSentiment = 0
+    try {
+      const sentimentData = await newsApiService.getCachedSentiment(symbol, 60) // 1-hour cache
+      if (sentimentData) {
+        newsSentiment = sentimentData.sentimentScore
+      }
+    } catch (error) {
+      console.error('Error fetching news sentiment:', error)
+      // Fall back to technical sentiment only
+    }
+
+    // Combine technical and news sentiment
+    // Weight: 60% technical (price/volume based), 40% news sentiment
+    return (technicalSentiment * 0.6 + newsSentiment * 0.4)
   }
 
   private extractTimeFeatures(lastData: MarketData): number[] {
