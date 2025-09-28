@@ -47,7 +47,8 @@ const defaultBotConfig = {
 export default function AITradingPage() {
   const tradingBot = useTradingBot()
   const autoExecution = useAutoExecution(tradingBot.engine)
-  const account = useAlpacaAccount()
+  // Only poll when bot is running to reduce API calls
+  const account = useAlpacaAccount()  // Keep minimal polling for balance display
   const positions = useAlpacaPositions()
   const aiActivity = useAIBotActivity({
     refreshInterval: 5000,

@@ -132,7 +132,7 @@ export const useTradingBot = () => {
    * Stop the AI trading bot
    */
   const stopBot = useCallback(async () => {
-    if (isStopping || !botStore.metrics.isRunning) return
+    if (isStopping) return // Allow stop even if not currently marked as running
 
     setIsStopping(true)
     setError(null)
@@ -191,18 +191,24 @@ export const useTradingBot = () => {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      console.error('❌ Failed to stop bot:', errorMessage)
+      console.error('❌ Failed to stop bot API call:', errorMessage)
 
-      setError(errorMessage)
+      // Even if API fails, still update local state to stop the bot
+      console.log('🔧 Forcing local bot state to stopped due to API error')
 
-      // Add error activity
-      botStore.addActivity({
-        type: 'error',
-        message: 'Failed to stop AI Trading Bot',
-        details: errorMessage
+      botStore.updateMetrics({
+        isRunning: false,
+        lastActivity: new Date()
       })
 
-      throw error
+      botStore.addActivity({
+        type: 'error',
+        message: 'Bot stopped with errors',
+        details: `API Error: ${errorMessage}, but local state updated`
+      })
+
+      // Don't throw error so the dashboard can update its state
+      console.log('✅ Bot state forcefully stopped locally')
 
     } finally {
       setIsStopping(false)

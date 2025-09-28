@@ -42,8 +42,6 @@ const defaultBotConfig = {
 export default function AITradingDashboard() {
   const tradingBot = useTradingBot()
   const autoExecution = useAutoExecution(tradingBot.engine)
-  const account = useAlpacaAccount()
-  const positions = useAlpacaPositions()
 
   // Persistent AI bot state
   const [persistentBotState, setPersistentBotState] = useState({
@@ -52,8 +50,12 @@ export default function AITradingDashboard() {
     config: defaultBotConfig
   })
 
+  // Only poll Alpaca data when AI bot is active to reduce unnecessary API calls
+  const account = useAlpacaAccount(persistentBotState.isRunning ? 5000 : undefined)
+  const positions = useAlpacaPositions(persistentBotState.isRunning ? 15000 : undefined)
+
   const aiActivity = useAIBotActivity({
-    refreshInterval: 5000,
+    refreshInterval: persistentBotState.isRunning ? 5000 : 30000, // Slower when inactive
     maxActivities: 8,
     autoStart: persistentBotState.isRunning // Start if was running before
   })
@@ -72,6 +74,7 @@ export default function AITradingDashboard() {
 
   // Store interval reference for cleanup
   const [tradingInterval, setTradingInterval] = useState<NodeJS.Timeout | null>(null)
+  const [isStoppingBot, setIsStoppingBot] = useState(false)
 
   // Real trading monitoring - no simulation
   const startTradingMonitoring = useCallback(() => {
@@ -183,20 +186,46 @@ export default function AITradingDashboard() {
 
   // Enhanced stop function that stops both bot and activity monitoring
   const handleStop = async () => {
-    await tradingBot.stopBot()
-    await aiActivity.stopSimulation()
+    if (isStoppingBot) return // Prevent multiple clicks
 
-    // Update persistent state
-    setPersistentBotState(prev => ({
-      ...prev,
-      isRunning: false,
-      startTime: null
-    }))
+    setIsStoppingBot(true)
 
-    // Stop trading monitoring
-    stopTradingMonitoring()
+    try {
+      console.log('🛑 Stopping AI Trading Bot...')
 
-    console.log('AI Trading Bot stopped and state cleared')
+      // Stop trading monitoring first
+      stopTradingMonitoring()
+
+      // Stop bot and AI activity in parallel
+      await Promise.all([
+        tradingBot.stopBot(),
+        aiActivity.stopSimulation()
+      ])
+
+      // Update persistent state
+      setPersistentBotState(prev => ({
+        ...prev,
+        isRunning: false,
+        startTime: null
+      }))
+
+      console.log('✅ AI Trading Bot stopped and state cleared')
+
+    } catch (error) {
+      console.error('❌ Error stopping AI Trading Bot:', error)
+
+      // Force update state even if there's an error
+      setPersistentBotState(prev => ({
+        ...prev,
+        isRunning: false,
+        startTime: null
+      }))
+
+      // Still stop monitoring
+      stopTradingMonitoring()
+    } finally {
+      setIsStoppingBot(false)
+    }
   }
 
 
@@ -304,13 +333,30 @@ export default function AITradingDashboard() {
               {/* Start/Stop Button */}
               <button
                 onClick={persistentBotState.isRunning ? handleStop : () => handleStart(defaultBotConfig)}
+                disabled={isStoppingBot || tradingBot.isStarting}
                 className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
-                  persistentBotState.isRunning
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
+                  isStoppingBot || tradingBot.isStarting
+                    ? 'bg-gray-600 cursor-not-allowed text-gray-300'
+                    : persistentBotState.isRunning
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
                 }`}
               >
-                {persistentBotState.isRunning ? (
+                {isStoppingBot ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span>Stopping...</span>
+                  </>
+                ) : tradingBot.isStarting ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span>Starting...</span>
+                  </>
+                ) : persistentBotState.isRunning ? (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
@@ -427,7 +473,10 @@ export default function AITradingDashboard() {
 
         {/* Live Balance Display - Spanning 2 columns */}
         <div className="xl:col-span-2">
-          <LiveBalanceDisplay refreshInterval={5000} showChangeIndicators={true} />
+          <LiveBalanceDisplay
+            refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+            showChangeIndicators={true}
+          />
         </div>
       </div>
 
@@ -458,6 +507,7 @@ export default function AITradingDashboard() {
                 showOrders={true}
                 useRealData={true}
                 defaultTab="orders"
+                refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
               />
             </div>
           </div>

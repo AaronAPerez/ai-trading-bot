@@ -11,7 +11,7 @@ export const alpacaQueryKeys = {
   marketData: (symbol: string) => ['alpaca', 'marketData', symbol] as const,
 }
 
-export function useAlpacaAccount() {
+export function useAlpacaAccount(refreshInterval?: number) {
   return useQuery({
     queryKey: alpacaQueryKeys.account,
     queryFn: async () => {
@@ -20,12 +20,12 @@ export function useAlpacaAccount() {
       const result = await response.json()
       return result.success ? result.data : {}
     },
-    refetchInterval: 5000, // Refetch every 5 seconds for more real-time data
+    refetchInterval: refreshInterval || false, // Only poll when specified
     staleTime: 2000, // Data is fresh for 2 seconds
   })
 }
 
-export function useAlpacaPositions() {
+export function useAlpacaPositions(refreshInterval?: number) {
   return useQuery({
     queryKey: alpacaQueryKeys.positions,
     queryFn: async () => {
@@ -34,11 +34,11 @@ export function useAlpacaPositions() {
       const data = await response.json()
       return data || []
     },
-    refetchInterval: 15000,
+    refetchInterval: refreshInterval || false, // Only poll when specified
   })
 }
 
-export function useAlpacaOrders() {
+export function useAlpacaOrders(refreshInterval?: number) {
   return useQuery({
     queryKey: alpacaQueryKeys.orders,
     queryFn: async () => {
@@ -47,12 +47,12 @@ export function useAlpacaOrders() {
       const result = await response.json()
       return result.success ? result.orders : []
     },
-    refetchInterval: 3000, // More frequent updates for orders
+    refetchInterval: refreshInterval || false, // Only poll when specified
     staleTime: 1000,
   })
 }
 
-export function useAlpacaTrades() {
+export function useAlpacaTrades(refreshInterval?: number) {
   return useQuery({
     queryKey: alpacaQueryKeys.trades,
     queryFn: async () => {
@@ -61,7 +61,7 @@ export function useAlpacaTrades() {
       const result = await response.json()
       return result.success ? result.trades : []
     },
-    refetchInterval: 5000, // Refetch every 5 seconds
+    refetchInterval: refreshInterval || false, // Only poll when specified
     staleTime: 2000, // Data is fresh for 2 seconds
   })
 }

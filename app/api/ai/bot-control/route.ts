@@ -133,11 +133,23 @@ async function handleStartBot(config: any) {
  * Handle stop bot request
  */
 async function handleStopBot() {
+  // Allow stop requests even if bot appears not running (for cleanup)
   if (!botState.isRunning) {
+    console.log('🛑 Stop requested but bot not running - performing cleanup anyway')
+
+    // Still perform cleanup
+    botState = {
+      isRunning: false,
+      config: null,
+      startTime: null,
+      sessionId: null,
+      interval: null
+    }
+
     return NextResponse.json({
-      success: false,
-      error: 'Bot is not running'
-    }, { status: 400 })
+      success: true,
+      message: 'Bot was not running, cleanup performed'
+    })
   }
 
   try {
