@@ -7,11 +7,13 @@ import useAILearning from '@/hooks/useAILearning'
 interface AILearningProgressProps {
   compact?: boolean
   showDetails?: boolean
+  botIsActive?: boolean
 }
 
 export default function AILearningProgress({
   compact = true,
-  showDetails = false
+  showDetails = false,
+  botIsActive = false
 }: AILearningProgressProps) {
   const {
     learningData,
@@ -19,14 +21,17 @@ export default function AILearningProgress({
     formatPercent,
     getAccuracyStatus,
     getLearningStatus
-  } = useAILearning({ refreshInterval: 30000 })
+  } = useAILearning({
+    // Only poll when bot is active and learning, otherwise just load once
+    refreshInterval: botIsActive ? 300000 : false // 5 minutes when active, never when inactive
+  })
 
   if (isLoading) {
     return (
       <div className="bg-gray-900/40 rounded-lg border border-gray-700/50 p-4">
         <div className="flex items-center space-x-2">
           <Brain className="w-4 h-4 text-purple-400 animate-pulse" />
-          <span className="text-sm text-gray-300">Loading AI learning...</span>
+          <span className="text-sm text-gray-300">Loading AI learning data from Supabase...</span>
         </div>
       </div>
     )

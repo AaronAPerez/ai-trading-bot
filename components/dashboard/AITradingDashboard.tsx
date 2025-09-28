@@ -16,6 +16,7 @@ import useAITradingNotifications from "@/hooks/useAITradingNotifications"
 import useRealAITrading from "@/hooks/useRealAITrading"
 import AILearningProgress from "./AILearningProgress"
 import LiveBalanceDisplay from "./LiveBalanceDisplay"
+import { ClientSafeTime } from "@/components/ui/ClientSafeTime"
 
 import PortfolioOverview from "./PortfolioOverview"
 import DashboardLayout from "./DashboardLayout"
@@ -255,8 +256,15 @@ export default function AITradingDashboard() {
     >
          {/* AI Trading Engine Header with Control Button */}
           <div className="flex items-center justify-between mb-6">
+        {/* Live Balance Display - Spanning 2 columns */}
+        {/* <div className="col-span-2"> */}
+          <LiveBalanceDisplay
+            refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+            showChangeIndicators={true}
+          />
+        {/* </div> */}
 
-            <div className="flex items-center space-x-3">
+            {/* <div className="flex items-center space-x-3"> */}
               {/* <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
@@ -266,7 +274,7 @@ export default function AITradingDashboard() {
                 <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
                 <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
               </div> */}
-            </div>
+            {/* </div> */}
 
             {/* AI Trading Control - Top Right */}
             <div className="flex items-center space-x-4">
@@ -466,18 +474,21 @@ export default function AITradingDashboard() {
               </div>
             </div>
             <div className="p-4">
-              <AILearningProgress compact={false} />
+              <AILearningProgress
+                compact={false}
+                botIsActive={persistentBotState.isRunning}
+              />
             </div>
           </div>
         </div>
 
         {/* Live Balance Display - Spanning 2 columns */}
-        <div className="xl:col-span-2">
+        {/* <div className="xl:col-span-2">
           <LiveBalanceDisplay
             refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
             showChangeIndicators={true}
           />
-        </div>
+        </div> */}
       </div>
 
       {/* Secondary Trading Data Section */}
@@ -569,7 +580,7 @@ export default function AITradingDashboard() {
             </div>
           </div>
           <div className="text-gray-500">
-            Last updated: {new Date().toLocaleTimeString()}
+            Last updated: <ClientSafeTime timestamp={new Date()} format="time" />
           </div>
         </div>
       </div>

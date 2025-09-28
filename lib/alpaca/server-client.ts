@@ -159,6 +159,34 @@ export class AlpacaServerClient {
       5000 // Cache for 5 seconds
     )
   }
+
+  async getBarsV2(symbol: string, options: any) {
+    if (!this.client) {
+      throw new Error('Alpaca client not initialized. Check API credentials.')
+    }
+
+    return alpacaRateLimiter.enqueue(
+      `/v2/stocks/${symbol}/bars`,
+      async () => {
+        try {
+          return await this.client!.getBarsV2(symbol, options)
+        } catch (error: any) {
+          console.error(`Failed to get bars for ${symbol} from Alpaca:`, error)
+          console.error('Bars API error details:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            url: error.config?.url,
+            headers: error.config?.headers
+          })
+          throw new Error(`Alpaca bars API error: ${error.message}`)
+        }
+      },
+      'normal',
+      `server_bars_${symbol}`,
+      60000 // Cache for 60 seconds
+    )
+  }
 }
 
 // Export singleton instance

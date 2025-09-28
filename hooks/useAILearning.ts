@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabaseService } from '@/lib/database/supabase-utils'
+import { getCurrentUserId } from '@/lib/auth/demo-user'
 
 export interface LearningInsights {
   overallAccuracy: number
@@ -37,13 +38,13 @@ export interface LearningData {
 }
 
 interface UseAILearningProps {
-  refreshInterval?: number
+  refreshInterval?: number | false
   userId?: string
 }
 
 export default function useAILearning({
-  refreshInterval = 30000,
-  userId = 'demo-user'
+  refreshInterval = false, // Default to no polling unless specified
+  userId = getCurrentUserId()
 }: UseAILearningProps = {}) {
   const [learningData, setLearningData] = useState<LearningData>({
     insights: null,
@@ -328,9 +329,12 @@ export default function useAILearning({
   useEffect(() => {
     fetchLearningData()
 
-    const interval = setInterval(fetchLearningData, refreshInterval)
-    return () => clearInterval(interval)
-  }, [userId, refreshInterval])
+    // Only set up polling if refreshInterval is specified and not false
+    if (refreshInterval && typeof refreshInterval === 'number') {
+      const interval = setInterval(fetchLearningData, refreshInterval)
+      return () => clearInterval(interval)
+    }
+  }, [userId, refreshInterval, fetchLearningData])
 
   const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`
 

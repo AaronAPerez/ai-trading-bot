@@ -20,20 +20,21 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
   const marketStore = useMarketStore()
 
   useEffect(() => {
-    // Initialize all stores on mount
+    // Initialize only essential stores on mount
     const initializeStores = async () => {
       try {
-        // Initialize portfolio data
+        // Initialize portfolio data (essential for balance display)
         await portfolioStore.refreshPortfolio()
-        
-        // Initialize AI recommendations
-        await aiStore.refreshRecommendations()
-        
+
+        // Do NOT auto-initialize AI recommendations on page load
+        // They will be loaded only when the AI bot is started or when explicitly requested
+        console.log('📦 Store initialization complete - AI recommendations will load when bot is active')
+
         // Set up WebSocket connections for real-time data
         if (typeof window !== 'undefined') {
           // Initialize market data WebSocket
           const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001')
-          
+
           ws.onopen = () => {
             marketStore.setConnectionStatus('connected')
             // Subscribe to watchlist symbols
@@ -41,23 +42,23 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
               ws.send(JSON.stringify({ type: 'subscribe', symbol }))
             })
           }
-          
+
           ws.onmessage = (event) => {
             const data = JSON.parse(event.data)
             if (data.type === 'price_update') {
               marketStore.updatePrice(data.symbol, data.price, data.change)
             }
           }
-          
+
           ws.onclose = () => {
             marketStore.setConnectionStatus('disconnected')
           }
-          
+
           ws.onerror = () => {
             marketStore.setConnectionStatus('reconnecting')
           }
         }
-        
+
       } catch (error) {
         console.error('Failed to initialize stores:', error)
       }
