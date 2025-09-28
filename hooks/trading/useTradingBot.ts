@@ -1,7 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useBotStore } from '@/store/slices/botSlice'
 import { useWebSocketContext } from '@/hooks/useWebSocketContext'
 import type { BotConfiguration } from '@/types/trading'
+
+// Global singleton to track if status has been checked
+let globalStatusChecked = false
 
 export const useTradingBot = () => {
   const [isStarting, setIsStarting] = useState(false)
@@ -12,10 +15,56 @@ export const useTradingBot = () => {
   const { sendInternalMessage } = useWebSocketContext()
 
   /**
+   * Check bot status on mount to sync with server state
+   */
+  const checkBotStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/ai/bot-control', {
+        method: 'GET'
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+
+        if (result.success && result.data) {
+          // Update local store with server state
+          botStore.updateMetrics({
+            isRunning: result.data.isRunning,
+            uptime: result.data.uptime || 0,
+            lastActivity: result.data.isRunning ? new Date() : undefined
+          })
+
+          if (result.data.isRunning) {
+            console.log('🔄 Synced with running bot session:', result.data.sessionId)
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to check bot status:', error)
+    }
+  }, [])
+
+  // Check status on mount only (run once globally)
+  useEffect(() => {
+    if (!globalStatusChecked) {
+      globalStatusChecked = true
+      checkBotStatus()
+      console.log('🔍 Bot status check initialized (once per session)')
+    }
+  }, [])
+
+  /**
    * Start the AI trading bot
    */
   const startBot = useCallback(async (config: BotConfiguration) => {
-    if (isStarting || botStore.metrics.isRunning) return
+    if (isStarting) return
+
+    // Check if bot is already running
+    if (botStore.metrics.isRunning) {
+      console.log('🔄 Bot already running, syncing status...')
+      await checkBotStatus()
+      return
+    }
 
     setIsStarting(true)
     setError(null)
@@ -63,6 +112,26 @@ export const useTradingBot = () => {
       const result = await response.json()
 
       if (!response.ok) {
+        // Handle specific case where bot is already running
+        if (response.status === 400 && result.error === 'Bot is already running') {
+          console.log('🔄 Bot already running on server, syncing local state...', result.data)
+
+          // Update local state with server data if available
+          if (result.data) {
+            botStore.updateMetrics({
+              isRunning: true,
+              uptime: result.data.uptime || 0,
+              lastActivity: new Date()
+            })
+
+            if (result.data.config) {
+              console.log('📊 Synced bot config:', result.data.config)
+            }
+          }
+
+          await checkBotStatus()
+          return result
+        }
         throw new Error(result.error || `HTTP ${response.status}: Failed to start bot`)
       }
 
@@ -126,7 +195,7 @@ export const useTradingBot = () => {
     } finally {
       setIsStarting(false)
     }
-  }, [isStarting, botStore, sendInternalMessage])
+  }, [isStarting, botStore, sendInternalMessage, checkBotStatus])
 
   /**
    * Stop the AI trading bot
@@ -243,6 +312,13 @@ export const useTradingBot = () => {
     // Actions
     startBot,
     stopBot,
-    clearError: () => setError(null)
+    checkBotStatus,
+    clearError: () => setError(null),
+
+    // Development utilities
+    resetStatusCheck: () => { globalStatusChecked = false },
+
+    // Engine placeholder (for compatibility)
+    engine: null
   }
 }

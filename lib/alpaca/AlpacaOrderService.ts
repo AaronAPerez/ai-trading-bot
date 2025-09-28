@@ -4,9 +4,7 @@ import {
   AlpacaConfig,
   AlpacaOrder,
   CreateOrderRequest,
-  AlpacaApiResponse,
   AlpacaOrderStatus,
-  AlpacaOrderValidation,
   ConnectionStatus
 } from './types'
 

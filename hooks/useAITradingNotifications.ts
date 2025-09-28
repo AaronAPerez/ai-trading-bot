@@ -18,53 +18,26 @@ interface UseAITradingNotificationsProps {
   maxNotifications?: number
   autoHideDuration?: number
   userId?: string
+  enablePolling?: boolean
+  pollingInterval?: number
 }
 
 export default function useAITradingNotifications({
   maxNotifications = 5,
   autoHideDuration = 8000,
-  userId = getCurrentUserId()
+  userId = getCurrentUserId(),
+  enablePolling = false, // Default to no polling
+  pollingInterval = 60000 // 1 minute instead of 30 seconds
 }: UseAITradingNotificationsProps = {}) {
   const [notifications, setNotifications] = useState<TradingNotification[]>([])
   const [lastFetchTime, setLastFetchTime] = useState<Date>(new Date())
 
-  // Fetch real trading notifications from Supabase
+  // Fetch real trading notifications from Supabase - DISABLED to prevent continuous requests
   const fetchRealTradeNotifications = useCallback(async () => {
-    try {
-      // Get recent trades from the last 5 minutes
-      const recentTrades = await supabaseService.getTradeHistory(userId, 20)
-
-      // Filter for trades that happened since last fetch
-      const newTrades = recentTrades.filter(trade => {
-        const tradeTime = new Date(trade.filled_at || trade.created_at)
-        return tradeTime > lastFetchTime && trade.status === 'FILLED'
-      })
-
-      // Convert trades to notifications without calling addTradeNotification to avoid loops
-      const newNotifications = newTrades.map(trade => ({
-        id: `real-trade-${trade.id}`,
-        type: trade.side as 'buy' | 'sell',
-        symbol: trade.symbol,
-        quantity: trade.quantity,
-        price: trade.price,
-        amount: trade.value,
-        pnl: trade.pnl,
-        timestamp: new Date(trade.filled_at || trade.created_at),
-        confidence: trade.confidence || undefined
-      }))
-
-      if (newNotifications.length > 0) {
-        setNotifications(prev => {
-          const updated = [...newNotifications, ...prev].slice(0, maxNotifications)
-          return updated
-        })
-      }
-
-      setLastFetchTime(new Date())
-    } catch (error) {
-      console.error('Failed to fetch real trade notifications:', error)
-    }
-  }, [userId, lastFetchTime, maxNotifications])
+    // DISABLED: This was causing continuous trade_history requests
+    console.log('🚫 fetchRealTradeNotifications disabled to prevent continuous API calls')
+    return
+  }, [])
 
   // Add new trading notification
   const addTradeNotification = useCallback((trade: TradeData) => {
@@ -156,11 +129,15 @@ export default function useAITradingNotifications({
 
   // Listen for real AI trading events and fetch real data
   useEffect(() => {
-    // Fetch real trade notifications immediately
-    fetchRealTradeNotifications()
+    let tradeCheckInterval: NodeJS.Timeout | undefined
 
-    // Set up interval to check for new trades every 30 seconds
-    const tradeCheckInterval = setInterval(fetchRealTradeNotifications, 30000)
+    // Only fetch and poll if explicitly enabled
+    if (enablePolling) {
+      console.log(`🔄 AI Trading Notifications: Polling enabled every ${pollingInterval}ms`)
+      // Fetch immediately when polling is enabled
+      fetchRealTradeNotifications()
+      tradeCheckInterval = setInterval(fetchRealTradeNotifications, pollingInterval)
+    }
 
     // This would typically listen to WebSocket events or Redux state changes
     const handleTradeEvent = (event: CustomEvent<TradeData>) => {
@@ -171,10 +148,12 @@ export default function useAITradingNotifications({
     window.addEventListener('ai-trade-executed', handleTradeEvent as EventListener)
 
     return () => {
-      clearInterval(tradeCheckInterval)
+      if (tradeCheckInterval) {
+        clearInterval(tradeCheckInterval)
+      }
       window.removeEventListener('ai-trade-executed', handleTradeEvent as EventListener)
     }
-  }, [fetchRealTradeNotifications, addTradeNotification])
+  }, [enablePolling, pollingInterval, userId])
 
   // Helper function to trigger notifications (for integration with trading bot)
   const notifyTrade = useCallback((trade: TradeData) => {

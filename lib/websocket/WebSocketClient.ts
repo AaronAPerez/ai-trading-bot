@@ -79,8 +79,18 @@ export class WebSocketManager extends EventEmitter {
         this.connections.set(connectionId, ws)
         this.reconnectAttempts.set(connectionId, 0)
 
+        // Set a connection timeout
+        const connectionTimeout = setTimeout(() => {
+          if (ws.readyState === WebSocket.CONNECTING) {
+            console.warn(`⏰ WebSocket connection timeout: ${connectionId}`)
+            ws.close()
+            reject(new Error(`WebSocket connection timeout: ${connectionId}`))
+          }
+        }, 10000) // 10 second timeout
+
         ws.onopen = () => {
           console.log(`✅ WebSocket connected: ${connectionId}`)
+          clearTimeout(connectionTimeout)
           this.isConnected.set(connectionId, true)
           this.emit('connected', connectionId)
           this.clearReconnectTimer(connectionId)
@@ -93,15 +103,28 @@ export class WebSocketManager extends EventEmitter {
 
         ws.onclose = (event) => {
           console.log(`🔌 WebSocket closed: ${connectionId}`, event.code, event.reason)
+          clearTimeout(connectionTimeout)
           this.isConnected.set(connectionId, false)
           this.emit('disconnected', connectionId, event)
-          this.attemptReconnect(connectionId, url, protocols)
+
+          // Only attempt reconnect if the connection was successfully established initially
+          // and the close wasn't intentional (code 1000)
+          if (event.code !== 1000 && this.reconnectAttempts.get(connectionId) !== undefined) {
+            this.attemptReconnect(connectionId, url, protocols)
+          } else {
+            // If connection never opened or was closed intentionally, reject the promise
+            reject(new Error(`WebSocket connection failed: ${connectionId} (code: ${event.code})`))
+          }
         }
 
         ws.onerror = (error) => {
-          console.error(`❌ WebSocket error: ${connectionId}`, error)
-          this.emit('error', connectionId, error)
-          reject(error)
+          console.warn(`⚠️ WebSocket connection failed: ${connectionId} (this is normal if WebSocket server is not running)`)
+          clearTimeout(connectionTimeout)
+          this.isConnected.set(connectionId, false)
+          this.emit('connectionError', connectionId, error)
+
+          // Don't reject immediately, let onclose handle cleanup
+          // This prevents uncaught promise rejections
         }
 
       } catch (error) {

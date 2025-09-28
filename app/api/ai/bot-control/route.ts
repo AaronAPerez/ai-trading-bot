@@ -55,9 +55,20 @@ export async function POST(request: NextRequest) {
  */
 async function handleStartBot(config: any) {
   if (botState.isRunning) {
+    console.log('⚠️ Bot start requested but already running, returning current state')
     return NextResponse.json({
       success: false,
-      error: 'Bot is already running'
+      error: 'Bot is already running',
+      data: {
+        sessionId: botState.sessionId,
+        startTime: botState.startTime,
+        uptime: botState.startTime ? Date.now() - new Date(botState.startTime).getTime() : 0,
+        config: botState.config ? {
+          mode: botState.config.mode,
+          strategiesEnabled: botState.config.strategies?.length || 0,
+          autoExecution: botState.config.executionSettings?.autoExecute || false
+        } : null
+      }
     }, { status: 400 })
   }
 

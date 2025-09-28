@@ -14,9 +14,9 @@ import AILiveTradesTable from "./AILiveTradesTable"
 import AITradingNotifications from "../notifications/AITradingNotifications"
 import useAITradingNotifications from "@/hooks/useAITradingNotifications"
 import useRealAITrading from "@/hooks/useRealAITrading"
-import AILearningProgress from "./AILearningProgress"
 import LiveBalanceDisplay from "./LiveBalanceDisplay"
 import { ClientSafeTime } from "@/components/ui/ClientSafeTime"
+import { Brain } from 'lucide-react'
 
 import PortfolioOverview from "./PortfolioOverview"
 import DashboardLayout from "./DashboardLayout"
@@ -251,137 +251,136 @@ export default function AITradingDashboard() {
   return (
     <DashboardLayout
       isLiveTrading={false}
-      onToggleMode={() => {}}
+      onToggleMode={() => { }}
       botStatus={botMetrics}
     >
-         {/* AI Trading Engine Header with Control Button */}
-          <div className="flex items-center justify-between mb-6">
+      {/* AI Trading Engine Header with Control Button */}
+      <div className="flex items-center justify-between mb-6">
         {/* Live Balance Display - Spanning 2 columns */}
         {/* <div className="col-span-2"> */}
-          <LiveBalanceDisplay
-            refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-            showChangeIndicators={true}
-          />
+        <LiveBalanceDisplay
+          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+          showChangeIndicators={true}
+        />
         {/* </div> */}
 
-            {/* <div className="flex items-center space-x-3"> */}
-              {/* <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+        {/* <div className="flex items-center space-x-3"> */}
+        {/* <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
                 </svg>
               </div> */}
-              {/* <div>
+        {/* <div>
                 <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
                 <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
               </div> */}
-            {/* </div> */}
+        {/* </div> */}
 
-            {/* AI Trading Control - Top Right */}
-            <div className="flex items-center space-x-4">
-              {/* Live Trading Activity Indicator - More Prominent */}
-              {persistentBotState.isRunning && (
-                <div className="relative bg-gradient-to-r from-green-900/50 to-blue-900/50 border border-green-500/30 rounded-lg px-3 py-2 overflow-hidden">
-                  {/* Animated background pulse */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-blue-500/10 animate-pulse"></div>
+        {/* AI Trading Control - Top Right */}
+        <div className="flex items-center space-x-4">
+          {/* Live Trading Activity Indicator - More Prominent */}
+          {persistentBotState.isRunning && (
+            <div className="relative bg-gradient-to-r from-green-900/50 to-blue-900/50 border border-green-500/30 rounded-lg px-3 py-2 overflow-hidden">
+              {/* Animated background pulse */}
+              <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-blue-500/10 animate-pulse"></div>
 
-                  
 
-                  <div className="relative flex items-center space-x-3">
-                    <div className="flex items-center space-x-1">
-                      <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
-                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                      <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" style={{animationDelay: '0.3s'}}></div>
-                      <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" style={{animationDelay: '0.6s'}}></div>
-                    </div>
-                    <div className="text-xs">
-                      <div className="text-green-400 font-bold text-sm">🤖 AI TRADING LIVE</div>
-                      <div className="text-gray-300 font-medium">
-                        {aiActivity.activities.length > 0
-                          ? `${aiActivity.activities.filter(a => a.type === 'trade').length} trades • ${aiActivity.activities.filter(a => a.type === 'analysis').length} analyses`
-                          : notifications.notifications.length > 0
-                            ? `${notifications.notifications.length} recent trades`
-                            : 'Monitoring Alpaca API...'}
-                      </div>
-                    </div>
-                  </div>
+
+              <div className="relative flex items-center space-x-3">
+                <div className="flex items-center space-x-1">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" style={{ animationDelay: '0.3s' }}></div>
+                  <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" style={{ animationDelay: '0.6s' }}></div>
                 </div>
-              )}
-
-              {/* Recent Trades Count */}
-              {notifications.notifications.length > 0 && (
-                <div className="flex items-center space-x-2 bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-600/50">
-                  <div className="relative">
-                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                    </svg>
-                    <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                      {notifications.notifications.length}
-                    </span>
+                <div className="text-xs">
+                  <div className="text-green-400 font-bold text-sm">🤖 AI TRADING LIVE</div>
+                  <div className="text-gray-300 font-medium">
+                    {aiActivity.activities.length > 0
+                      ? `${aiActivity.activities.filter(a => a.type === 'trade').length} trades • ${aiActivity.activities.filter(a => a.type === 'analysis').length} analyses`
+                      : notifications.notifications.length > 0
+                        ? `${notifications.notifications.length} recent trades`
+                        : 'Monitoring Alpaca API...'}
                   </div>
-                  <span className="text-xs text-gray-300 font-medium">Recent</span>
-                </div>
-              )}
-
-              {/* Bot Status Indicator */}
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${persistentBotState.isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></div>
-                <div className="text-sm">
-                  <div className={`font-medium ${persistentBotState.isRunning ? 'text-green-400' : 'text-gray-400'}`}>
-                    {persistentBotState.isRunning ? 'AI Bot Active' : 'AI Bot Stopped'}
-                  </div>
-                  {persistentBotState.isRunning && persistentBotState.startTime && (
-                    <div className="text-xs text-gray-500">
-                      Running {Math.floor((Date.now() - persistentBotState.startTime.getTime()) / 60000)}m
-                    </div>
-                  )}
                 </div>
               </div>
+            </div>
+          )}
 
+          {/* Recent Trades Count */}
+          {notifications.notifications.length > 0 && (
+            <div className="flex items-center space-x-2 bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-600/50">
+              <div className="relative">
+                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                  {notifications.notifications.length}
+                </span>
+              </div>
+              <span className="text-xs text-gray-300 font-medium">Recent</span>
+            </div>
+          )}
 
-              {/* Start/Stop Button */}
-              <button
-                onClick={persistentBotState.isRunning ? handleStop : () => handleStart(defaultBotConfig)}
-                disabled={isStoppingBot || tradingBot.isStarting}
-                className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
-                  isStoppingBot || tradingBot.isStarting
-                    ? 'bg-gray-600 cursor-not-allowed text-gray-300'
-                    : persistentBotState.isRunning
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
-                }`}
-              >
-                {isStoppingBot ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    <span>Stopping...</span>
-                  </>
-                ) : tradingBot.isStarting ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    <span>Starting...</span>
-                  </>
-                ) : persistentBotState.isRunning ? (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                    <span>Stop AI Trading</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m2 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    <span>Start AI Trading</span>
-                  </>
-                )}
-              </button>
+          {/* Bot Status Indicator */}
+          <div className="flex items-center space-x-2">
+            <div className={`w-3 h-3 rounded-full ${persistentBotState.isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></div>
+            <div className="text-sm">
+              <div className={`font-medium ${persistentBotState.isRunning ? 'text-green-400' : 'text-gray-400'}`}>
+                {persistentBotState.isRunning ? 'AI Bot Active' : 'AI Bot Stopped'}
+              </div>
+              {persistentBotState.isRunning && persistentBotState.startTime && (
+                <div className="text-xs text-gray-500">
+                  Running {Math.floor((Date.now() - persistentBotState.startTime.getTime()) / 60000)}m
+                </div>
+              )}
             </div>
           </div>
+
+
+          {/* Start/Stop Button */}
+          <button
+            onClick={persistentBotState.isRunning ? handleStop : () => handleStart(defaultBotConfig)}
+            disabled={isStoppingBot || tradingBot.isStarting}
+            className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${isStoppingBot || tradingBot.isStarting
+                ? 'bg-gray-600 cursor-not-allowed text-gray-300'
+                : persistentBotState.isRunning
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
+              }`}
+          >
+            {isStoppingBot ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Stopping...</span>
+              </>
+            ) : tradingBot.isStarting ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Starting...</span>
+              </>
+            ) : persistentBotState.isRunning ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Stop AI Trading</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m2 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Start AI Trading</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
 
 
       {/* AI-Powered Trading Overview Section - Top Priority */}
@@ -418,12 +417,11 @@ export default function AITradingDashboard() {
                 <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
                   {aiActivity.activities.slice(0, 6).map((activity) => (
                     <div key={activity.id} className="ai-activity-card flex items-start space-x-2 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/30 transition-all text-xs">
-                      <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ai-pulse ${
-                        activity.type === 'trade' ? 'bg-green-400 ai-glow-green' :
-                        activity.type === 'analysis' ? 'bg-blue-400 ai-glow-blue' :
-                        activity.type === 'recommendation' ? 'bg-yellow-400 ai-glow-yellow' :
-                        activity.type === 'error' ? 'bg-red-400 ai-glow-red' : 'bg-gray-400'
-                      }`}></div>
+                      <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ai-pulse ${activity.type === 'trade' ? 'bg-green-400 ai-glow-green' :
+                          activity.type === 'analysis' ? 'bg-blue-400 ai-glow-blue' :
+                            activity.type === 'recommendation' ? 'bg-yellow-400 ai-glow-yellow' :
+                              activity.type === 'error' ? 'bg-red-400 ai-glow-red' : 'bg-gray-400'
+                        }`}></div>
                       <div className="flex-1 min-w-0">
                         <div className="text-white font-medium truncate">{activity.message}</div>
                         {activity.symbol && (
@@ -474,21 +472,15 @@ export default function AITradingDashboard() {
               </div>
             </div>
             <div className="p-4">
-              <AILearningProgress
-                compact={false}
-                botIsActive={persistentBotState.isRunning}
-              />
+              <div className="text-center py-8 text-gray-400">
+                <Brain className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+                <div className="text-sm">AI Learning Module</div>
+                <div className="text-xs mt-1">Simplified - No continuous polling</div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Live Balance Display - Spanning 2 columns */}
-        {/* <div className="xl:col-span-2">
-          <LiveBalanceDisplay
-            refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-            showChangeIndicators={true}
-          />
-        </div> */}
       </div>
 
       {/* Secondary Trading Data Section */}
@@ -500,7 +492,7 @@ export default function AITradingDashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z" />
                   </svg>
                   <h4 className="text-lg font-semibold text-white">Complete Trading Activity</h4>
                   <span className="text-xs text-gray-500">(Alpaca API + AI Trades from Supabase)</span>
@@ -510,7 +502,7 @@ export default function AITradingDashboard() {
                 </div>
               </div>
             </div>
-            <div className="p-4">
+            {/* <div className="p-4">
               <TradesOrdersTable
                 maxItems={15}
                 compact={false}
@@ -520,27 +512,27 @@ export default function AITradingDashboard() {
                 defaultTab="orders"
                 refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
               />
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
 
-                  {/* AI Live Trades Section */}
-            {/* <div className="border-t border-gray-700/50">
-              <div className="p-4 pb-2">
-                <div className="flex items-center space-x-2 mb-3">
-                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                  </svg>
-                  <h5 className="text-sm font-semibold text-white">AI Live Trades</h5>
-                </div>
-                <AILiveTradesTable
-                  maxItems={5}
-                  compact={true}
-                  showHeader={false}
-                />
-              </div>
-            </div> */}
+      {/* AI Live Trades Section */}
+      <div className="border-t border-gray-700/50">
+        <div className="p-4 pb-2">
+          <div className="flex items-center space-x-2 mb-3">
+            <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            <h5 className="text-sm font-semibold text-white">AI Live Trades</h5>
+          </div>
+          <AILiveTradesTable
+            maxItems={5}
+            compact={true}
+            showHeader={false}
+          />
+        </div>
+      </div>
 
 
       {/* Dashboard Grid Layout */}

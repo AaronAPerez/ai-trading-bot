@@ -14,6 +14,11 @@ export class SupabaseService {
   private client: SupabaseClient<Database> = supabase
   private serverClient?: SupabaseClient<Database>
 
+  // Public getter for the supabase client
+  get supabase(): SupabaseClient<Database> {
+    return this.client
+  }
+
   private getServerClient(): SupabaseClient<Database> {
     if (!this.serverClient && typeof window === 'undefined') {
       this.serverClient = createServerSupabaseClient()
@@ -32,17 +37,6 @@ export class SupabaseService {
     return data
   }
 
-  async getTradeHistory(userId: string, limit = 50): Promise<TradeHistory[]> {
-    const { data, error } = await this.client
-      .from('trade_history')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(limit)
-
-    if (error) throw error
-    return data || []
-  }
 
   async updateBotMetrics(userId: string, metrics: Tables['bot_metrics']['Update']) {
     const { data, error } = await this.client
@@ -199,6 +193,79 @@ export class SupabaseService {
     return {
       ...summary,
       winRate: summary?.totalTrades > 0 ? (summary.winningTrades / summary.totalTrades) * 100 : 0
+    }
+  }
+
+  async getPositions(userId: string) {
+    try {
+      const { data, error } = await this.client
+        .from('trade_history')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'FILLED')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get positions:', error)
+      return []
+    }
+  }
+
+  async getTradeHistory(userId: string, limit: number = 100, since?: Date) {
+    try {
+      let query = this.client
+        .from('trade_history')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      if (since) {
+        query = query.gt('created_at', since.toISOString())
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get trade history:', error)
+      return []
+    }
+  }
+
+  async getAILearningData(userId: string) {
+    try {
+      const { data, error } = await this.client
+        .from('ai_learning_data')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get AI learning data:', error)
+      return []
+    }
+  }
+
+  async getBotMetrics(userId: string) {
+    try {
+      const { data, error } = await this.client
+        .from('bot_metrics')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get bot metrics:', error)
+      return []
     }
   }
 

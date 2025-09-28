@@ -29,6 +29,8 @@ export interface Database {
       }
       trade_history: {
         Row: {
+          filled_at: any
+          updated_at: any
           id: string
           user_id: string
           symbol: string
