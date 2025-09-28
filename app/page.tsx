@@ -1,6 +1,5 @@
 import React from "react";
 import AITradingDashboard from "@/components/dashboard/AITradingDashboard";
-import OrderExecutionDebugger from "@/components/OrderExecutionDebugger";
 
 
 export default function Home() {
@@ -8,7 +7,7 @@ export default function Home() {
     <div>
       <main>
       <AITradingDashboard/>
-      <OrderExecutionDebugger/>
+      {/* <OrderExecutionDebugger/> */}
       </main>
     </div>
   );

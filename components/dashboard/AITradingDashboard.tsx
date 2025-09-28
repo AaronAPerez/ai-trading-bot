@@ -17,6 +17,9 @@ import useRealAITrading from "@/hooks/useRealAITrading"
 import LiveBalanceDisplay from "./LiveBalanceDisplay"
 import { ClientSafeTime } from "@/components/ui/ClientSafeTime"
 import { Brain } from 'lucide-react'
+import OptimizedAILearning from "./OptimizedAILearning"
+import AIInsightsDashboard from "./AIInsightsDashboard"
+import { useAILearningManager } from "@/hooks/useAILearningManager"
 
 import PortfolioOverview from "./PortfolioOverview"
 import DashboardLayout from "./DashboardLayout"
@@ -72,6 +75,9 @@ export default function AITradingDashboard() {
   const realAITrading = useRealAITrading({
     // userId will use getCurrentUserId() by default
   })
+
+  // AI Learning Manager for 24/7 learning from Alpaca API data
+  const aiLearningManager = useAILearningManager()
 
   // Store interval reference for cleanup
   const [tradingInterval, setTradingInterval] = useState<NodeJS.Timeout | null>(null)
@@ -159,6 +165,10 @@ export default function AITradingDashboard() {
     await tradingBot.startBot(config)
     await aiActivity.startSimulation()
 
+    // Start 24/7 AI Learning Service with Alpaca API data
+    console.log('🧠 Starting 24/7 AI Learning Service with Alpaca API data...')
+    await aiLearningManager.startLearning()
+
     // Update persistent state
     setPersistentBotState(prev => ({
       ...prev,
@@ -182,7 +192,7 @@ export default function AITradingDashboard() {
       })
     }, 1000)
 
-    console.log('AI Trading Bot started and state persisted')
+    console.log('✅ AI Trading Bot + Learning Service started with Alpaca API integration')
   }
 
   // Enhanced stop function that stops both bot and activity monitoring
@@ -197,10 +207,12 @@ export default function AITradingDashboard() {
       // Stop trading monitoring first
       stopTradingMonitoring()
 
-      // Stop bot and AI activity in parallel
+      // Stop bot, AI activity, and learning service in parallel
+      console.log('🛑 Stopping AI Learning Service...')
       await Promise.all([
         tradingBot.stopBot(),
-        aiActivity.stopSimulation()
+        aiActivity.stopSimulation(),
+        aiLearningManager.stopLearning()
       ])
 
       // Update persistent state
@@ -384,10 +396,10 @@ export default function AITradingDashboard() {
 
 
       {/* AI-Powered Trading Overview Section - Top Priority */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
 
         {/* AI Bot Activity - Primary Column */}
-        <div className="xl:col-span-1">
+        {/* <div className="xl:col-span-1">
           <div className="bg-gradient-to-br from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 shadow-2xl">
             <div className="p-4 border-b border-blue-700/30">
               <div className="flex items-center justify-between">
@@ -401,20 +413,20 @@ export default function AITradingDashboard() {
                   <span className="text-green-400">{(tradingBot.metrics.successRate * 100 || 0).toFixed(1)}%</span>
                 </div>
               </div>
-            </div>
+            </div> */}
 
             {/* Live AI Activity Stream */}
-            <div className="p-4">
+            {/* <div className="p-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between mb-3">
                   <h6 className="text-sm font-semibold text-white">Live Activity Feed</h6>
                   <div className="text-xs text-blue-300">
                     {aiActivity.activities.length > 0 ? `${aiActivity.activities.length} activities` : 'No activity yet'}
                   </div>
-                </div>
+                </div> */}
 
                 {/* Activity Stream with enhanced styling */}
-                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                {/* <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
                   {aiActivity.activities.slice(0, 6).map((activity) => (
                     <div key={activity.id} className="ai-activity-card flex items-start space-x-2 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/30 transition-all text-xs">
                       <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ai-pulse ${activity.type === 'trade' ? 'bg-green-400 ai-glow-green' :
@@ -440,10 +452,10 @@ export default function AITradingDashboard() {
                       {persistentBotState.isRunning ? 'Waiting for AI activity...' : 'Start AI bot to see live activity'}
                     </div>
                   )}
-                </div>
+                </div> */}
 
                 {/* Real-time AI metrics from Supabase */}
-                {aiActivity.metrics && (
+                {/* {aiActivity.metrics && (
                   <div className="mt-4 pt-3 border-t border-blue-700/30">
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div className="bg-gray-800/30 rounded-lg p-2">
@@ -460,27 +472,74 @@ export default function AITradingDashboard() {
               </div>
             </div>
           </div>
-        </div>
+        </div> */}
 
-        {/* AI Learning Progress - Secondary Column */}
-        <div className="xl:col-span-1">
-          <div className="bg-gradient-to-br from-green-900/50 to-blue-900/50 rounded-lg border border-green-700/50 shadow-2xl h-full">
-            <div className="p-4 border-b border-green-700/30">
+        {/* AI Quick Stats - Secondary Column */}
+        {/* <div className="xl:col-span-1">
+          <div className="bg-gradient-to-br from-green-900/50 to-blue-900/50 rounded-lg border border-green-700/50 shadow-2xl h-full"> */}
+            {/* <div className="p-4 border-b border-green-700/30">
               <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                <h4 className="text-lg font-semibold ai-gradient-text">🧠 AI Learning</h4>
+                <div className={`w-3 h-3 rounded-full ${aiLearningManager.isActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></div>
+                <h4 className="text-lg font-semibold ai-gradient-text">🧠 AI Learning Status</h4>
               </div>
-            </div>
-            <div className="p-4">
-              <div className="text-center py-8 text-gray-400">
-                <Brain className="w-12 h-12 mx-auto mb-3 text-gray-600" />
-                <div className="text-sm">AI Learning Module</div>
-                <div className="text-xs mt-1">Simplified - No continuous polling</div>
-              </div>
-            </div>
+            </div> */}
+            {/* <div className="p-4 space-y-4"> */}
+              {/* <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Learning Engine</span>
+                  <span className="text-sm font-medium text-white">
+                    {aiLearningManager.isActive ? 'Active' : 'Standby'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Accuracy</span>
+                  <span className="text-sm font-medium text-green-400">
+                    {(aiLearningManager.learningStats.accuracy * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Patterns Found</span>
+                  <span className="text-sm font-medium text-blue-400">
+                    {aiLearningManager.learningStats.patternsIdentified}
+                  </span>
+                </div>
+              </div> */}
+
+              {/* <div className="bg-gray-800/30 rounded-lg p-3">
+                <div className="text-xs text-gray-300 mb-2">Data Sources</div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">Alpaca API</span>
+                    <span className="text-green-400">✓ Connected</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">Supabase DB</span>
+                    <span className="text-blue-400">✓ Synced</span>
+                  </div>
+                </div>
+              </div> */}
+            {/* </div>
+          </div>
+        </div> */}
+
+      </div>
+
+      {/* AI Learning & Insights Section */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Brain className="w-6 h-6 text-purple-400" />
+            <h3 className="text-xl font-bold text-white">AI Learning & Insights</h3>
+          </div>
+          <div className="text-xs text-gray-400">
+            Real-time learning from Alpaca API trades
           </div>
         </div>
 
+        <AIInsightsDashboard
+          botIsActive={persistentBotState.isRunning}
+          learningActive={aiLearningManager.isActive}
+        />
       </div>
 
       {/* Secondary Trading Data Section */}

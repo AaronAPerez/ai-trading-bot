@@ -32,12 +32,53 @@ export default function useAITradingNotifications({
   const [notifications, setNotifications] = useState<TradingNotification[]>([])
   const [lastFetchTime, setLastFetchTime] = useState<Date>(new Date())
 
-  // Fetch real trading notifications from Supabase - DISABLED to prevent continuous requests
+  // Fetch real trading notifications from Supabase - OPTIMIZED with throttling
   const fetchRealTradeNotifications = useCallback(async () => {
-    // DISABLED: This was causing continuous trade_history requests
-    console.log('🚫 fetchRealTradeNotifications disabled to prevent continuous API calls')
-    return
-  }, [])
+    // Only fetch if enablePolling is true and sufficient time has passed
+    if (!enablePolling) {
+      console.log('🚫 Trade notifications polling disabled')
+      return
+    }
+
+    try {
+      console.log('📊 Fetching trade notifications (throttled)')
+
+      // Get recent trades from the last 5 minutes only
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+      const recentTrades = await supabaseService.getTradeHistory(userId, 10, fiveMinutesAgo)
+
+      // Filter for trades that happened since last fetch
+      const newTrades = recentTrades.filter(trade => {
+        const tradeTime = new Date(trade.filled_at || trade.created_at)
+        return tradeTime > lastFetchTime && trade.status === 'FILLED'
+      })
+
+      // Convert trades to notifications without calling addTradeNotification to avoid loops
+      const newNotifications = newTrades.map(trade => ({
+        id: `real-trade-${trade.id}`,
+        type: trade.side as 'buy' | 'sell',
+        symbol: trade.symbol,
+        quantity: trade.quantity,
+        price: trade.price,
+        amount: trade.value,
+        pnl: trade.pnl,
+        timestamp: new Date(trade.filled_at || trade.created_at),
+        confidence: trade.confidence || undefined
+      }))
+
+      if (newNotifications.length > 0) {
+        console.log(`📈 Found ${newNotifications.length} new trade notifications`)
+        setNotifications(prev => {
+          const updated = [...newNotifications, ...prev].slice(0, maxNotifications)
+          return updated
+        })
+      }
+
+      setLastFetchTime(new Date())
+    } catch (error) {
+      console.error('Failed to fetch real trade notifications:', error)
+    }
+  }, [userId, lastFetchTime, maxNotifications, enablePolling])
 
   // Add new trading notification
   const addTradeNotification = useCallback((trade: TradeData) => {
@@ -153,7 +194,7 @@ export default function useAITradingNotifications({
       }
       window.removeEventListener('ai-trade-executed', handleTradeEvent as EventListener)
     }
-  }, [enablePolling, pollingInterval, userId])
+  }, [enablePolling, pollingInterval, userId, fetchRealTradeNotifications])
 
   // Helper function to trigger notifications (for integration with trading bot)
   const notifyTrade = useCallback((trade: TradeData) => {

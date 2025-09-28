@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Brain, TrendingUp, TrendingDown, Target, BookOpen, BarChart3, Clock, Settings } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '../ui/badge';
 
 interface LearningInsights {

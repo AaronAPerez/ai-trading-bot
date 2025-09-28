@@ -37,7 +37,6 @@ export default function RootLayout({
               {children}
             </WebSocketProvider>
           </StoreProvider>
-
         </Providers>
       </body>
     </html>
