@@ -1,0 +1,69 @@
+/* Custom scrollbar for AI activity feed */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(55, 65, 81, 0.3);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.7);
+}
+
+/* Enhanced AI activity cards with hover effects */
+.ai-activity-card {
+  transition: all 0.2s ease-in-out;
+}
+
+.ai-activity-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Glowing effect for AI indicators */
+.ai-glow-green {
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+}
+
+.ai-glow-blue {
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+.ai-glow-yellow {
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.3);
+}
+
+.ai-glow-red {
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+}
+
+/* Gradient text for AI titles */
+.ai-gradient-text {
+  background: linear-gradient(135deg, #60a5fa, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Pulse animation for live indicators */
+@keyframes ai-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+.ai-pulse {
+  animation: ai-pulse 2s ease-in-out infinite;
+}

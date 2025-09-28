@@ -140,7 +140,7 @@ export default function AIBotActivity({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <Bot className="w-5 h-5 text-blue-400" />
-            {/* <span className="font-semibold text-white">AI Bot Activity</span> */}
+            <span className="font-semibold text-white">AI Bot Activity</span>
             <div className={`w-2 h-2 rounded-full ${botIsRunning || isSimulating ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
           </div>
           {/* <Button

@@ -1,5 +1,6 @@
 import { supabase, createServerSupabaseClient } from '../supabaseClient'
 import { Database } from '../../types/supabase'
+import { SupabaseClient } from '@supabase/supabase-js'
 
 type Tables = Database['public']['Tables']
 type TradeHistory = Tables['trade_history']['Row']
@@ -10,8 +11,15 @@ type MarketSentiment = Tables['market_sentiment']['Row']
 type Profile = Tables['profiles']['Row']
 
 export class SupabaseService {
-  private client = supabase
-  private serverClient = createServerSupabaseClient()
+  private client: SupabaseClient<Database> = supabase
+  private serverClient?: SupabaseClient<Database>
+
+  private getServerClient(): SupabaseClient<Database> {
+    if (!this.serverClient && typeof window === 'undefined') {
+      this.serverClient = createServerSupabaseClient()
+    }
+    return this.serverClient || this.client
+  }
 
   async saveTradeHistory(trade: Tables['trade_history']['Insert']) {
     const { data, error } = await this.client
