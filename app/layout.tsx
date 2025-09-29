@@ -4,6 +4,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import { StoreProvider } from "@/store/slices/StoreProvider";
 import { WebSocketProvider } from "@/components/WebSocketProvider";
+import AuthProvider from "@/components/auth/AuthProvider";
+import UserHeader from "@/components/layout/UserHeader";
 import './globals.css';
 
 const geistSans = Geist({
@@ -29,13 +31,20 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-gray-50 dark:bg-black`}
       >
         <Providers>
           <StoreProvider>
-            <WebSocketProvider>
-              {children}
-            </WebSocketProvider>
+            <AuthProvider>
+              <WebSocketProvider>
+                <div className="min-h-screen flex flex-col px-4">
+                  <UserHeader />
+                  <main className="flex-1 w-full max-w-10xl mx-auto">
+                    {children}
+                  </main>
+                </div>
+              </WebSocketProvider>
+            </AuthProvider>
           </StoreProvider>
         </Providers>
       </body>

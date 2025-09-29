@@ -11,23 +11,33 @@ type MarketSentiment = Tables['market_sentiment']['Row']
 type Profile = Tables['profiles']['Row']
 
 export class SupabaseService {
-  private client: SupabaseClient<Database> = supabase
+  private _client: SupabaseClient<Database> = supabase
   private serverClient?: SupabaseClient<Database>
 
   // Public getter for the supabase client
   get supabase(): SupabaseClient<Database> {
-    return this.client
+    return this._client
+  }
+
+  // Public getter for the client with proper access
+  get client(): SupabaseClient<Database> {
+    return this._client
   }
 
   private getServerClient(): SupabaseClient<Database> {
     if (!this.serverClient && typeof window === 'undefined') {
       this.serverClient = createServerSupabaseClient()
     }
-    return this.serverClient || this.client
+    return this.serverClient || this._client
+  }
+
+  // Use service role client for admin operations
+  getServiceClient(): SupabaseClient<Database> {
+    return this.getServerClient()
   }
 
   async saveTradeHistory(trade: Tables['trade_history']['Insert']) {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('trade_history')
       .insert(trade)
       .select()
@@ -39,7 +49,7 @@ export class SupabaseService {
 
 
   async updateBotMetrics(userId: string, metrics: Tables['bot_metrics']['Update']) {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('bot_metrics')
       .upsert({
         user_id: userId,
@@ -54,7 +64,7 @@ export class SupabaseService {
   }
 
   async getBotMetrics(userId: string): Promise<BotMetrics | null> {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('bot_metrics')
       .select('*')
       .eq('user_id', userId)
@@ -65,7 +75,7 @@ export class SupabaseService {
   }
 
   async logBotActivity(log: Tables['bot_activity_logs']['Insert']) {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('bot_activity_logs')
       .insert(log)
       .select()
@@ -76,7 +86,7 @@ export class SupabaseService {
   }
 
   async getBotActivityLogs(userId: string, limit = 100): Promise<BotActivityLog[]> {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('bot_activity_logs')
       .select('*')
       .eq('user_id', userId)
@@ -88,7 +98,7 @@ export class SupabaseService {
   }
 
   async saveAILearningData(learning: Tables['ai_learning_data']['Insert']) {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('ai_learning_data')
       .insert(learning)
       .select()
@@ -99,7 +109,7 @@ export class SupabaseService {
   }
 
   async getAILearningData(userId: string, symbol?: string): Promise<AILearningData[]> {
-    let query = this.client
+    let query = this._client
       .from('ai_learning_data')
       .select('*')
       .eq('user_id', userId)
@@ -116,7 +126,7 @@ export class SupabaseService {
   }
 
   async saveMarketSentiment(sentiment: Tables['market_sentiment']['Insert']) {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('market_sentiment')
       .insert(sentiment)
       .select()
@@ -127,7 +137,7 @@ export class SupabaseService {
   }
 
   async getLatestMarketSentiment(symbol: string): Promise<MarketSentiment | null> {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('market_sentiment')
       .select('*')
       .eq('symbol', symbol)
@@ -140,7 +150,7 @@ export class SupabaseService {
   }
 
   async createOrUpdateProfile(profile: Tables['profiles']['Insert']) {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('profiles')
       .upsert(profile)
       .select()
@@ -151,7 +161,7 @@ export class SupabaseService {
   }
 
   async getProfile(userId: string): Promise<Profile | null> {
-    const { data, error } = await this.client
+    const { data, error } = await this._client
       .from('profiles')
       .select('*')
       .eq('user_id', userId)
@@ -162,7 +172,7 @@ export class SupabaseService {
   }
 
   async getPortfolioSummary(userId: string) {
-    const { data: trades, error } = await this.client
+    const { data: trades, error } = await this._client
       .from('trade_history')
       .select('*')
       .eq('user_id', userId)
@@ -198,7 +208,7 @@ export class SupabaseService {
 
   async getPositions(userId: string) {
     try {
-      const { data, error } = await this.client
+      const { data, error } = await this._client
         .from('trade_history')
         .select('*')
         .eq('user_id', userId)
@@ -215,7 +225,7 @@ export class SupabaseService {
 
   async getTradeHistory(userId: string, limit: number = 100, since?: Date) {
     try {
-      let query = this.client
+      let query = this._client
         .from('trade_history')
         .select('*')
         .eq('user_id', userId)
@@ -238,7 +248,7 @@ export class SupabaseService {
 
   async getAILearningData(userId: string) {
     try {
-      const { data, error } = await this.client
+      const { data, error } = await this._client
         .from('ai_learning_data')
         .select('*')
         .eq('user_id', userId)
@@ -254,7 +264,7 @@ export class SupabaseService {
 
   async getBotMetrics(userId: string) {
     try {
-      const { data, error } = await this.client
+      const { data, error } = await this._client
         .from('bot_metrics')
         .select('*')
         .eq('user_id', userId)
@@ -269,9 +279,125 @@ export class SupabaseService {
     }
   }
 
+  // Missing methods that bot-control API needs
+  async upsertBotMetrics(userId: string, metrics: Partial<Tables['bot_metrics']['Update']>) {
+    try {
+      // Use server client to bypass RLS for bot operations
+      const client = this.getServerClient()
+
+      const { data, error } = await client
+        .from('bot_metrics')
+        .upsert({
+          user_id: userId,
+          ...metrics,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        })
+        .select()
+
+      if (error) {
+        console.warn('Failed to upsert bot metrics:', error)
+        return null
+      }
+      return data?.[0] || null
+    } catch (error) {
+      console.warn('Error upserting bot metrics:', error)
+      return null
+    }
+  }
+
+  async logBotActivity(userId: string, activity: {
+    type: string
+    symbol?: string
+    message: string
+    status: string
+    details?: string
+  }) {
+    try {
+      // Use server client to bypass RLS for bot operations
+      const client = this.getServerClient()
+
+      let metadata = null
+      if (activity.details) {
+        try {
+          metadata = JSON.parse(activity.details)
+        } catch {
+          // If JSON parsing fails, leave metadata as null
+          metadata = null
+        }
+      }
+
+      const { data, error } = await client
+        .from('bot_activity_logs')
+        .insert({
+          user_id: userId,
+          timestamp: new Date().toISOString(),
+          type: activity.type,
+          symbol: activity.symbol,
+          message: activity.message,
+          status: activity.status,
+          details: activity.details,
+          metadata: metadata
+        })
+        .select()
+
+      if (error) {
+        console.warn('Failed to log bot activity:', error)
+        return null
+      }
+      return data?.[0] || null
+    } catch (error) {
+      console.warn('Error logging bot activity:', error)
+      return null
+    }
+  }
+
+  async saveTrade(userId: string, trade: {
+    symbol: string
+    side: string
+    quantity: number
+    price: number
+    value: number
+    timestamp: string
+    status: string
+    order_id?: string
+    ai_confidence?: number
+  }) {
+    try {
+      // Use server client to bypass RLS for bot operations
+      const client = this.getServerClient()
+
+      const { data, error } = await client
+        .from('trade_history')
+        .insert({
+          user_id: userId,
+          symbol: trade.symbol,
+          side: trade.side,
+          quantity: trade.quantity,
+          price: trade.price,
+          value: trade.value,
+          timestamp: trade.timestamp,
+          status: trade.status,
+          order_id: trade.order_id,
+          ai_confidence: trade.ai_confidence
+        })
+        .select()
+
+      if (error) {
+        console.warn('Failed to save trade:', error)
+        return null
+      }
+      return data?.[0] || null
+    } catch (error) {
+      console.warn('Error saving trade:', error)
+      return null
+    }
+  }
+
   async testConnection(): Promise<boolean> {
     try {
-      const { data, error } = await this.client
+      const { data, error } = await this._client
         .from('profiles')
         .select('count(*)')
         .limit(1)

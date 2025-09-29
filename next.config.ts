@@ -2,13 +2,19 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-     devIndicators: false,
-   reactStrictMode: true,
+  devIndicators: false,
+  reactStrictMode: true,
+  outputFileTracingRoot: __dirname,
+  output: 'standalone',
+  trailingSlash: false,
   eslint: {
     ignoreDuringBuilds: true,
   },
   typescript: {
     ignoreBuildErrors: true,
+  },
+  experimental: {
+    forceSwcTransforms: true
   },
    webpack: (config, { isServer }) => {
     if (!isServer) {

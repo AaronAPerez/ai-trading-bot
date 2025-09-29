@@ -213,7 +213,13 @@ export const useWebSocket = () => {
           }
           console.log('✅ Internal WebSocket connection initialized (dev mode)')
         } catch (error) {
-          console.warn('⚠️ Internal WebSocket server not available:', error)
+          // Suppress timeout errors for optional internal WebSocket
+          if (!(error instanceof Error && error.message.includes('timeout'))) {
+            console.warn('⚠️ Internal WebSocket server not available:', error)
+          }
+          if (isMountedRef.current) {
+            setIsInitialized(true)
+          }
         }
         return
       }
@@ -243,7 +249,10 @@ export const useWebSocket = () => {
           setConnectionStatus(prev => ({ ...prev, internalWs: true }))
         }
       } catch (error) {
-        console.warn('⚠️ Internal WebSocket server not available:', error)
+        // Suppress timeout errors for optional internal WebSocket
+        if (!(error instanceof Error && error.message.includes('timeout'))) {
+          console.warn('⚠️ Internal WebSocket server not available:', error)
+        }
       }
 
       // Setup event listeners

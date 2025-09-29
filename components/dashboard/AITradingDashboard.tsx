@@ -20,11 +20,12 @@ import { Brain } from 'lucide-react'
 import OptimizedAILearning from "./OptimizedAILearning"
 import AIInsightsDashboard from "./AIInsightsDashboard"
 import { useAILearningManager } from "@/hooks/useAILearningManager"
+import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
+import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
 import LiveTradesDisplay from "../trading/LiveTradesDisplay"
 import MarketStatusDisplay from "../market/MarketStatusDisplay"
 
 import PortfolioOverview from "./PortfolioOverview"
-import DashboardLayout from "./DashboardLayout"
 
 // Default bot configuration with auto-execution enabled
 const defaultBotConfig = {
@@ -97,6 +98,10 @@ export default function AITradingDashboard() {
 
   // AI Learning Manager for 24/7 learning from Alpaca API data
   const aiLearningManager = useAILearningManager()
+
+  // Real-time data hooks using React Query
+  const realTimeMetrics = useRealTimeAIMetrics()
+  const realTimeActivity = useRealTimeActivity()
 
   // Store interval reference for cleanup
   const [tradingInterval, setTradingInterval] = useState<NodeJS.Timeout | null>(null)
@@ -280,94 +285,64 @@ export default function AITradingDashboard() {
   }
 
   return (
-    <DashboardLayout
-      isLiveTrading={false}
-      onToggleMode={() => { }}
-      botStatus={botMetrics}
-    >
-      {/* AI Trading Engine Header with Control Button */}
-      <div className="flex items-center justify-between mb-6">
-        {/* Live Balance Display - Spanning 2 columns */}
-        <div className="col-span-2">
-          <LiveBalanceDisplay
-            refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-            showChangeIndicators={true}
-          />
+    <div className="space-y-6">
+      {/* AI Trading Control Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+              <Brain className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">AI Trading Engine</h1>
+              <p className="text-gray-400 text-sm">Powered by Advanced Machine Learning</p>
+            </div>
+          </div>
         </div>
 
-        {/* <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
-            <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
-          </div>
-        </div> */}
-
-        {/* AI Trading Control - Top Right */}
         <div className="flex items-center space-x-4">
-          {/* Live Trading Activity Indicator - More Prominent */}
-          {persistentBotState.isRunning && (
-            <div className="relative bg-gradient-to-r from-green-900/50 to-blue-900/50 border border-green-500/30 rounded-lg px-3 py-2 overflow-hidden">
-              {/* Animated background pulse */}
-              <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-blue-500/10 animate-pulse"></div>
+          {/* Generate Real Data Button */}
+          <button
+            onClick={async () => {
+              try {
+                console.log('🔄 Generating real AI learning data from Alpaca trades...')
+                const response = await fetch('/api/generate-learning-data', { method: 'POST' })
+                const result = await response.json()
+                console.log('✅ Learning data generated:', result)
 
+                // Update bot metrics too
+                const metricsResponse = await fetch('/api/update-bot-metrics', { method: 'POST' })
+                const metricsResult = await metricsResponse.json()
+                console.log('✅ Bot metrics updated:', metricsResult)
 
+                // Force refresh the metrics
+                realTimeMetrics.refetch()
 
-              <div className="relative flex items-center space-x-3">
-                <div className="flex items-center space-x-1">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" style={{ animationDelay: '0.3s' }}></div>
-                  <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" style={{ animationDelay: '0.6s' }}></div>
-                </div>
-                <div className="text-xs">
-                  <div className="text-green-400 font-bold text-sm">🤖 AI TRADING LIVE</div>
-                  <div className="text-gray-300 font-medium">
-                    {aiActivity.activities.length > 0
-                      ? `${aiActivity.activities.filter(a => a.type === 'trade').length} trades • ${aiActivity.activities.filter(a => a.type === 'analysis').length} analyses`
-                      : notifications.notifications.length > 0
-                        ? `${notifications.notifications.length} recent trades`
-                        : 'Monitoring Alpaca API...'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+                alert(`Generated ${result.learningDataCreated} AI learning records from real trades!`)
+              } catch (error) {
+                console.error('Error generating real data:', error)
+                alert('Error generating real data. Check console for details.')
+              }
+            }}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+          >
+            Generate Real Data
+          </button>
 
-          {/* Recent Trades Count */}
-          {notifications.notifications.length > 0 && (
-            <div className="flex items-center space-x-2 bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-600/50">
-              <div className="relative">
-                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                  {notifications.notifications.length}
-                </span>
-              </div>
-              <span className="text-xs text-gray-300 font-medium">Recent</span>
-            </div>
-          )}
-
-          {/* Bot Status Indicator */}
+          {/* Bot Status */}
           <div className="flex items-center space-x-2">
             <div className={`w-3 h-3 rounded-full ${persistentBotState.isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></div>
             <div className="text-sm">
               <div className={`font-medium ${persistentBotState.isRunning ? 'text-green-400' : 'text-gray-400'}`}>
-                {persistentBotState.isRunning ? 'AI Bot Active' : 'AI Bot Stopped'}
+                {persistentBotState.isRunning ? 'AI Active' : 'AI Stopped'}
               </div>
               {persistentBotState.isRunning && persistentBotState.startTime && (
                 <div className="text-xs text-gray-500">
-                  Running {Math.floor((Date.now() - persistentBotState.startTime.getTime()) / 60000)}m
+                  {Math.floor((Date.now() - persistentBotState.startTime.getTime()) / 60000)}m uptime
                 </div>
               )}
             </div>
           </div>
-
 
           {/* Start/Stop Button */}
           <button
@@ -399,159 +374,376 @@ export default function AITradingDashboard() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                <span>Stop AI Trading</span>
+                <span>Stop AI</span>
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m2 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span>Start AI Trading</span>
+                <span>Start AI</span>
               </>
             )}
           </button>
         </div>
       </div>
 
+      {/* Live Portfolio Balance */}
+      <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
+        <LiveBalanceDisplay
+          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+          showChangeIndicators={true}
+        />
+      </div>
 
-      {/* AI-Powered Trading Overview Section - Top Priority */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
 
-        {/* AI Bot Activity - Primary Column */}
-        {/* <div className="xl:col-span-1">
-          <div className="bg-gradient-to-br from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 shadow-2xl">
-            <div className="p-4 border-b border-blue-700/30">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full ${persistentBotState.isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></div>
-                  <h4 className="text-lg font-semibold ai-gradient-text">🤖 AI Trading Bot</h4>
+      {/* AI Progress and Learning Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* AI Learning Progress - Real-time Data */}
+        <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <Brain className="w-5 h-5 text-purple-400" />
+              <h3 className="text-lg font-semibold text-white">AI Learning Progress</h3>
+            </div>
+            <div className="flex items-center space-x-2">
+              {realTimeMetrics.isLoading && (
+                <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
+              <div className={`w-2 h-2 rounded-full ${
+                realTimeMetrics.metrics.isLearningActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+              }`}></div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">Accuracy Rate</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-lg font-bold text-green-400">
+                  {realTimeMetrics.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
+                  ) : (
+                    `${(realTimeMetrics.metrics.accuracy * 100).toFixed(1)}%`
+                  )}
+                </span>
+                {realTimeMetrics.metrics.accuracy > 0.8 && (
+                  <span className="text-xs text-green-300">↗</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">Patterns Identified</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-lg font-bold text-blue-400">
+                  {realTimeMetrics.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-5 w-8 rounded"></div>
+                  ) : (
+                    realTimeMetrics.metrics.patternsIdentified.toLocaleString()
+                  )}
+                </span>
+                {realTimeMetrics.metrics.patternsIdentified > 10 && (
+                  <span className="text-xs text-blue-300">+{Math.floor(realTimeMetrics.metrics.patternsIdentified / 5)}</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">Data Points Processed</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-lg font-bold text-purple-400">
+                  {realTimeMetrics.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-5 w-16 rounded"></div>
+                  ) : (
+                    realTimeMetrics.metrics.dataPointsProcessed.toLocaleString()
+                  )}
+                </span>
+                {realTimeMetrics.metrics.dataPointsProcessed > 100 && (
+                  <span className="text-xs text-purple-300">📈</span>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-purple-700/30">
+              <div className="text-xs text-gray-400 mb-2">Learning Sources</div>
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-300">Alpaca API</span>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                    <span className="text-green-400">Live</span>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-1 text-xs text-gray-300">
-                  <span>{tradingBot.metrics.tradesExecuted || 0} trades</span>
-                  <span className="text-gray-500">•</span>
-                  <span className="text-green-400">{(tradingBot.metrics.successRate * 100 || 0).toFixed(1)}%</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-300">Supabase DB</span>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                    <span className="text-blue-400">Synced</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-300">React Query</span>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                    <span className="text-purple-400">Caching</span>
+                  </div>
                 </div>
               </div>
-            </div> */}
+            </div>
+          </div>
+        </div>
 
-        {/* Live AI Activity Stream */}
-        {/* <div className="p-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between mb-3">
-                  <h6 className="text-sm font-semibold text-white">Live Activity Feed</h6>
-                  <div className="text-xs text-blue-300">
-                    {aiActivity.activities.length > 0 ? `${aiActivity.activities.length} activities` : 'No activity yet'}
-                  </div>
-                </div> */}
+        {/* AI Performance Metrics - Real-time Alpaca Data */}
+        <div className="bg-gradient-to-br from-green-900/50 to-emerald-900/50 rounded-xl p-6 border border-green-700/50">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+              <h3 className="text-lg font-semibold text-white">AI Performance</h3>
+            </div>
+            <div className="flex items-center space-x-2">
+              {realTimeMetrics.isLoading && (
+                <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
+              <div className="text-xs text-green-400 font-medium">
+                {persistentBotState.isRunning ? 'Live' : 'Inactive'}
+              </div>
+            </div>
+          </div>
 
-        {/* Activity Stream with enhanced styling */}
-        {/* <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                  {aiActivity.activities.slice(0, 6).map((activity) => (
-                    <div key={activity.id} className="ai-activity-card flex items-start space-x-2 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/30 transition-all text-xs">
-                      <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ai-pulse ${activity.type === 'trade' ? 'bg-green-400 ai-glow-green' :
-                          activity.type === 'analysis' ? 'bg-blue-400 ai-glow-blue' :
-                            activity.type === 'recommendation' ? 'bg-yellow-400 ai-glow-yellow' :
-                              activity.type === 'error' ? 'bg-red-400 ai-glow-red' : 'bg-gray-400'
-                        }`}></div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium truncate">{activity.message}</div>
-                        {activity.symbol && (
-                          <div className="text-blue-300 font-mono text-xs">{activity.symbol}</div>
-                        )}
-                        <div className="text-gray-400 text-xs">
-                          {new Date(activity.timestamp).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {aiActivity.activities.length === 0 && (
-                    <div className="text-center py-6 text-gray-400 text-sm">
-                      <div className="mb-2">🎯</div>
-                      {persistentBotState.isRunning ? 'Waiting for AI activity...' : 'Start AI bot to see live activity'}
-                    </div>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">Success Rate</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-lg font-bold text-green-400">
+                  {realTimeMetrics.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
+                  ) : (
+                    `${(realTimeMetrics.metrics.successRate * 100).toFixed(1)}%`
                   )}
-                </div> */}
+                </span>
+                {realTimeMetrics.metrics.successRate > 0.7 && (
+                  <span className="text-xs text-green-300">🎯</span>
+                )}
+              </div>
+            </div>
 
-        {/* Real-time AI metrics from Supabase */}
-        {/* {aiActivity.metrics && (
-                  <div className="mt-4 pt-3 border-t border-blue-700/30">
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="bg-gray-800/30 rounded-lg p-2">
-                        <div className="text-gray-400">Symbols Analyzed</div>
-                        <div className="text-white font-bold">{aiActivity.metrics.symbolsScanned || 0}</div>
-                      </div>
-                      <div className="bg-gray-800/30 rounded-lg p-2">
-                        <div className="text-gray-400">Success Rate</div>
-                        <div className="text-green-400 font-bold">{aiActivity.metrics.successRate.toFixed(1)}%</div>
-                      </div>
-                    </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">Trades Executed</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-lg font-bold text-blue-400">
+                  {realTimeMetrics.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-5 w-8 rounded"></div>
+                  ) : (
+                    realTimeMetrics.metrics.tradesExecuted.toLocaleString()
+                  )}
+                </span>
+                {realTimeMetrics.metrics.tradesExecuted > 0 && (
+                  <span className="text-xs text-blue-300">📊</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">Recommendations</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-lg font-bold text-purple-400">
+                  {realTimeMetrics.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-5 w-8 rounded"></div>
+                  ) : (
+                    realTimeMetrics.metrics.recommendationsGenerated.toLocaleString()
+                  )}
+                </span>
+                {realTimeMetrics.metrics.recommendationsGenerated > 5 && (
+                  <span className="text-xs text-purple-300">💡</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">Risk Score</span>
+              <div className="flex items-center space-x-2">
+                <span className={`text-lg font-bold ${
+                  realTimeMetrics.metrics.riskScore > 70 ? 'text-red-400' :
+                  realTimeMetrics.metrics.riskScore > 40 ? 'text-yellow-400' : 'text-green-400'
+                }`}>
+                  {realTimeMetrics.isLoading ? (
+                    <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
+                  ) : (
+                    `${realTimeMetrics.metrics.riskScore}/100`
+                  )}
+                </span>
+                {realTimeMetrics.metrics.riskScore < 30 && (
+                  <span className="text-xs text-green-300">🛡️</span>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-green-700/30">
+              <div className="text-xs text-gray-400 mb-2">Real-time P&L from Alpaca</div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Total P&L</span>
+                  <div className="flex items-center space-x-1">
+                    <span className={`font-bold ${
+                      realTimeMetrics.metrics.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {realTimeMetrics.isLoading ? (
+                        <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
+                      ) : (
+                        `${realTimeMetrics.metrics.totalPnL >= 0 ? '+' : ''}$${realTimeMetrics.metrics.totalPnL.toFixed(2)}`
+                      )}
+                    </span>
+                    {Math.abs(realTimeMetrics.metrics.totalPnL) > 100 && (
+                      <span className="text-xs">{realTimeMetrics.metrics.totalPnL >= 0 ? '📈' : '📉'}</span>
+                    )}
                   </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Daily P&L</span>
+                  <div className="flex items-center space-x-1">
+                    <span className={`font-bold ${
+                      realTimeMetrics.metrics.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {realTimeMetrics.isLoading ? (
+                        <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
+                      ) : (
+                        `${realTimeMetrics.metrics.dailyPnL >= 0 ? '+' : ''}$${realTimeMetrics.metrics.dailyPnL.toFixed(2)}`
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Activity Feed - Real-time Database Data */}
+        <div className="bg-gradient-to-br from-blue-900/50 to-indigo-900/50 rounded-xl p-6 border border-blue-700/50">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${
+                realTimeActivity.hasRecentActivity ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+              }`}></div>
+              <h3 className="text-lg font-semibold text-white">Live AI Activity</h3>
+            </div>
+            <div className="flex items-center space-x-2">
+              {realTimeActivity.isLoading && (
+                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
+              <div className="text-xs text-blue-400">
+                {realTimeActivity.isLoading ? (
+                  <div className="animate-pulse bg-gray-600 h-3 w-16 rounded"></div>
+                ) : (
+                  `${realTimeActivity.activities.length} activities`
                 )}
               </div>
             </div>
           </div>
-        </div> */}
 
-        {/* AI Quick Stats - Secondary Column */}
-        {/* <div className="xl:col-span-1">
-          <div className="bg-gradient-to-br from-green-900/50 to-blue-900/50 rounded-lg border border-green-700/50 shadow-2xl h-full"> */}
-        {/* <div className="p-4 border-b border-green-700/30">
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${aiLearningManager.isActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></div>
-                <h4 className="text-lg font-semibold ai-gradient-text">🧠 AI Learning Status</h4>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {realTimeActivity.isLoading ? (
+              // Loading skeleton
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-start space-x-3 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30 animate-pulse">
+                  <div className="w-2 h-2 bg-gray-600 rounded-full mt-2 flex-shrink-0"></div>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="h-4 bg-gray-600 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-700 rounded w-1/2"></div>
+                  </div>
+                </div>
+              ))
+            ) : realTimeActivity.activities.length > 0 ? (
+              realTimeActivity.activities.slice(0, 6).map((activity) => (
+                <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/30 transition-all">
+                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                    activity.type === 'trade' ? 'bg-green-400' :
+                    activity.type === 'info' ? 'bg-blue-400' :
+                    activity.type === 'recommendation' ? 'bg-yellow-400' :
+                    activity.type === 'error' ? 'bg-red-400' :
+                    activity.type === 'risk' ? 'bg-orange-400' :
+                    activity.type === 'system' ? 'bg-purple-400' : 'bg-gray-400'
+                  }`}></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-white font-medium truncate">{activity.message}</div>
+                    {activity.symbol && (
+                      <div className="text-xs text-blue-300 font-mono">{activity.symbol}</div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-gray-400">
+                        {new Date(activity.timestamp).toLocaleTimeString()}
+                      </div>
+                      <div className={`text-xs px-2 py-1 rounded ${
+                        activity.status === 'completed' ? 'bg-green-900/30 text-green-300' :
+                        activity.status === 'failed' ? 'bg-red-900/30 text-red-300' :
+                        'bg-yellow-900/30 text-yellow-300'
+                      }`}>
+                        {activity.status}
+                      </div>
+                    </div>
+                    {activity.confidence && (
+                      <div className="text-xs text-purple-300 mt-1">
+                        Confidence: {(activity.confidence * 100).toFixed(1)}%
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <Brain className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                <div className="text-sm">
+                  {persistentBotState.isRunning ? 'Waiting for AI activity...' : 'Start AI to see live activity'}
+                </div>
+                <div className="text-xs text-gray-500 mt-2">
+                  Data sourced from Supabase database
+                </div>
               </div>
-            </div> */}
-        {/* <div className="p-4 space-y-4"> */}
-        {/* <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">Learning Engine</span>
-                  <span className="text-sm font-medium text-white">
-                    {aiLearningManager.isActive ? 'Active' : 'Standby'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">Accuracy</span>
-                  <span className="text-sm font-medium text-green-400">
-                    {(aiLearningManager.learningStats.accuracy * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">Patterns Found</span>
-                  <span className="text-sm font-medium text-blue-400">
-                    {aiLearningManager.learningStats.patternsIdentified}
-                  </span>
-                </div>
-              </div> */}
-
-        {/* <div className="bg-gray-800/30 rounded-lg p-3">
-                <div className="text-xs text-gray-300 mb-2">Data Sources</div>
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Alpaca API</span>
-                    <span className="text-green-400">✓ Connected</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Supabase DB</span>
-                    <span className="text-blue-400">✓ Synced</span>
-                  </div>
-                </div>
-              </div> */}
-        {/* </div>
+            )}
           </div>
-        </div> */}
 
+          {/* Activity Stats */}
+          {realTimeActivity.activities.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-blue-700/30">
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="bg-gray-800/30 rounded-lg p-2">
+                  <div className="text-gray-400">Recent Trades</div>
+                  <div className="text-green-400 font-bold">{realTimeActivity.recentTradesCount}</div>
+                </div>
+                <div className="bg-gray-800/30 rounded-lg p-2">
+                  <div className="text-gray-400">Total Activities</div>
+                  <div className="text-blue-400 font-bold">{realTimeActivity.stats.totalActivities}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* AI Learning & Insights Section */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2">
+      {/* Advanced AI Insights Dashboard */}
+      <div className="bg-gradient-to-r from-gray-800/40 to-purple-900/20 rounded-xl p-6 border border-gray-700/50">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
             <Brain className="w-6 h-6 text-purple-400" />
-            <h3 className="text-xl font-bold text-white">AI Learning & Insights</h3>
+            <h2 className="text-xl font-bold text-white">Advanced AI Insights</h2>
           </div>
-          <div className="text-xs text-gray-400">
-            Real-time learning from Alpaca API trades
+          <div className="flex items-center space-x-4">
+            {persistentBotState.isRunning && (
+              <div className="flex items-center space-x-2 bg-green-900/30 px-3 py-1 rounded-full border border-green-500/30">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
+                <span className="text-xs text-green-400 font-medium">AI Learning Active</span>
+              </div>
+            )}
+            {notifications.notifications.length > 0 && (
+              <div className="flex items-center space-x-2 bg-blue-900/30 px-3 py-1 rounded-full border border-blue-500/30">
+                <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                <span className="text-xs text-blue-400 font-medium">{notifications.notifications.length} Recent Trades</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -561,55 +753,62 @@ export default function AITradingDashboard() {
         />
       </div>
 
-      {/* Market Status Section */}
-      <div className="mb-8">
-        <MarketStatusDisplay />
+      {/* Market Data and Trading Activity */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Market Status */}
+        <div className="bg-gradient-to-r from-gray-800/40 to-blue-900/20 rounded-xl p-6 border border-gray-700/50">
+          <div className="flex items-center space-x-2 mb-4">
+            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <h3 className="text-lg font-semibold text-white">Market Overview</h3>
+          </div>
+          <MarketStatusDisplay />
+        </div>
+
+        {/* Live Trading Activity */}
+        <div className="bg-gradient-to-r from-gray-800/40 to-green-900/20 rounded-xl p-6 border border-gray-700/50">
+          <div className="flex items-center space-x-2 mb-4">
+            <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            <h3 className="text-lg font-semibold text-white">Live Trades</h3>
+          </div>
+          <LiveTradesDisplay />
+        </div>
       </div>
 
-      {/* Live Trading Activity Section */}
-      <div className="mb-8">
-        <LiveTradesDisplay />
-      </div>
-
-
-      {/* Dashboard Grid Layout */}
-      {/* <div className="grid grid-cols-1 gap-6 mb-8">
-        <PortfolioOverview
-          portfolio={account.data}
-          positions={positions.data}
-          isLoading={account.isLoading || positions.isLoading}
-          error={account.error || positions.error}
-        />
-      </div> */}
-
-      {/* <AIRecommendationsList
-        recommendations={[]}
-        onExecuteRecommendation={async (rec) => {
-          console.log('Executing recommendation:', rec)
-          // TODO: Implement actual execution logic
-        }}
-        isLoading={false}
-      /> */}
-
-      {/* Data Sources Info */}
-      <div className="mt-6 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center space-x-4 text-gray-400">
+      {/* Enhanced Data Sources Footer */}
+      <div className="bg-gradient-to-r from-gray-900/50 to-gray-800/50 rounded-xl p-6 border border-gray-700/30">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-              <span>Live Alpaca API</span>
+              <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse"></div>
+              <div className="text-sm">
+                <span className="text-blue-400 font-medium">Alpaca API</span>
+                <div className="text-xs text-gray-400">Real-time market data & trading</div>
+              </div>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span>Supabase Database</span>
+              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              <div className="text-sm">
+                <span className="text-green-400 font-medium">Supabase</span>
+                <div className="text-xs text-gray-400">AI learning database</div>
+              </div>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-              <span>AI Analytics Engine</span>
+              <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
+              <div className="text-sm">
+                <span className="text-purple-400 font-medium">Zustand + React Query</span>
+                <div className="text-xs text-gray-400">State management & caching</div>
+              </div>
             </div>
           </div>
-          <div className="text-gray-500">
-            Last updated: <ClientSafeTime timestamp={new Date()} format="time" />
+          <div className="text-right">
+            <div className="text-xs text-gray-400">Last updated</div>
+            <div className="text-sm text-white font-medium">
+              <ClientSafeTime timestamp={new Date()} format="time" />
+            </div>
           </div>
         </div>
       </div>
@@ -620,6 +819,6 @@ export default function AITradingDashboard() {
         onDismiss={notifications.dismissNotification}
         autoHideDuration={notifications.autoHideDuration}
       />
-    </DashboardLayout>
+    </div>
   )
 }

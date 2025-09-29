@@ -82,7 +82,10 @@ export class WebSocketManager extends EventEmitter {
         // Set a connection timeout
         const connectionTimeout = setTimeout(() => {
           if (ws.readyState === WebSocket.CONNECTING) {
-            console.warn(`⏰ WebSocket connection timeout: ${connectionId}`)
+            // Suppress timeout warnings for internal WebSocket connections
+            if (!connectionId.includes('internal')) {
+              console.warn(`⏰ WebSocket connection timeout: ${connectionId}`)
+            }
             ws.close()
             reject(new Error(`WebSocket connection timeout: ${connectionId}`))
           }
@@ -118,7 +121,10 @@ export class WebSocketManager extends EventEmitter {
         }
 
         ws.onerror = (error) => {
-          console.warn(`⚠️ WebSocket connection failed: ${connectionId} (this is normal if WebSocket server is not running)`)
+          // Suppress error warnings for internal WebSocket connections
+          if (!connectionId.includes('internal')) {
+            console.warn(`⚠️ WebSocket connection failed: ${connectionId} (this is normal if WebSocket server is not running)`)
+          }
           clearTimeout(connectionTimeout)
           this.isConnected.set(connectionId, false)
           this.emit('connectionError', connectionId, error)

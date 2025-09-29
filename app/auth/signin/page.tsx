@@ -2,30 +2,22 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/stores/authStore'
 import { SignIn } from '@/components/auth/SignInForm'
-
 
 export default function SignInPage() {
   const router = useRouter()
-  const supabase = createClient()
+  const { signIn } = useAuth()
 
   const handleSignIn = async (email: string, password: string) => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
+    const { user, error } = await signIn(email, password)
 
-      if (error) throw error
+    if (error) {
+      throw error
+    }
 
-      if (data.user) {
-        router.push('/dashboard')
-        router.refresh()
-      }
-    } catch (error: any) {
-      console.error('Sign in error:', error)
-      throw new Error(error.message || 'Authentication failed')
+    if (user) {
+      router.push('/dashboard')
     }
   }
 

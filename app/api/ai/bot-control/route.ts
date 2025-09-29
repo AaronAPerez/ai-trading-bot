@@ -334,7 +334,7 @@ function startBotLogic(sessionId: string, config: any) {
 
       // 3. Log AI analysis activity to Supabase
       await supabaseService.logBotActivity(userId, {
-        type: 'analysis',
+        type: 'info',
         symbol: selectedSymbol,
         message: `AI analyzing ${selectedSymbol} | Confidence: ${(confidence * 100).toFixed(1)}%`,
         status: 'completed',

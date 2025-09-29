@@ -7,7 +7,7 @@ import { FreeMarketDataProvider } from '@/lib/marketData/FreeMarketDataProvider'
 interface BotActivityLog {
   id: string
   timestamp: Date
-  type: 'scan' | 'analysis' | 'recommendation' | 'trade' | 'error' | 'info'
+  type: 'trade' | 'recommendation' | 'risk' | 'system' | 'info' | 'error'
   symbol?: string
   message: string
   details?: string
@@ -618,8 +618,8 @@ async function performRealBotActivity() {
       }
 
       // Update metrics
-      botMetrics.symbolsScanned += type === 'scan' ? 1 : 0
-      botMetrics.analysisCompleted += type === 'analysis' ? 1 : 0
+      botMetrics.symbolsScanned += type === 'system' ? 1 : 0
+      botMetrics.analysisCompleted += type === 'info' ? 1 : 0
       botMetrics.recommendationsGenerated += type === 'recommendation' ? 1 : 0
       botMetrics.errorCount += status === 'failed' ? 1 : 0
       botMetrics.lastActivityTime = new Date()

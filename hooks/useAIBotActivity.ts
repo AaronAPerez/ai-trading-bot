@@ -7,7 +7,7 @@ import { getCurrentUserId } from '@/lib/auth/demo-user'
 interface BotActivityLog {
   id: string
   timestamp: string
-  type: 'scan' | 'analysis' | 'recommendation' | 'trade' | 'error' | 'info'
+  type: 'trade' | 'recommendation' | 'risk' | 'system' | 'info' | 'error'
   symbol?: string
   message: string
   details?: string
@@ -112,7 +112,7 @@ export function useAIBotActivity({
 
       const botMetrics = metrics ? {
         symbolsScanned: 0, // This would come from aggregating activity logs
-        analysisCompleted: activities.filter(a => a.type === 'analysis').length,
+        analysisCompleted: activities.filter(a => a.type === 'info').length,
         recommendationsGenerated: metrics.recommendations_generated || 0,
         tradesExecuted: metrics.trades_executed || 0,
         lastActivityTime: activities[0]?.timestamp || new Date().toISOString(),

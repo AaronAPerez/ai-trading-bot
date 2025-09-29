@@ -43,8 +43,17 @@ export async function POST(request: NextRequest) {
       orderData.type = 'market'
     }
 
+    // Set appropriate time_in_force based on asset type
     if (!orderData.time_in_force) {
-      orderData.time_in_force = 'day'
+      // Check if this is a crypto order (contains '/')
+      const isCrypto = orderData.symbol.includes('/')
+      if (isCrypto) {
+        // Crypto orders support: gtc, ioc, fok
+        orderData.time_in_force = 'gtc' // Good Till Canceled for crypto
+      } else {
+        // Stock orders support: day, gtc, opg, cls, ioc, fok
+        orderData.time_in_force = 'day'
+      }
     }
 
     // Check API credentials
@@ -92,6 +101,57 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('📊 Final order payload:', JSON.stringify(orderPayload, null, 2))
+
+    // Check for existing open orders to prevent wash trades
+    const existingOrdersResponse = await fetch(`https://paper-api.alpaca.markets/v2/orders?status=open&symbols=${orderPayload.symbol}`, {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+        'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+        'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!
+      }
+    })
+
+    if (existingOrdersResponse.ok) {
+      const existingOrders = await existingOrdersResponse.json()
+      console.log(`🔍 Found ${existingOrders.length} existing open orders for ${orderPayload.symbol}`)
+
+      // Check for opposite side orders
+      const oppositeSideOrders = existingOrders.filter((order: any) =>
+        order.symbol === orderPayload.symbol &&
+        order.side !== orderPayload.side &&
+        ['new', 'partially_filled', 'pending_new'].includes(order.status)
+      )
+
+      if (oppositeSideOrders.length > 0) {
+        console.log(`⚠️ Found ${oppositeSideOrders.length} opposite side orders, canceling them first...`)
+
+        // Cancel opposite side orders to prevent wash trade
+        for (const order of oppositeSideOrders) {
+          try {
+            const cancelResponse = await fetch(`https://paper-api.alpaca.markets/v2/orders/${order.id}`, {
+              method: 'DELETE',
+              headers: {
+                accept: 'application/json',
+                'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+                'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!
+              }
+            })
+
+            if (cancelResponse.ok) {
+              console.log(`✅ Canceled order ${order.id}`)
+            } else {
+              console.log(`⚠️ Could not cancel order ${order.id}: ${cancelResponse.status}`)
+            }
+          } catch (error) {
+            console.log(`⚠️ Error canceling order ${order.id}:`, error)
+          }
+        }
+
+        // Wait a moment for cancellations to process
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    }
 
     // Direct fetch to Alpaca Paper Trading API
     const options = {
