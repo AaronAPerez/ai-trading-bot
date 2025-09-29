@@ -116,7 +116,7 @@ export default function AILiveTradesTable({
     })
 
     // Get trade activities from AI bot
-    const tradeActivities = activities.filter(activity => activity.type === 'trade')
+    const tradeActivities = (activities || []).filter(activity => activity.type === 'trade')
 
     // Create a map of current positions for quick lookup
     const positionMap = new Map()

@@ -84,8 +84,8 @@ export async function POST(request: NextRequest) {
       const alpacaResponse = await fetch(`${process.env.ALPACA_BASE_URL}/v2/orders`, {
         method: 'POST',
         headers: {
-          'APCA-API-KEY-ID': process.env.ALPACA_API_KEY || '',
-          'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY || '',
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -164,8 +164,8 @@ export async function GET(request: NextRequest) {
       // Production: Get order from Alpaca
       const alpacaResponse = await fetch(`${process.env.ALPACA_BASE_URL}/v2/orders/${orderId}`, {
         headers: {
-          'APCA-API-KEY-ID': process.env.ALPACA_API_KEY || '',
-          'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY || ''
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || ''
         }
       })
 

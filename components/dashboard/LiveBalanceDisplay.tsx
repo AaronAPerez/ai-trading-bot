@@ -42,13 +42,15 @@ export default function LiveBalanceDisplay({
     const cash = account.data ? parseFloat(account.data.cash || account.data.cash_withdrawable || '0') : 0
     const portfolioValue = account.data ? parseFloat(account.data.portfolio_value || account.data.equity || '0') : 0
 
-    const investedAmount = positions.data ? positions.data.reduce((total, pos) => {
-      return total + (parseFloat(pos.market_value || pos.marketValue || '0'))
-    }, 0) : 0
+    const positionsArray = Array.isArray(positions.data) ? positions.data : []
 
-    const totalPnL = positions.data ? positions.data.reduce((total, pos) => {
+    const investedAmount = positionsArray.reduce((total, pos) => {
+      return total + (parseFloat(pos.market_value || pos.marketValue || '0'))
+    }, 0)
+
+    const totalPnL = positionsArray.reduce((total, pos) => {
       return total + (parseFloat(pos.unrealized_pl || pos.unrealizedPnL || '0'))
-    }, 0) : 0
+    }, 0)
 
     const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
 

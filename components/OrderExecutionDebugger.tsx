@@ -283,7 +283,7 @@ const OrderExecutionDebugger: React.FC = () => {
               <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-3">
                 <div className="text-red-400 font-semibold">❌ Missing API Credentials</div>
                 <div className="text-gray-300 text-sm">
-                  Add ALPACA_API_KEY and ALPACA_SECRET_KEY to your .env.local file
+                  Add APCA_API_KEY_ID and APCA_API_SECRET_KEY to your .env.local file
                 </div>
               </div>
             )}

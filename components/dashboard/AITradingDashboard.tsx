@@ -31,8 +31,8 @@ import PortfolioOverview from "./PortfolioOverview"
 const defaultBotConfig = {
   alpaca: {
     baseUrl: 'https://paper-api.alpaca.markets',
-    apiKey: process.env.NEXT_PUBLIC_ALPACA_API_KEY || '',
-    secretKey: process.env.NEXT_PUBLIC_ALPACA_SECRET_KEY || ''
+    apiKey: process.env.NEXT_PUBLIC_APCA_API_KEY_ID || '',
+    secretKey: process.env.NEXT_PUBLIC_APCA_API_SECRET_KEY || ''
   },
   trading: {
     maxPositionSize: 10,
@@ -267,7 +267,7 @@ export default function AITradingDashboard() {
 
 
   // Calculate financial metrics for bot metrics (simplified since LiveBalanceDisplay handles the main metrics)
-  const positions_data = positions.data || []
+  const positions_data = Array.isArray(positions.data) ? positions.data : []
   const totalPnL = positions_data.reduce((total, pos) => total + (parseFloat(pos.unrealized_pl || pos.unrealizedPnL || '0')), 0)
   const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
 

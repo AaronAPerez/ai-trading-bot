@@ -4,14 +4,15 @@
 // ===============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAlpacaClient } from '@/lib/alpaca/server-client'
+import { withErrorHandling } from '@/lib/api/error-handler'
+import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
-import type { 
-  AIRecommendation, 
-  SafetyChecks, 
+import type {
+  AIRecommendation,
+  SafetyChecks,
   MarketData,
   TechnicalIndicators,
-  SentimentData 
+  SentimentData
 } from '@/types/trading'
 
 // ===============================================
@@ -47,7 +48,7 @@ class AIRecommendationEngine {
   }
 
   constructor() {
-    this.alpacaClient = getAlpacaClient()
+    this.alpacaClient = alpacaClient
     try {
       this.wsServer = getWebSocketServerManager().getServer()
     } catch (error) {
@@ -238,11 +239,7 @@ class AIRecommendationEngine {
    */
   private async getCurrentPositions(): Promise<any[]> {
     try {
-      if (this.alpacaClient && typeof this.alpacaClient.getPositions === 'function') {
-        return await this.alpacaClient.getPositions()
-      }
-      console.warn('getPositions method not available on Alpaca client')
-      return []
+      return await this.alpacaClient.getPositions()
     } catch (error) {
       console.error('Error fetching positions:', error)
       return []
@@ -260,7 +257,7 @@ class AIRecommendationEngine {
       const startDate = new Date()
       startDate.setDate(endDate.getDate() - 50) // 50 days of historical data
 
-      const bars = await this.alpacaClient.getBarsV2(symbol, {
+      const bars = await this.alpacaClient.getBars(symbol, {
         start: startDate.toISOString(),
         end: endDate.toISOString(),
         timeframe: '1Day'
@@ -700,82 +697,71 @@ const aiEngine = new AIRecommendationEngine()
 
 /**
  * GET /api/ai/recommendations
- * Fetch current AI recommendations
+ * Fetch current AI recommendations with standardized error handling
  */
-export async function GET(request: NextRequest) {
-  try {
-    console.log('🔍 GET /api/ai/recommendations - Fetching AI recommendations...')
-    
-    const { searchParams } = new URL(request.url)
-    const symbol = searchParams.get('symbol')
-    const limit = parseInt(searchParams.get('limit') || '15')
-    const minConfidence = parseInt(searchParams.get('minConfidence') || '60')
+export const GET = withErrorHandling(async (request: NextRequest) => {
+  console.log('🔍 GET /api/ai/recommendations - Fetching AI recommendations...')
 
-    let recommendations: AIRecommendation[]
+  const { searchParams } = new URL(request.url)
+  const symbol = searchParams.get('symbol')
+  const limit = parseInt(searchParams.get('limit') || '15')
+  const minConfidence = parseInt(searchParams.get('minConfidence') || '60')
 
-    if (symbol) {
-      // Generate single recommendation
-      const recommendation = await aiEngine.generateSingleRecommendation(symbol.toUpperCase())
-      recommendations = recommendation ? [recommendation] : []
-    } else {
-      // Generate all recommendations
-      recommendations = await aiEngine.generateRecommendations()
-    }
+  let recommendations: AIRecommendation[]
 
-    // Filter by confidence if specified
-    const filteredRecommendations = recommendations.filter(rec => 
-      rec.confidence >= minConfidence
-    ).slice(0, limit)
-
-    // Calculate summary statistics
-    const summary = {
-      total: filteredRecommendations.length,
-      buySignals: filteredRecommendations.filter(r => r.action === 'BUY').length,
-      sellSignals: filteredRecommendations.filter(r => r.action === 'SELL').length,
-      avgConfidence: filteredRecommendations.length > 0 
-        ? filteredRecommendations.reduce((sum, r) => sum + r.confidence, 0) / filteredRecommendations.length
-        : 0,
-      highConfidenceCount: filteredRecommendations.filter(r => r.confidence >= 80).length
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        recommendations: filteredRecommendations,
-        summary,
-        generatedAt: new Date().toISOString(),
-        engineVersion: '2.0',
-        modelAccuracy: {
-          lstm: 78.5,
-          transformer: 82.1,
-          ensemble: 85.3
-        }
-      }
-    })
-
-  } catch (error) {
-    console.error('❌ Error generating recommendations:', error)
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to generate AI recommendations',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+  if (symbol) {
+    // Generate single recommendation
+    const recommendation = await aiEngine.generateSingleRecommendation(symbol.toUpperCase())
+    recommendations = recommendation ? [recommendation] : []
+  } else {
+    // Generate all recommendations
+    recommendations = await aiEngine.generateRecommendations()
   }
-}
+
+  // Filter by confidence if specified
+  const filteredRecommendations = recommendations.filter(rec =>
+    rec.confidence >= minConfidence
+  ).slice(0, limit)
+
+  // Calculate summary statistics
+  const summary = {
+    total: filteredRecommendations.length,
+    buySignals: filteredRecommendations.filter(r => r.action === 'BUY').length,
+    sellSignals: filteredRecommendations.filter(r => r.action === 'SELL').length,
+    avgConfidence: filteredRecommendations.length > 0
+      ? filteredRecommendations.reduce((sum, r) => sum + r.confidence, 0) / filteredRecommendations.length
+      : 0,
+    highConfidenceCount: filteredRecommendations.filter(r => r.confidence >= 80).length
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      recommendations: filteredRecommendations,
+      summary,
+      generatedAt: new Date().toISOString(),
+      engineVersion: '2.0',
+      modelAccuracy: {
+        lstm: 78.5,
+        transformer: 82.1,
+        ensemble: 85.3
+      }
+    },
+    timestamp: new Date().toISOString(),
+  })
+})
 
 /**
  * POST /api/ai/recommendations
- * Generate new recommendations or execute specific actions
+ * Generate new recommendations or execute specific actions with standardized error handling
  */
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { action, symbol, filters } = body
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  const body = await request.json()
+  const { action, symbol, filters } = body
 
-    console.log(`🤖 POST /api/ai/recommendations - Action: ${action}`)
+  console.log(`🤖 POST /api/ai/recommendations - Action: ${action}`)
 
-    switch (action) {
+  switch (action) {
       case 'generate':
         // Generate fresh recommendations
         const recommendations = symbol 
@@ -856,35 +842,21 @@ export async function POST(request: NextRequest) {
         })
 
       default:
-        return NextResponse.json({
-          success: false,
-          error: `Unknown action: ${action}`
-        }, { status: 400 })
+        throw new Error(`Unknown action: ${action}`)
     }
-
-  } catch (error) {
-    console.error('❌ Error in POST /api/ai/recommendations:', error)
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to process AI recommendations request',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
-  }
-}
+})
 
 /**
  * PUT /api/ai/recommendations
- * Update recommendation settings or feedback
+ * Update recommendation settings or feedback with standardized error handling
  */
-export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { action, recommendationId, feedback, settings } = body
+export const PUT = withErrorHandling(async (request: NextRequest) => {
+  const body = await request.json()
+  const { action, recommendationId, feedback, settings } = body
 
-    console.log(`🔧 PUT /api/ai/recommendations - Action: ${action}`)
+  console.log(`🔧 PUT /api/ai/recommendations - Action: ${action}`)
 
-    switch (action) {
+  switch (action) {
       case 'feedback':
         // Record feedback for ML model improvement
         if (!recommendationId || !feedback) {
@@ -938,35 +910,21 @@ export async function PUT(request: NextRequest) {
         })
 
       default:
-        return NextResponse.json({
-          success: false,
-          error: `Unknown update action: ${action}`
-        }, { status: 400 })
+        throw new Error(`Unknown update action: ${action}`)
     }
-
-  } catch (error) {
-    console.error('❌ Error in PUT /api/ai/recommendations:', error)
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to update AI recommendations',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
-  }
-}
+})
 
 /**
  * DELETE /api/ai/recommendations
- * Remove or expire recommendations
+ * Remove or expire recommendations with standardized error handling
  */
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const recommendationId = searchParams.get('id')
-    const symbol = searchParams.get('symbol')
-    const action = searchParams.get('action') || 'expire'
+export const DELETE = withErrorHandling(async (request: NextRequest) => {
+  const { searchParams } = new URL(request.url)
+  const recommendationId = searchParams.get('id')
+  const symbol = searchParams.get('symbol')
+  const action = searchParams.get('action') || 'expire'
 
-    console.log(`🗑️ DELETE /api/ai/recommendations - Action: ${action}`)
+  console.log(`🗑️ DELETE /api/ai/recommendations - Action: ${action}`)
 
     if (recommendationId) {
       // Remove specific recommendation
@@ -1007,21 +965,8 @@ export async function DELETE(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({
-      success: false,
-      error: 'No valid parameters provided for deletion'
-    }, { status: 400 })
-
-  } catch (error) {
-    console.error('❌ Error in DELETE /api/ai/recommendations:', error)
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to delete AI recommendations',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
-  }
-}
+  throw new Error('No valid parameters provided for deletion')
+})
 
 // ===============================================
 // HELPER FUNCTIONS

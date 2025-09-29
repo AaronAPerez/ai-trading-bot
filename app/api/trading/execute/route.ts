@@ -1,148 +1,96 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { AlpacaClient } from '@/lib/marketData/AlpacaClient'
+import { withErrorHandling } from '@/lib/api/error-handler'
+import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { detectAssetType, getSymbolMetadata } from '@/config/symbols'
 
-const alpacaClient = new AlpacaClient()
+/**
+ * POST /api/trading/execute
+ * Execute trades with standardized error handling
+ */
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  const { order, mode = 'paper' } = await request.json()
 
-export async function POST(request: NextRequest) {
-  try {
-    const { order, mode = 'paper' } = await request.json()
+  // Enhanced order validation
+  if (!order || !order.symbol || !order.side || !order.quantity) {
+    throw new Error('Invalid order format. Required: symbol, side, quantity')
+  }
 
-    // Enhanced order validation
-    if (!order || !order.symbol || !order.side || !order.quantity) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid order format. Required: symbol, side, quantity' 
-        },
-        { status: 400 }
-      )
+  // Validate order parameters
+  const assetType = detectAssetType(order.symbol)
+  const metadata = getSymbolMetadata(order.symbol)
+
+  // Check minimum order size
+  if (order.quantity < (metadata.minOrderSize || 0.0001)) {
+    throw new Error(`Order quantity ${order.quantity} below minimum ${metadata.minOrderSize}`)
+  }
+
+  // Check trading hours for stocks
+  if (assetType === 'stock' && metadata.tradingHours === 'market_hours') {
+    const marketStatus = await checkMarketStatus()
+    if (!marketStatus.stockMarket.isOpen && !marketStatus.stockMarket.isExtendedHours) {
+      throw new Error('Stock market is closed. Next open: ' + marketStatus.stockMarket.nextOpen)
     }
+  }
 
-    // Validate order parameters
-    const assetType = detectAssetType(order.symbol)
-    const metadata = getSymbolMetadata(order.symbol)
+  let result
 
-    // Check minimum order size
-    if (order.quantity < (metadata.minOrderSize || 0.0001)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Order quantity ${order.quantity} below minimum ${metadata.minOrderSize}`
-        },
-        { status: 400 }
-      )
-    }
-
-    // Check trading hours for stocks
-    if (assetType === 'stock' && metadata.tradingHours === 'market_hours') {
-      const marketStatus = await checkMarketStatus()
-      if (!marketStatus.stockMarket.isOpen && !marketStatus.stockMarket.isExtendedHours) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Stock market is closed. Next open: ' + marketStatus.stockMarket.nextOpen
-          },
-          { status: 400 }
-        )
-      }
-    }
-
-    console.log(`🔄 Executing ${mode} ${assetType} trade:`, {
-      symbol: order.symbol,
-      side: order.side,
-      quantity: order.quantity,
-      type: order.orderType || 'MARKET'
-    })
-
-    let result
-
-    if (mode === 'paper') {
-      // Enhanced paper trading logic
-      if (assetType === 'stock' && process.env.ALPACA_API_KEY) {
-        try {
-          // Use Alpaca for stock paper trading
-          result = await alpacaClient.executePaperTrade({
-            symbol: order.symbol,
-            side: order.side.toLowerCase(),
-            quantity: order.quantity,
-            type: order.orderType?.toLowerCase() || 'market'
-          })
-          
-          console.log(`✅ Alpaca paper trade executed:`, result)
-        } catch (alpacaError) {
-          console.warn('Alpaca paper trading failed, using simulation:', alpacaError)
-          result = await executeSimulatedTrade(order)
-        }
-      } else {
-        // Simulate crypto or fallback trading
+  if (mode === 'paper') {
+    // Enhanced paper trading logic
+    if (assetType === 'stock') {
+      try {
+        // Use Alpaca for stock paper trading
+        result = await alpacaClient.createOrder({
+          symbol: order.symbol,
+          side: order.side.toLowerCase(),
+          qty: order.quantity,
+          type: order.orderType?.toLowerCase() || 'market'
+        })
+      } catch (alpacaError) {
+        console.warn('Alpaca paper trading failed, using simulation:', alpacaError)
         result = await executeSimulatedTrade(order)
       }
-    } else if (mode === 'live') {
-      // Live trading (only for stocks via Alpaca)
-      if (assetType === 'crypto') {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Live crypto trading not yet implemented. Use paper mode.'
-          },
-          { status: 501 }
-        )
-      }
-
-      if (!process.env.ALPACA_API_KEY) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Live trading requires Alpaca API configuration'
-          },
-          { status: 503 }
-        )
-      }
-
-      // Execute live trade via Alpaca
-      result = await alpacaClient.executePaperTrade(order) // For now, still paper
+    } else {
+      // Simulate crypto or fallback trading
+      result = await executeSimulatedTrade(order)
+    }
+  } else if (mode === 'live') {
+    // Live trading (only for stocks via Alpaca)
+    if (assetType === 'crypto') {
+      throw new Error('Live crypto trading not yet implemented. Use paper mode.')
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...result,
-        assetType,
-        metadata: {
-          symbol: metadata.name,
-          category: metadata.category,
-          tradingHours: metadata.tradingHours
-        }
-      },
-      mode,
-      exchange: getExchangeName(assetType, mode),
-      timestamp: new Date()
-    })
-
-  } catch (error) {
-    console.error('Enhanced trading execution error:', error)
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Trade execution failed' 
-      },
-      { status: 500 }
-    )
+    // Execute live trade via Alpaca
+    result = await alpacaClient.createOrder(order) // For now, still paper
   }
-}
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      ...result,
+      assetType,
+      metadata: {
+        symbol: metadata.name,
+        category: metadata.category,
+        tradingHours: metadata.tradingHours
+      }
+    },
+    mode,
+    exchange: getExchangeName(assetType, mode),
+    timestamp: new Date().toISOString()
+  })
+})
 
 // Helper function for enhanced simulation
 async function executeSimulatedTrade(order: any) {
   const assetType = detectAssetType(order.symbol)
   const metadata = getSymbolMetadata(order.symbol)
-  
+
   // Get real market price from Alpaca API
   let price = 100 // Default fallback price
 
   try {
     // Get real price from Alpaca API directly
-    const quotes = await alpacaClient.getLatestQuotes([order.symbol])
+    const quotes = await alpacaClient.getQuotes([order.symbol])
     if (quotes[order.symbol]) {
       price = quotes[order.symbol].midPrice || quotes[order.symbol].askPrice || quotes[order.symbol].bidPrice
       console.log(`📈 Using real Alpaca price for ${order.symbol}: ${price}`)
@@ -181,12 +129,12 @@ async function executeSimulatedTrade(order: any) {
 // Helper function to check market status using Alpaca API
 async function checkMarketStatus() {
   try {
-    const marketStatus = await alpacaClient.getMarketStatus()
+    const marketStatus = await alpacaClient.getClock()
     return {
       stockMarket: {
-        isOpen: marketStatus.isOpen,
-        nextOpen: marketStatus.nextOpen,
-        nextClose: marketStatus.nextClose
+        isOpen: marketStatus.is_open,
+        nextOpen: marketStatus.next_open,
+        nextClose: marketStatus.next_close
       }
     }
   } catch (error) {

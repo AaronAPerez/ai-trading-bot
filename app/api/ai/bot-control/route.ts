@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withErrorHandling } from '@/lib/api/error-handler'
+import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
 import { supabaseService } from '@/lib/database/supabase-utils'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
@@ -14,43 +16,29 @@ let botState = {
 
 /**
  * POST /api/ai/bot-control
- * Start or stop the AI trading bot
+ * Start or stop the AI trading bot with standardized error handling
  */
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { action, config } = body
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  const body = await request.json()
+  const { action, config } = body
 
-    console.log(`🤖 Bot Control API - Action: ${action}`)
-    console.log('📝 Request body:', { action, hasConfig: !!config })
+  console.log(`🤖 Bot Control API - Action: ${action}`)
+  console.log('📝 Request body:', { action, hasConfig: !!config })
 
-    switch (action) {
-      case 'start':
-        return await handleStartBot(config)
+  switch (action) {
+    case 'start':
+      return await handleStartBot(config)
 
-      case 'stop':
-        return await handleStopBot()
+    case 'stop':
+      return await handleStopBot()
 
-      case 'status':
-        return handleGetStatus()
+    case 'status':
+      return handleGetStatus()
 
-      default:
-        return NextResponse.json({
-          success: false,
-          error: `Unknown action: ${action}`
-        }, { status: 400 })
-    }
-
-  } catch (error) {
-    console.error('❌ Bot Control API Error:', error)
-
-    return NextResponse.json({
-      success: false,
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
-    }, { status: 500 })
+    default:
+      throw new Error(`Unknown action: ${action}`)
   }
-}
+})
 
 /**
  * Handle start bot request
@@ -440,24 +428,16 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
     // Calculate position size (1-5 shares for demo)
     const quantity = Math.floor(1 + Math.random() * 4)
 
-    // Call Alpaca API to place order
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3002'}/api/alpaca/orders`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        symbol,
-        qty: quantity,
-        side: signal.toLowerCase(),
-        type: 'market',
-        time_in_force: 'day'
-      })
+    // Call Alpaca API to place order using unified client
+    const orderResult = await alpacaClient.createOrder({
+      symbol,
+      qty: quantity,
+      side: signal.toLowerCase(),
+      type: 'market',
+      time_in_force: 'day'
     })
 
-    if (response.ok) {
-      const orderResponse = await response.json()
-      const orderResult = orderResponse.order || orderResponse
+    if (orderResult) {
 
       console.log(`✅ ${signal} order placed: ${quantity} shares of ${symbol}`)
       console.log(`📋 Order ID: ${orderResult.id || orderResult.orderId}`)
@@ -500,20 +480,6 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
       console.log(`💾 Trade saved to Supabase: ${signal} ${quantity} ${symbol} @ $${estimatedPrice.toFixed(2)}`)
 
-    } else {
-      const errorResponse = await response.json().catch(() => ({ error: 'Unknown error' }))
-      const error = errorResponse.error || errorResponse.details || 'Order placement failed'
-
-      console.error(`❌ Failed to place ${signal} order for ${symbol}:`, error)
-
-      // Log failed trade to Supabase
-      await supabaseService.logBotActivity(userId, {
-        type: 'error',
-        symbol: symbol,
-        message: `Failed to place ${signal} order for ${symbol}: ${error}`,
-        status: 'failed',
-        details: JSON.stringify({ error, symbol, signal, quantity, sessionId, httpStatus: response.status })
-      })
     }
 
   } catch (error) {
@@ -548,9 +514,9 @@ function stopBotLogic(sessionId: string) {
 }
 
 /**
- * GET endpoint for status checks
+ * GET endpoint for status checks with standardized error handling
  */
-export async function GET() {
+export const GET = withErrorHandling(async () => {
   return NextResponse.json({
     success: true,
     data: {
@@ -558,6 +524,7 @@ export async function GET() {
       sessionId: botState.sessionId,
       uptime: botState.startTime ? Date.now() - new Date(botState.startTime).getTime() : 0,
       status: botState.isRunning ? 'RUNNING' : 'STOPPED'
-    }
+    },
+    timestamp: new Date().toISOString(),
   })
-}
+})

@@ -99,14 +99,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Check Alpaca configuration
-    if (process.env.ALPACA_API_KEY && process.env.ALPACA_SECRET_KEY) {
+    if (process.env.APCA_API_KEY_ID && process.env.APCA_API_SECRET_KEY) {
       try {
         const accountResponse = await fetch(
           `${process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'}/v2/account`,
           {
             headers: {
-              'APCA-API-KEY-ID': process.env.ALPACA_API_KEY,
-              'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY,
+              'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID,
+              'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY,
             }
           }
         )
@@ -142,8 +142,8 @@ export async function GET(request: NextRequest) {
         `${process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'}/v2/clock`,
         {
           headers: {
-            'APCA-API-KEY-ID': process.env.ALPACA_API_KEY || '',
-            'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY || '',
+            'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
+            'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
           }
         }
       )
@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
 
     if (debugReport.alpacaConnection.status !== 'connected') {
       issues.push('Alpaca API not connected')
-      recommendations.push('Check environment variables: ALPACA_API_KEY, ALPACA_SECRET_KEY')
+      recommendations.push('Check environment variables: APCA_API_KEY_ID, APCA_API_SECRET_KEY')
     }
 
     if (debugReport.orderExecutionConfig.minConfidenceForOrder >= 70) {
@@ -248,8 +248,8 @@ export async function POST(request: NextRequest) {
       {
         method: 'POST',
         headers: {
-          'APCA-API-KEY-ID': process.env.ALPACA_API_KEY || '',
-          'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY || '',
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(testOrder)

@@ -10,8 +10,8 @@ export default function SettingsPage() {
 
   // API Settings
   const [apiSettings, setApiSettings] = useState({
-    alpacaKeyId: process.env.NEXT_PUBLIC_ALPACA_API_KEY || '',
-    alpacaSecretKey: process.env.NEXT_PUBLIC_ALPACA_SECRET_KEY || '',
+    alpacaKeyId: process.env.NEXT_PUBLIC_APCA_API_KEY_ID || '',
+    alpacaSecretKey: process.env.NEXT_PUBLIC_APCA_API_SECRET_KEY || '',
     tradingMode: 'paper',
     dataFeed: 'iex'
   })

@@ -532,8 +532,8 @@ export async function GET(request: NextRequest) {
           dailyOrderLimit: autoExecutionConfig.dailyOrderLimit,
           recentOrdersCount: recentOrders.size,
           environment: {
-            hasApiKey: !!process.env.ALPACA_API_KEY,
-            hasSecretKey: !!process.env.ALPACA_SECRET_KEY,
+            hasApiKey: !!process.env.APCA_API_KEY_ID,
+            hasSecretKey: !!process.env.APCA_API_SECRET_KEY,
             baseUrl: process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
           }
         },

@@ -1,3 +1,24 @@
+import { AlpacaRateLimiter } from './rate-limiter'
+
+const rateLimiter = new AlpacaRateLimiter()
+
+export async function makeAlpacaRequest(endpoint: string, options?: RequestInit) {
+  return rateLimiter.enqueue(
+    endpoint,
+    async () => {
+      const response = await fetch(`https://paper-api.alpaca.markets${endpoint}`, {
+        ...options,
+        headers: {
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID!,
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY!,
+          ...options?.headers,
+        },
+      })
+      return response.json()
+    },
+    'normal'
+  )
+}
 import Alpaca from '@alpacahq/alpaca-trade-api'
 import { alpacaRateLimiter } from './rate-limiter'
 

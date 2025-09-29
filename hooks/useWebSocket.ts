@@ -187,8 +187,8 @@ export const useWebSocket = () => {
 
     try {
       // Get API credentials from environment
-      const apiKey = process.env.NEXT_PUBLIC_ALPACA_API_KEY
-      const apiSecret = process.env.NEXT_PUBLIC_ALPACA_SECRET_KEY
+      const apiKey = process.env.NEXT_PUBLIC_APCA_API_KEY_ID
+      const apiSecret = process.env.NEXT_PUBLIC_APCA_API_SECRET_KEY
       const isPaperTrading = process.env.NEXT_PUBLIC_TRADING_MODE !== 'live'
 
       if (!apiKey || !apiSecret) {

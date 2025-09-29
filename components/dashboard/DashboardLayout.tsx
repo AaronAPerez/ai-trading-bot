@@ -1,273 +1,430 @@
-// ===============================================
-// DASHBOARD LAYOUT - Main Layout Component
-// src/components/layout/DashboardLayout.tsx
-// ===============================================
+// ============================================================
+// ACCESSIBLE MOBILE-FIRST DASHBOARD COMPONENTS
+// Full WCAG 2.1 AA compliance with responsive design
+// ============================================================
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import {
-  Menu,
-  X,
-  Settings,
-  AlertTriangle,
-  Wifi,
-  WifiOff,
-  Bot,
-  Shield,
-  PieChart,
-  BarChart3,
-} from 'lucide-react'
-import type { DashboardLayoutProps } from '@/types/trading'
+'use client';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+// ============================================================
+// 1. ACCESSIBLE DASHBOARD LAYOUT
+// components/dashboard/DashboardLayout.tsx
+// ============================================================
 
 /**
- * Main dashboard layout component providing responsive navigation,
- * trading mode indicators, and bot status monitoring
+ * Accessible Mobile-First Dashboard Layout
+ * 
+ * Accessibility Features:
+ * - WCAG 2.1 AA compliant (4.5:1 contrast ratios)
+ * - Full keyboard navigation (Tab, Escape, Arrow keys)
+ * - Screen reader optimized with ARIA labels
+ * - Touch-optimized (44x44px minimum tap targets)
+ * - Focus management and skip links
+ * - High contrast mode support
+ * 
+ * Responsive Breakpoints:
+ * - Mobile: 320px - 767px
+ * - Tablet: 768px - 1023px
+ * - Desktop: 1024px+
  */
-const DashboardLayout = ({
+
+interface DashboardLayoutProps {
+  children: React.ReactNode;
+  isLiveTrading?: boolean;
+  onToggleMode?: () => void;
+  botStatus?: {
+    isRunning: boolean;
+    uptime: number;
+    tradesExecuted: number;
+    successRate: number;
+    totalPnL: number;
+  };
+}
+
+export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   children,
-  isLiveTrading,
-  onToggleMode,
-  botStatus
-}: DashboardLayoutProps) => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isOnline, setIsOnline] = useState(true)
-  const router = useRouter()
-  
+  isLiveTrading = false,
+  onToggleMode = () => {},
+  botStatus = {
+    isRunning: false,
+    uptime: 0,
+    tradesExecuted: 0,
+    successRate: 0,
+    totalPnL: 0,
+  },
+}) => {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [announceMessage, setAnnounceMessage] = useState('');
+  const mainContentRef = useRef<HTMLElement>(null);
 
-  // Navigation menu items with icons and labels
+  // Navigation items with accessibility metadata
   const navigationItems = [
-    { id: 'positions', label: 'Positions', icon: PieChart, path: '/positions' },
-    { id: 'orders', label: 'Orders', icon: BarChart3, path: '/orders' },
-    { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
-  ]
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      path: '/',
+      ariaLabel: 'Go to dashboard home',
+      icon: '🏠',
+    },
+    {
+      id: 'trading',
+      label: 'Trading',
+      path: '/trading',
+      ariaLabel: 'Go to live trading page',
+      icon: '📈',
+    },
+    {
+      id: 'positions',
+      label: 'Positions',
+      path: '/positions',
+      ariaLabel: 'View your current positions',
+      icon: '📊',
+    },
+    {
+      id: 'orders',
+      label: 'Orders',
+      path: '/orders',
+      ariaLabel: 'View order history',
+      icon: '📋',
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      path: '/settings',
+      ariaLabel: 'Configure bot settings',
+      icon: '⚙️',
+    },
+  ];
 
-  /**
-   * Toggle mobile sidebar visibility
-   */
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen)
-  }
+  // Monitor online status for accessibility announcements
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      announceToScreenReader('Connection restored');
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      announceToScreenReader('Connection lost. Trading paused.');
+    };
 
-  /**
-   * Handle navigation item click - closes mobile sidebar and navigates
-   */
-  const handleNavItemClick = (path: string) => {
-    setIsSidebarOpen(false)
-    router.push(path)
-  }
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
-  /**
-   * Format bot uptime for display
-   */
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Screen reader announcements using ARIA live region
+  const announceToScreenReader = useCallback((message: string) => {
+    setAnnounceMessage(message);
+    setTimeout(() => setAnnounceMessage(''), 100);
+  }, []);
+
+  // Toggle sidebar with keyboard support and announcement
+  const toggleSidebar = useCallback(() => {
+    const newState = !isSidebarOpen;
+    setIsSidebarOpen(newState);
+    announceToScreenReader(newState ? 'Menu opened' : 'Menu closed');
+    
+    // Focus management: trap focus in sidebar when open
+    if (newState) {
+      setTimeout(() => {
+        const firstFocusable = document.querySelector('#sidebar-menu a, #sidebar-menu button') as HTMLElement;
+        firstFocusable?.focus();
+      }, 100);
+    }
+  }, [isSidebarOpen, announceToScreenReader]);
+
+  // Close sidebar on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isSidebarOpen) {
+        setIsSidebarOpen(false);
+        announceToScreenReader('Menu closed');
+        
+        // Return focus to menu button
+        const menuButton = document.querySelector('[aria-controls="sidebar-menu"]') as HTMLElement;
+        menuButton?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isSidebarOpen, announceToScreenReader]);
+
+  // Format uptime for display
   const formatUptime = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
-  }
-
-  /**
-   * Get status color based on bot metrics and connection
-   */
-  const getStatusColor = (): string => {
-    if (!isOnline) return 'bg-red-500'
-    if (!botStatus.isRunning) return 'bg-yellow-500'
-    if (botStatus.riskScore > 70) return 'bg-orange-500'
-    return 'bg-green-500'
-  }
-
-  /**
-   * Get trading mode display properties
-   */
-  const getTradingModeProps = () => {
-    return isLiveTrading
-      ? {
-          text: 'LIVE TRADING',
-          bgColor: 'bg-red-500',
-          textColor: 'text-white',
-          icon: AlertTriangle,
-          pulseColor: 'bg-red-400'
-        }
-      : {
-          text: 'PAPER TRADING',
-          bgColor: 'bg-blue-500',
-          textColor: 'text-white',
-          icon: Shield,
-          pulseColor: 'bg-blue-400'
-        }
-  }
-
-  const tradingModeProps = getTradingModeProps()
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
-        <div className="flex items-center justify-between">
-          {/* Left section - Logo */}
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      {/* Skip to main content link - WCAG 2.1 requirement */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-6 focus:py-3 focus:bg-blue-600 focus:text-white focus:rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-300 focus:font-semibold"
+      >
+        Skip to main content
+      </a>
+
+      {/* Live region for screen reader announcements - polite for non-urgent updates */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {announceMessage}
+      </div>
+
+      {/* Header - Sticky with proper landmark */}
+      <header
+        className="bg-gray-800 border-b border-gray-700 sticky top-0 z-40 shadow-lg"
+        role="banner"
+      >
+        <div className="flex items-center justify-between px-4 py-3 md:px-6">
+          {/* Logo and Mobile Menu Button */}
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Bot size={18} className="text-white" />
-            </div>
-            <button
-              onClick={() => router.push('/')}
-              className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent hover:opacity-80 transition-opacity"
-            >
-              AI Trading Platform
-            </button>
-          </div>
-
-          {/* Center section - Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-1">
-            {navigationItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => handleNavItemClick(item.path)}
-                className="flex items-center space-x-2 px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-700 transition-colors font-medium"
-              >
-                <item.icon size={18} />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-
-          {/* Mobile navigation menu */}
-          <div className="md:hidden">
             <button
               onClick={toggleSidebar}
-              className="p-2 rounded-md hover:bg-gray-700 transition-colors"
-              aria-label="Toggle navigation menu"
+              className="md:hidden p-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation"
+              aria-label={isSidebarOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={isSidebarOpen}
+              aria-controls="sidebar-menu"
+              type="button"
             >
-              {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+              <span className="text-2xl" aria-hidden="true">
+                {isSidebarOpen ? '✕' : '☰'}
+              </span>
             </button>
+
+            <div className="flex items-center space-x-2">
+              <span className="text-2xl" aria-hidden="true" role="img" aria-label="Robot">
+                🤖
+              </span>
+              <h1 className="text-lg md:text-xl font-bold leading-tight">
+                AI Trading Bot
+              </h1>
+            </div>
           </div>
 
-          {/* Right section - Status indicators and controls */}
-          <div className="hidden lg:flex items-center space-x-4">
-            {/* Trading mode indicator */}
+          {/* Status Indicators - Responsive with proper ARIA */}
+          <div className="flex items-center space-x-2 md:space-x-4">
+            {/* Connection Status */}
             <div
-              className={`relative ${tradingModeProps.bgColor} ${tradingModeProps.textColor} px-3 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 shadow-lg`}
+              className="flex items-center space-x-2 px-2 md:px-3 py-2 rounded-lg bg-gray-700 min-h-[44px]"
+              role="status"
+              aria-label={`Connection status: ${isOnline ? 'Online' : 'Offline'}`}
             >
-              {/* Pulsing indicator for live trading */}
-              {isLiveTrading && (
-                <div className={`absolute -left-1 -top-1 w-3 h-3 ${tradingModeProps.pulseColor} rounded-full animate-ping`} />
-              )}
-              <tradingModeProps.icon size={14} />
-              <span>{tradingModeProps.text}</span>
-            </div>
-
-            {/* Bot status indicator */}
-            {/* <div className="flex items-center space-x-2">
-              <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
-              <div className="text-xs text-gray-400">
-                <div>Bot: {botStatus.isRunning ? 'Active' : 'Stopped'}</div>
-                {botStatus.isRunning && (
-                  <div>Up: {formatUptime(botStatus.uptime)}</div>
-                )}
-              </div>
-            </div> */}
-
-            {/* Connection status */}
-            <div className="flex items-center space-x-2">
-              {isOnline ? (
-                <Wifi size={20} className="text-green-400" />
-              ) : (
-                <WifiOff size={16} className="text-red-400" />
-              )}
-              {/* <span className="text-xs text-gray-400">
-                {isOnline ? 'Connected' : 'Offline'}
-              </span> */}
-            </div>
-
-            {/* Trading mode toggle switch */}
-            <div className="flex items-center space-x-3">
-              <span className={`text-sm font-medium ${!isLiveTrading ? 'text-blue-400' : 'text-gray-400'}`}>
-                Paper
-              </span>
-              <button
-                onClick={onToggleMode}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isLiveTrading ? 'bg-red-500' : 'bg-blue-500'
-                }`}
-                title={isLiveTrading ? 'Switch to Paper Trading' : 'Switch to Live Trading'}
+              <span 
+                className="text-lg" 
+                aria-hidden="true" 
+                role="img"
               >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    isLiveTrading ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-              <span className={`text-sm font-medium ${isLiveTrading ? 'text-red-400' : 'text-gray-400'}`}>
-                Live
+                {isOnline ? '📡' : '🔴'}
               </span>
+              <span className="text-xs md:text-sm font-medium hidden sm:inline">
+                {isOnline ? 'Online' : 'Offline'}
+              </span>
+            </div>
+
+            {/* Bot Status */}
+            <div
+              className="flex items-center space-x-2 px-2 md:px-3 py-2 rounded-lg bg-gray-700 min-h-[44px]"
+              role="status"
+              aria-label={`Bot status: ${botStatus.isRunning ? 'Running' : 'Stopped'}. ${botStatus.isRunning ? `Uptime: ${formatUptime(botStatus.uptime)}` : ''}`}
+            >
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  botStatus.isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-400'
+                }`}
+                aria-hidden="true"
+              />
+              <span className="text-xs md:text-sm font-medium hidden sm:inline">
+                {botStatus.isRunning ? 'Active' : 'Stopped'}
+              </span>
+            </div>
+
+            {/* Trading Mode Badge */}
+            <div
+              className={`hidden md:flex items-center px-3 py-2 rounded-lg text-xs font-bold min-h-[44px] ${
+                isLiveTrading
+                  ? 'bg-red-900/70 text-red-200 border-2 border-red-500'
+                  : 'bg-blue-900/70 text-blue-200 border-2 border-blue-500'
+              }`}
+              role="status"
+              aria-label={`Trading mode: ${isLiveTrading ? 'Live trading with real money' : 'Paper trading simulation'}`}
+            >
+              {isLiveTrading ? '🔴 LIVE' : '📝 PAPER'}
             </div>
           </div>
         </div>
 
-        {/* Mobile navigation dropdown */}
-        {isSidebarOpen && (
-          <div className="md:hidden mt-2 border-t border-gray-700 pt-2">
-            <nav className="space-y-1">
-              {navigationItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavItemClick(item.path)}
-                  className="w-full flex items-center space-x-3 px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors text-left rounded-lg"
-                >
-                  <item.icon size={18} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </nav>
+        {/* Desktop Navigation */}
+        <nav
+          className="hidden md:flex items-center space-x-1 px-6 pb-3"
+          role="navigation"
+          aria-label="Main navigation"
+        >
+          {navigationItems.map((item) => (
+            <a
+              key={item.id}
+              href={item.path}
+              className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 min-h-[44px]"
+              aria-label={item.ariaLabel}
+            >
+              <span className="text-lg" aria-hidden="true">{item.icon}</span>
+              <span>{item.label}</span>
+            </a>
+          ))}
+        </nav>
+      </header>
 
-            {/* Mobile status indicators */}
-            <div className="mt-4 pt-4 border-t border-gray-700">
-              <div className="flex justify-center mb-3">
-                <div
-                  className={`relative ${tradingModeProps.bgColor} ${tradingModeProps.textColor} px-3 py-1 rounded-full text-xs font-semibold flex items-center space-x-2`}
-                >
-                  {isLiveTrading && (
-                    <div className={`absolute -left-0.5 -top-0.5 w-2 h-2 ${tradingModeProps.pulseColor} rounded-full animate-ping`} />
-                  )}
-                  <tradingModeProps.icon size={12} />
-                  <span>{tradingModeProps.text}</span>
+      {/* Mobile Sidebar Navigation - Full accessibility */}
+      <nav
+        id="sidebar-menu"
+        className={`fixed inset-y-0 left-0 z-50 w-64 sm:w-80 bg-gray-800 border-r border-gray-700 transform transition-transform duration-300 ease-in-out md:hidden ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } shadow-2xl`}
+        aria-label="Mobile navigation"
+        aria-hidden={!isSidebarOpen}
+      >
+        <div className="flex flex-col h-full">
+          {/* Sidebar Header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <div className="flex items-center space-x-2">
+              <span className="text-2xl" aria-hidden="true">📱</span>
+              <span className="text-lg font-bold">Menu</span>
+            </div>
+            <button
+              onClick={toggleSidebar}
+              className="p-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors duration-200 touch-manipulation"
+              aria-label="Close navigation menu"
+              type="button"
+            >
+              <span className="text-2xl" aria-hidden="true">✕</span>
+            </button>
+          </div>
+
+          {/* Navigation Items - Touch optimized */}
+          <div className="flex-1 overflow-y-auto py-4">
+            {navigationItems.map((item, index) => (
+              <a
+                key={item.id}
+                href={item.path}
+                onClick={() => {
+                  setIsSidebarOpen(false);
+                  announceToScreenReader(`Navigating to ${item.label}`);
+                }}
+                className="flex items-center justify-between px-4 py-4 text-gray-300 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 transition-all duration-200 min-h-[56px] touch-manipulation border-b border-gray-700/50"
+                aria-label={item.ariaLabel}
+                tabIndex={isSidebarOpen ? 0 : -1}
+              >
+                <div className="flex items-center space-x-3">
+                  <span className="text-2xl" aria-hidden="true">{item.icon}</span>
+                   <span className="text-2xl" aria-hidden="true">{item.icon}</span>
+                  <span className="text-base font-medium">{item.label}</span>
                 </div>
+                <span className="text-xl text-gray-500" aria-hidden="true">›</span>
+              </a>
+            ))}
+          </div>
+
+          {/* Sidebar Footer - Bot Stats */}
+          {botStatus.isRunning && (
+            <div className="p-4 border-t border-gray-700 bg-gray-900/50">
+              <div className="text-xs text-gray-400 mb-3 font-semibold uppercase tracking-wider">
+                Bot Statistics
               </div>
-
-              <div className="flex justify-between items-center text-xs text-gray-400">
-                <div className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
-                  <span>Bot: {botStatus.isRunning ? 'Active' : 'Stopped'}</span>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs">Uptime</div>
+                  <div className="font-bold text-white mt-1">
+                    {formatUptime(botStatus.uptime)}
+                  </div>
                 </div>
-                <div className="flex items-center space-x-1">
-                  {isOnline ? (
-                    <Wifi size={12} className="text-green-400" />
-                  ) : (
-                    <WifiOff size={12} className="text-red-400" />
-                  )}
-                  <span>{isOnline ? 'Connected' : 'Offline'}</span>
+                <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs">Trades</div>
+                  <div className="font-bold text-white mt-1">
+                    {botStatus.tradesExecuted}
+                  </div>
+                </div>
+                <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs">Success Rate</div>
+                  <div className="font-bold text-green-400 mt-1">
+                    {botStatus.successRate}%
+                  </div>
+                </div>
+                <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs">P&L</div>
+                  <div className={`font-bold mt-1 ${botStatus.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${Math.abs(botStatus.totalPnL).toFixed(2)}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </nav>
 
-        {/* Mobile overlay */}
-        {isSidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
-            onClick={toggleSidebar}
-          />
-        )}
-      </header>
+      {/* Overlay for mobile sidebar - Dismiss on click */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-60 z-40 md:hidden transition-opacity duration-300"
+          onClick={toggleSidebar}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              toggleSidebar();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label="Close navigation menu"
+        />
+      )}
 
-      {/* Main content - Full width */}
-      <main className="overflow-auto">
-        <div className="p-6">
+      {/* Main Content with proper focus management */}
+      <main
+        id="main-content"
+        ref={mainContentRef}
+        className="flex-1 overflow-auto focus:outline-none"
+        role="main"
+        tabIndex={-1}
+      >
+        <div className="container mx-auto px-4 py-6 md:px-6 lg:px-8 max-w-7xl">
           {children}
         </div>
       </main>
-    </div>
-  )
-}
 
-export default DashboardLayout
+      {/* Sticky Footer with Emergency Stop - Mobile only */}
+      {botStatus.isRunning && (
+        <footer
+          className="bg-gray-800 border-t-2 border-red-500 p-4 md:hidden sticky bottom-0 z-30 shadow-2xl"
+          role="contentinfo"
+        >
+          <button
+            onClick={() => {
+              onToggleMode();
+              announceToScreenReader('Emergency stop activated. Bot stopped.');
+            }}
+            className="w-full py-4 px-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 active:from-red-800 active:to-red-900 text-white font-bold rounded-lg focus:outline-none focus:ring-4 focus:ring-red-300 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 min-h-[56px] shadow-lg touch-manipulation"
+            aria-label="Emergency stop trading bot"
+            type="button"
+          >
+            <span className="flex items-center justify-center space-x-2">
+              <span className="text-xl" aria-hidden="true">🛑</span>
+              <span>Emergency Stop Bot</span>
+            </span>
+          </button>
+        </footer>
+      )}
+    </div>
+  );
+};

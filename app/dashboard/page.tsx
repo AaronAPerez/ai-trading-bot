@@ -11,7 +11,6 @@ import {
   AlertCircle,
   ArrowRight,
   Bot,
-  Eye,
   Zap,
   BarChart3,
   PieChart,
@@ -19,17 +18,48 @@ import {
 } from 'lucide-react'
 
 export default function DashboardPage() {
-  const account = useAlpacaAccount()
-  const positions = useAlpacaPositions()
+  // ✅ Destructure query results
+  const {
+    data: account,
+    isLoading: accountLoading,
+    error: accountError
+  } = useAlpacaAccount()
 
-  // Calculate key metrics
-  const totalBalance = account.data ? parseFloat(account.data.equity) : 0
-  const buyingPower = account.data ? parseFloat(account.data.buying_power) : 0
-  const investedAmount = positions.data ? positions.data.reduce((total, pos) => total + (parseFloat(pos.market_value) || 0), 0) : 0
-  const totalPnL = positions.data ? positions.data.reduce((total, pos) => total + (parseFloat(pos.unrealized_pl) || 0), 0) : 0
-  const dayPnL = account.data ? parseFloat(account.data.portfolio_value || '0') - parseFloat(account.data.last_equity || '0') : 0
+  const {
+    data: positions,
+    isLoading: positionsLoading,
+    error: positionsError
+  } = useAlpacaPositions()
+
+  // ✅ Normalize positions into an array
+  const positionsArray = Array.isArray(positions)
+    ? positions
+    : positions
+      ? [positions]
+      : []
+
+  // ✅ Calculate key metrics safely
+  const totalBalance = account ? parseFloat(account.equity) : 0
+  const buyingPower = account ? parseFloat(account.buying_power) : 0
+
+  const investedAmount = positionsArray.reduce(
+    (total, pos) => total + (parseFloat(pos.market_value) || 0),
+    0
+  )
+
+  const totalPnL = positionsArray.reduce(
+    (total, pos) => total + (parseFloat(pos.unrealized_pl) || 0),
+    0
+  )
+
+  const dayPnL = account
+    ? parseFloat(account.portfolio_value || '0') -
+    parseFloat(account.last_equity || '0')
+    : 0
+
   const pnlPercentage = totalBalance > 0 ? (totalPnL / totalBalance) * 100 : 0
 
+  // ✅ Portfolio cards
   const portfolioCards = [
     {
       title: 'Portfolio Value',
@@ -47,7 +77,10 @@ export default function DashboardPage() {
       changePercent: pnlPercentage,
       subtitle: 'Unrealized P&L',
       icon: totalPnL >= 0 ? TrendingUp : TrendingDown,
-      gradient: totalPnL >= 0 ? 'from-green-500 to-emerald-400' : 'from-red-500 to-rose-400'
+      gradient:
+        totalPnL >= 0
+          ? 'from-green-500 to-emerald-400'
+          : 'from-red-500 to-rose-400'
     },
     {
       title: 'Buying Power',
@@ -58,7 +91,7 @@ export default function DashboardPage() {
     },
     {
       title: 'Positions',
-      value: positions.data ? positions.data.length : 0,
+      value: positionsArray.length,
       subtitle: 'Active holdings',
       icon: PieChart,
       gradient: 'from-orange-500 to-amber-400',
@@ -93,18 +126,21 @@ export default function DashboardPage() {
     }
   ]
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value)
-  }
 
-  const formatPercentage = (value: number) => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+const formatPercentage = (value?: number): string => {
+  if (typeof value !== 'number' || isNaN(value)) {
+    return '--%'; // or '--' if you prefer a placeholder
   }
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
@@ -116,38 +152,54 @@ export default function DashboardPage() {
               Portfolio
             </h1>
             <p className="text-gray-400 mt-2 flex items-center">
-              <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+              <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
               Real-time market data
             </p>
           </div>
           <div className="flex items-center space-x-3">
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-2">
-              <span className="text-blue-400 text-sm font-medium">Paper Trading</span>
+              <span className="text-blue-400 text-sm font-medium">
+                Paper Trading
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Portfolio Cards - Coinbase/Robinhood Style */}
+        {/* Portfolio Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {portfolioCards.map((card, index) => (
-            <div key={index} className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 group">
+            <div
+              key={index}
+              className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 group"
+            >
               <div className="flex items-center justify-between mb-4">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-r ${card.gradient} flex items-center justify-center shadow-lg`}>
+                <div
+                  className={`w-12 h-12 rounded-xl bg-gradient-to-r ${card.gradient} flex items-center justify-center shadow-lg`}
+                >
                   <card.icon size={24} className="text-white" />
                 </div>
                 {card.change !== undefined && (
-                  <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${
-                    card.change >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                  }`}>
-                    {card.change >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                  <div
+                    className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${card.change >= 0
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-red-500/20 text-red-400'
+                      }`}
+                  >
+                    {card.change >= 0 ? (
+                      <TrendingUp size={12} />
+                    ) : (
+                      <TrendingDown size={12} />
+                    )}
                     <span>{formatPercentage(card.changePercent)}</span>
                   </div>
                 )}
               </div>
               <div className="space-y-2">
-                <h3 className="text-gray-400 text-sm font-medium">{card.title}</h3>
+                <h3 className="text-gray-400 text-sm font-medium">
+                  {card.title}
+                </h3>
                 <div className="text-2xl font-bold text-white">
-                  {account.isLoading || positions.isLoading ? (
+                  {accountLoading || positionsLoading ? (
                     <div className="animate-pulse bg-gray-600 h-8 w-24 rounded-lg"></div>
                   ) : card.isCount ? (
                     card.value
@@ -163,19 +215,18 @@ export default function DashboardPage() {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Portfolio Overview - 2/3 width */}
+          {/* Portfolio Overview */}
           <div className="xl:col-span-2">
             <PortfolioOverview
-              portfolio={account.data}
-              positions={positions.data}
-              isLoading={account.isLoading || positions.isLoading}
-              error={account.error || positions.error}
+              portfolio={account}
+              positions={positionsArray}
+              isLoading={accountLoading || positionsLoading}
+              error={accountError || positionsError}
             />
           </div>
 
-          {/* Quick Actions - 1/3 width */}
+          {/* Quick Actions */}
           <div className="space-y-6">
-            {/* Quick Actions */}
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
               <div className="flex items-center space-x-2 mb-6">
                 <Zap size={20} className="text-yellow-400" />
@@ -192,10 +243,15 @@ export default function DashboardPage() {
                       <action.icon size={20} />
                       <div>
                         <div className="font-semibold">{action.title}</div>
-                        <div className="text-sm opacity-90">{action.description}</div>
+                        <div className="text-sm opacity-90">
+                          {action.description}
+                        </div>
                       </div>
                     </div>
-                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform relative z-10" />
+                    <ArrowRight
+                      size={16}
+                      className="group-hover:translate-x-1 transition-transform relative z-10"
+                    />
                     <div className="absolute inset-0 bg-gradient-to-r from-white/0 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   </Link>
                 ))}
@@ -223,3 +279,4 @@ export default function DashboardPage() {
     </div>
   )
 }
+

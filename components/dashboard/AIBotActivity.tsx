@@ -183,7 +183,7 @@ export default function AIBotActivity({
             )}
 
             <div className="space-y-1 max-h-32 overflow-y-auto">
-              {activities.slice(0, 3).map((activity) => (
+              {(activities || []).slice(0, 3).map((activity) => (
                 <div key={activity.id} className="flex items-center space-x-2 text-xs">
                   {getActivityIcon(activity)}
                   <span className="text-gray-300 truncate flex-1">{activity.message}</span>
@@ -338,10 +338,10 @@ export default function AIBotActivity({
         <div className="flex items-center space-x-2 mb-3">
           <Activity className="w-4 h-4 text-gray-400" />
           <span className="text-sm font-medium text-gray-300">Recent Activity</span>
-          <span className="text-xs text-gray-500">({activities.length} activities)</span>
+          <span className="text-xs text-gray-500">({(activities || []).length} activities)</span>
         </div>
 
-        {activities.length === 0 ? (
+        {(activities || []).length === 0 ? (
           <div className="text-center py-8">
             <Bot className="w-12 h-12 text-gray-600 mx-auto mb-3" />
             <div className="text-gray-400">No activity yet</div>
@@ -350,7 +350,7 @@ export default function AIBotActivity({
             </div>
           </div>
         ) : (
-          activities.map((activity) => (
+          (activities || []).map((activity) => (
             <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-900 rounded hover:bg-gray-800 transition-colors">
               <div className="flex items-center space-x-2 mt-0.5">
                 {getActivityIcon(activity)}

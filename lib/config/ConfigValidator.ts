@@ -57,11 +57,11 @@ export class ConfigValidator {
       : 'https://api.alpaca.markets'
 
     // Check for deprecated environment variables
-    if (process.env.ALPACA_API_KEY) {
-      warnings.push('Deprecated: ALPACA_API_KEY found. Use APCA_API_KEY_ID instead')
+    if (process.env.APCA_API_KEY_ID) {
+      warnings.push('Deprecated: APCA_API_KEY_ID found. Use APCA_API_KEY_ID instead')
     }
-    if (process.env.ALPACA_SECRET_KEY) {
-      warnings.push('Deprecated: ALPACA_SECRET_KEY found. Use APCA_API_SECRET_KEY instead')
+    if (process.env.APCA_API_SECRET_KEY) {
+      warnings.push('Deprecated: APCA_API_SECRET_KEY found. Use APCA_API_SECRET_KEY instead')
     }
 
     // Ensure paper trading for safety
@@ -172,8 +172,8 @@ export class ConfigValidator {
   static getRecommendedEnvironmentVariables(): string {
     return `
 # Required Alpaca API credentials
-APCA_API_KEY_ID=your_alpaca_api_key_here
-APCA_API_SECRET_KEY=your_alpaca_secret_key_here
+APCA_API_KEY_ID=your_APCA_API_KEY_ID_here
+APCA_API_SECRET_KEY=your_APCA_API_SECRET_KEY_here
 
 # Trading mode (paper or live) - ONLY use paper for safety
 NEXT_PUBLIC_TRADING_MODE=paper

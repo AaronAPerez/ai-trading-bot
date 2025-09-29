@@ -1,396 +1,420 @@
-// ===============================================
-// PORTFOLIO OVERVIEW - Portfolio Summary Component
-// src/components/portfolio/PortfolioOverview.tsx
-// ===============================================
+'use client';
 
-import { useMemo } from 'react'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  PieChart, 
-  Activity,
-  AlertCircle,
-  RefreshCw
-} from 'lucide-react'
-import type { PortfolioOverviewProps, Position } from '@/types/trading'
+import React from 'react';
 
 /**
- * Portfolio overview component displaying key metrics, performance charts,
- * and position summaries with real-time updates
+ * Accessible Portfolio Overview Component
+ * 
+ * Features:
+ * - Responsive card grid (1/2/3/4 columns)
+ * - Color-blind friendly indicators
+ * - Screen reader friendly financial data
+ * - Touch-optimized interactive elements
+ * - Proper number formatting with localization
+ * - Loading and error states
  */
-const PortfolioOverview = ({
+
+interface Position {
+  symbol: string;
+  quantity: number;
+  marketValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+  currentPrice: number;
+  avgEntryPrice: number;
+}
+
+interface PortfolioData {
+  totalValue: number;
+  buyingPower: number;
+  cash: number;
+  dayPnL: number;
+  dayPnLPercent: number;
+  totalPnL: number;
+  totalPnLPercent: number;
+}
+
+interface PortfolioOverviewProps {
+  portfolio: PortfolioData;
+  positions: Position[];
+  isLoading?: boolean;
+  error?: string | null;
+  onRefresh?: () => void;
+}
+
+export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
   portfolio,
   positions,
   isLoading = false,
-  error
-}: PortfolioOverviewProps) => {
-
-  /**
-   * Calculate portfolio composition and sector allocation
-   */
-  const portfolioAnalysis = useMemo(() => {
-    if (!positions?.length) {
-      return {
-        totalPositions: 0,
-        winnersCount: 0,
-        losersCount: 0,
-        largestPosition: null,
-        concentration: [],
-        sectorAllocation: []
-      }
+  error = null,
+  onRefresh,
+}) => {
+  // Format currency with proper accessibility
+  const formatCurrency = (value: number | undefined | null): string => {
+    if (value === undefined || value === null || isNaN(value)) {
+      return '$0.00';
     }
-
-    const winners = positions.filter(pos => pos.unrealizedPnL > 0)
-    const losers = positions.filter(pos => pos.unrealizedPnL < 0)
-    const largestByValue = positions.reduce((prev, current) => 
-      Math.abs(current.marketValue) > Math.abs(prev.marketValue) ? current : prev
-    )
-
-    // Calculate position concentration (top 5 positions by market value)
-    const concentration = positions
-      .sort((a, b) => Math.abs(b.marketValue) - Math.abs(a.marketValue))
-      .slice(0, 5)
-      .map(pos => ({
-        symbol: pos.symbol,
-        value: pos.marketValue,
-        percentage: portfolio?.portfolioValue ? (Math.abs(pos.marketValue) / portfolio.portfolioValue) * 100 : 0,
-        pnl: pos.unrealizedPnL
-      }))
-
-    // Basic sector allocation (simplified - would use real sector data in production)
-    const sectorMap: Record<string, string> = {
-      'AAPL': 'Technology',
-      'MSFT': 'Technology', 
-      'GOOGL': 'Technology',
-      'TSLA': 'Consumer Discretionary',
-      'NVDA': 'Technology',
-      'META': 'Communication',
-      'AMZN': 'Consumer Discretionary',
-      'NFLX': 'Communication',
-      'JPM': 'Financials',
-      'V': 'Financials',
-      'BTCUSD': 'Cryptocurrency',
-      'ETHUSD': 'Cryptocurrency'
-    }
-
-    const sectorTotals: Record<string, number> = {}
-    positions.forEach(pos => {
-      const sector = sectorMap[pos.symbol] || 'Other'
-      sectorTotals[sector] = (sectorTotals[sector] || 0) + Math.abs(pos.marketValue)
-    })
-
-    const sectorAllocation = Object.entries(sectorTotals).map(([sector, value]) => ({
-      sector,
-      value,
-      percentage: (value / portfolio?.portfolioValue) * 100
-    }))
-
-    return {
-      totalPositions: positions.length,
-      winnersCount: winners.length,
-      losersCount: losers.length,
-      largestPosition: largestByValue,
-      concentration,
-      sectorAllocation
-    }
-  }, [positions, portfolio?.portfolioValue])
-
-  /**
-   * Calculate performance metrics
-   */
-  const performanceMetrics = useMemo(() => {
-    const dayPnLPercent = portfolio?.lastDayEquity > 0
-      ? (portfolio.dayPnL / portfolio.lastDayEquity) * 100
-      : 0
-
-    const totalPnLPercent = portfolio?.portfolioValue > 0
-      ? (portfolio.totalPnL / (portfolio.portfolioValue - portfolio.totalPnL)) * 100
-      : 0
-
-    return {
-      dayPnLPercent,
-      totalPnLPercent,
-      buyingPowerUsed: ((portfolio?.portfolioValue - portfolio?.buyingPower) / portfolio?.portfolioValue) * 100
-    }
-  }, [portfolio])
-
-  /**
-   * Format currency values with appropriate decimals
-   */
-  const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value)
-  }
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
 
-  /**
-   * Format percentage values
-   */
-  const formatPercentage = (value: number): string => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
-  }
+  // Format percentage with proper accessibility
+  const formatPercent = (value: number | undefined | null): string => {
+    if (value === undefined || value === null || isNaN(value)) {
+      return '0.00%';
+    }
+    const sign = value >= 0 ? '+' : '';
+    return `${sign}${value.toFixed(2)}%`;
+  };
 
-  /**
-   * Get color class based on value (positive/negative)
-   */
-  const getValueColor = (value: number): string => {
-    if (value > 0) return 'text-green-400'
-    if (value < 0) return 'text-red-400'
-    return 'text-gray-300'
-  }
+  // Get accessible color class
+  const getValueColorClass = (value: number): string => {
+    if (value > 0) return 'text-green-400';
+    if (value < 0) return 'text-red-400';
+    return 'text-gray-300';
+  };
+
+  // Calculate portfolio stats
+  const winnersCount = positions.filter(p => p.unrealizedPnL > 0).length;
+  const losersCount = positions.filter(p => p.unrealizedPnL < 0).length;
 
   // Loading state
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="animate-spin h-8 w-8 text-blue-400" />
-          <span className="ml-2 text-gray-400">Loading portfolio data...</span>
-        </div>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label="Loading portfolio data"
+        className="flex flex-col items-center justify-center py-12 space-y-4"
+      >
+        <div className="animate-spin text-4xl" aria-hidden="true">⏳</div>
+        <p className="text-gray-400">Loading portfolio data...</p>
       </div>
-    )
+    );
   }
 
   // Error state
   if (error) {
     return (
-      <div className="bg-red-900 border border-red-700 rounded-lg p-4">
-        <div className="flex items-center">
-          <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-          <span className="text-red-300">Error loading portfolio: {error instanceof Error ? error.message : String(error || 'Unknown error')}</span>
+      <div
+        role="alert"
+        aria-live="assertive"
+        className="bg-red-900/50 border-2 border-red-500 rounded-lg p-6"
+      >
+        <div className="flex items-start space-x-3">
+          <span className="text-3xl flex-shrink-0" aria-hidden="true">⚠️</span>
+          <div className="flex-1">
+            <h3 className="font-semibold text-red-200 text-lg">Error Loading Portfolio</h3>
+            <p className="text-red-300 mt-2">{error}</p>
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                className="mt-4 px-4 py-2 bg-red-700 hover:bg-red-800 text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300 transition-colors min-h-[44px]"
+                aria-label="Retry loading portfolio"
+                type="button"
+              >
+                Try Again
+              </button>
+            )}
+          </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="space-y-6">
-      {/* Portfolio Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Portfolio Value */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-          <div className="flex items-center justify-between">
+      {/* Summary Cards - Responsive Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Portfolio Value Card */}
+        <article
+          className="bg-gradient-to-br from-blue-900/40 to-blue-800/40 border-2 border-blue-700 rounded-lg p-4 md:p-6 shadow-lg hover:shadow-xl transition-shadow duration-200"
+          aria-labelledby="total-value-heading"
+        >
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-sm text-gray-400">Total Value</p>
-              <p className="text-2xl font-bold text-white">
-                {formatCurrency(portfolio.portfolioValue)}
+              <h3
+                id="total-value-heading"
+                className="text-sm font-medium text-blue-200"
+              >
+                Total Portfolio Value
+              </h3>
+              <p className="text-2xl md:text-3xl font-bold text-white mt-2">
+                {formatCurrency(portfolio.totalValue)}
               </p>
             </div>
-            <div className="p-2 bg-blue-900 rounded-lg">
-              <DollarSign className="h-6 w-6 text-blue-400" />
+            <div
+              className="p-2 bg-blue-700/50 rounded-lg"
+              aria-hidden="true"
+            >
+              <span className="text-2xl">💼</span>
             </div>
           </div>
-          <div className="mt-2 flex items-center text-sm">
-            <span className={getValueColor(performanceMetrics.totalPnLPercent)}>
-              {formatPercentage(performanceMetrics.totalPnLPercent)}
+          <div className="flex items-center text-sm">
+            <span className={`font-semibold ${getValueColorClass(portfolio.totalPnLPercent)}`}>
+              {formatPercent(portfolio.totalPnLPercent)}
             </span>
-            <span className="text-gray-400 ml-1">total return</span>
+            <span className="text-gray-300 ml-1">total return</span>
           </div>
-        </div>
+        </article>
 
-        {/* Daily P&L */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-          <div className="flex items-center justify-between">
+        {/* Day P&L Card */}
+        <article
+          className={`bg-gradient-to-br ${
+            portfolio.dayPnL >= 0
+              ? 'from-green-900/40 to-green-800/40 border-green-700'
+              : 'from-red-900/40 to-red-800/40 border-red-700'
+          } border-2 rounded-lg p-4 md:p-6 shadow-lg hover:shadow-xl transition-shadow duration-200`}
+          aria-labelledby="day-pnl-heading"
+        >
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-sm text-gray-400">Daily P&L</p>
-              <p className={`text-2xl font-bold ${getValueColor(portfolio.dayPnL)}`}>
+              <h3
+                id="day-pnl-heading"
+                className={`text-sm font-medium ${
+                  portfolio.dayPnL >= 0 ? 'text-green-200' : 'text-red-200'
+                }`}
+              >
+                Daily P&L
+              </h3>
+              <p
+                className={`text-2xl md:text-3xl font-bold mt-2 ${getValueColorClass(
+                  portfolio.dayPnL
+                )}`}
+              >
                 {formatCurrency(portfolio.dayPnL)}
               </p>
             </div>
-            <div className={`p-2 rounded-lg ${portfolio.dayPnL >= 0 ? 'bg-green-900' : 'bg-red-900'}`}>
-              {portfolio.dayPnL >= 0 ? (
-                <TrendingUp className="h-6 w-6 text-green-400" />
-              ) : (
-                <TrendingDown className="h-6 w-6 text-red-400" />
-              )}
+            <div
+              className={`p-2 rounded-lg ${
+                portfolio.dayPnL >= 0 ? 'bg-green-700/50' : 'bg-red-700/50'
+              }`}
+              aria-hidden="true"
+            >
+              <span className="text-2xl">
+                {portfolio.dayPnL >= 0 ? '📈' : '📉'}
+              </span>
             </div>
           </div>
-          <div className="mt-2 flex items-center text-sm">
-            <span className={getValueColor(performanceMetrics.dayPnLPercent)}>
-              {formatPercentage(performanceMetrics.dayPnLPercent)}
+          <div className="flex items-center text-sm">
+            <span className={`font-semibold ${getValueColorClass(portfolio.dayPnLPercent)}`}>
+              {formatPercent(portfolio.dayPnLPercent)}
             </span>
-            <span className="text-gray-400 ml-1">today</span>
+            <span className="text-gray-300 ml-1">today</span>
           </div>
-        </div>
+        </article>
 
-        {/* Buying Power */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-          <div className="flex items-center justify-between">
+        {/* Buying Power Card */}
+        <article
+          className="bg-gradient-to-br from-purple-900/40 to-purple-800/40 border-2 border-purple-700 rounded-lg p-4 md:p-6 shadow-lg hover:shadow-xl transition-shadow duration-200"
+          aria-labelledby="buying-power-heading"
+        >
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-sm text-gray-400">Buying Power</p>
-              <p className="text-2xl font-bold text-white">
+              <h3
+                id="buying-power-heading"
+                className="text-sm font-medium text-purple-200"
+              >
+                Buying Power
+              </h3>
+              <p className="text-2xl md:text-3xl font-bold text-white mt-2">
                 {formatCurrency(portfolio.buyingPower)}
               </p>
             </div>
-            <div className="p-2 bg-purple-900 rounded-lg">
-              <Activity className="h-6 w-6 text-purple-400" />
+            <div
+              className="p-2 bg-purple-700/50 rounded-lg"
+              aria-hidden="true"
+            >
+              <span className="text-2xl">💰</span>
             </div>
           </div>
-          <div className="mt-2 flex items-center text-sm">
-            <span className="text-gray-300">
-              {(100 - performanceMetrics.buyingPowerUsed).toFixed(1)}%
-            </span>
-            <span className="text-gray-400 ml-1">available</span>
+          <div className="text-sm text-gray-300">
+            Cash: {formatCurrency(portfolio.cash)}
           </div>
-        </div>
+        </article>
 
-        {/* Positions Summary */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-          <div className="flex items-center justify-between">
+        {/* Open Positions Card */}
+        <article
+          className="bg-gradient-to-br from-indigo-900/40 to-indigo-800/40 border-2 border-indigo-700 rounded-lg p-4 md:p-6 shadow-lg hover:shadow-xl transition-shadow duration-200"
+          aria-labelledby="positions-heading"
+        >
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-sm text-gray-400">Open Positions</p>
-              <p className="text-2xl font-bold text-white">
-                {portfolioAnalysis.totalPositions}
+              <h3
+                id="positions-heading"
+                className="text-sm font-medium text-indigo-200"
+              >
+                Open Positions
+              </h3>
+              <p className="text-2xl md:text-3xl font-bold text-white mt-2">
+                {positions.length}
               </p>
             </div>
-            <div className="p-2 bg-indigo-900 rounded-lg">
-              <PieChart className="h-6 w-6 text-indigo-400" />
+            <div
+              className="p-2 bg-indigo-700/50 rounded-lg"
+              aria-hidden="true"
+            >
+              <span className="text-2xl">📊</span>
             </div>
           </div>
-          <div className="mt-2 flex items-center text-sm space-x-2">
-            <span className="text-green-400">{portfolioAnalysis.winnersCount} ↑</span>
-            <span className="text-red-400">{portfolioAnalysis.losersCount} ↓</span>
+          <div className="flex items-center text-sm space-x-3">
+            <span className="text-green-400 font-semibold">
+              {winnersCount} ↑
+            </span>
+            <span className="text-red-400 font-semibold">
+              {losersCount} ↓
+            </span>
           </div>
-        </div>
+        </article>
       </div>
 
-      {/* Positions Table and Analysis */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Top Positions */}
-        <div className="lg:col-span-2 bg-gray-800 border border-gray-700 rounded-lg">
-          <div className="p-4 border-b border-gray-700">
-            <h3 className="text-lg font-semibold text-white">Current Positions</h3>
-            <p className="text-sm text-gray-400">Real-time position tracking</p>
+      {/* Positions Table - Responsive */}
+      <div className="bg-gray-800 border-2 border-gray-700 rounded-lg overflow-hidden">
+        <div className="px-6 py-4 bg-gray-900/50 border-b-2 border-gray-700">
+          <h2 className="text-xl font-bold text-white">Current Positions</h2>
+          <p className="text-sm text-gray-400 mt-1">
+            {positions.length} active position{positions.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+
+        {positions.length === 0 ? (
+          <div className="p-8 text-center">
+            <span className="text-6xl mb-4 block" aria-hidden="true">📭</span>
+            <p className="text-gray-400 text-lg">No open positions</p>
+            <p className="text-gray-500 text-sm mt-2">
+              Start trading to see your positions here
+            </p>
           </div>
-          <div className="overflow-x-auto">
-            {positions.length > 0 ? (
-              <table className="w-full">
+        ) : (
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full" role="table" aria-label="Portfolio positions">
                 <thead>
-                  <tr className="border-b border-gray-700">
-                    <th className="text-left p-4 text-sm font-medium text-gray-400">Symbol</th>
-                    <th className="text-right p-4 text-sm font-medium text-gray-400">Qty</th>
-                    <th className="text-right p-4 text-sm font-medium text-gray-400">Price</th>
-                    <th className="text-right p-4 text-sm font-medium text-gray-400">Market Value</th>
-                    <th className="text-right p-4 text-sm font-medium text-gray-400">P&L</th>
-                    <th className="text-right p-4 text-sm font-medium text-gray-400">% Change</th>
+                  <tr className="bg-gray-900/50 border-b border-gray-700">
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Symbol
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Quantity
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Avg Price
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Current Price
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Market Value
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      P&L
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      P&L %
+                    </th>
                   </tr>
                 </thead>
-                <tbody>
-                  {positions.slice(0, 10).map((position) => (
-                    <tr key={position.symbol} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                      <td className="p-4">
-                        <div className="font-medium text-white">{position.symbol}</div>
-                        <div className="text-xs text-gray-400 capitalize">{position.side}</div>
+                <tbody className="divide-y divide-gray-700">
+                  {positions.map((position) => (
+                    <tr
+                      key={position.symbol}
+                      className="hover:bg-gray-700/30 transition-colors"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-semibold text-white text-lg">
+                          {position.symbol}
+                        </div>
                       </td>
-                      <td className="text-right p-4 text-white">
-                        {Math.abs(position.qty).toLocaleString()}
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-gray-300">
+                        {position.quantity?.toLocaleString() || '0'}
                       </td>
-                      <td className="text-right p-4 text-white">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-gray-300">
+                        {formatCurrency(position.avgEntryPrice)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-white font-semibold">
                         {formatCurrency(position.currentPrice)}
                       </td>
-                      <td className="text-right p-4 text-white">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-white font-semibold">
                         {formatCurrency(position.marketValue)}
                       </td>
-                      <td className={`text-right p-4 ${getValueColor(position.unrealizedPnL)}`}>
+                      <td className={`px-6 py-4 whitespace-nowrap text-right font-semibold ${getValueColorClass(position.unrealizedPnL)}`}>
                         {formatCurrency(position.unrealizedPnL)}
                       </td>
-                      <td className={`text-right p-4 ${getValueColor(position.unrealizedPnLPercent)}`}>
-                        {formatPercentage(position.unrealizedPnLPercent)}
+                      <td className={`px-6 py-4 whitespace-nowrap text-right font-semibold ${getValueColorClass(position.unrealizedPnLPercent)}`}>
+                        {formatPercent(position.unrealizedPnLPercent)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            ) : (
-              <div className="p-8 text-center">
-                <PieChart className="h-12 w-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">No open positions</p>
-                <p className="text-sm text-gray-500 mt-1">Positions will appear here when trades are executed</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Portfolio Analytics */}
-        <div className="space-y-4">
-          {/* Position Concentration */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <h4 className="font-medium text-white mb-3">Position Concentration</h4>
-            {portfolioAnalysis.concentration.length > 0 ? (
-              <div className="space-y-2">
-                {portfolioAnalysis.concentration.map((item) => (
-                  <div key={item.symbol} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">{item.symbol}</span>
-                    <div className="text-right">
-                      <div className="text-sm text-white">{item.percentage.toFixed(1)}%</div>
-                      <div className={`text-xs ${getValueColor(item.pnl)}`}>
-                        {formatCurrency(item.pnl)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400">No concentration data available</p>
-            )}
-          </div>
-
-          {/* Sector Allocation */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <h4 className="font-medium text-white mb-3">Sector Allocation</h4>
-            {portfolioAnalysis.sectorAllocation.length > 0 ? (
-              <div className="space-y-2">
-                {portfolioAnalysis.sectorAllocation
-                  .sort((a, b) => b.percentage - a.percentage)
-                  .map((sector) => (
-                  <div key={sector.sector} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">{sector.sector}</span>
-                    <div className="text-right">
-                      <div className="text-sm text-white">{sector.percentage.toFixed(1)}%</div>
-                      <div className="text-xs text-gray-400">
-                        {formatCurrency(sector.value)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400">No sector data available</p>
-            )}
-          </div>
-
-          {/* Account Info */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <h4 className="font-medium text-white mb-3">Account Details</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Account Type:</span>
-                <span className={`font-medium ${portfolio.accountType === 'LIVE' ? 'text-red-400' : 'text-blue-400'}`}>
-                  {portfolio.accountType}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Cash Balance:</span>
-                <span className="text-white">{formatCurrency(portfolio.cash)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Day Trades:</span>
-                <span className="text-white">{portfolio.daytradeCountToday}/3</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Currency:</span>
-                <span className="text-white">{portfolio.currency}</span>
-              </div>
             </div>
-          </div>
-        </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-gray-700">
+              {positions.map((position) => (
+                <article
+                  key={position.symbol}
+                  className="p-4 hover:bg-gray-700/30 transition-colors"
+                  aria-label={`Position in ${position.symbol}`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xl font-bold text-white">
+                      {position.symbol}
+                    </h3>
+                    <div
+                      className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                        position.unrealizedPnL >= 0
+                          ? 'bg-green-900/50 text-green-300'
+                          : 'bg-red-900/50 text-red-300'
+                      }`}
+                    >
+                      {formatPercent(position.unrealizedPnLPercent)}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-gray-400">Quantity</div>
+                      <div className="text-white font-semibold mt-1">
+                        {position.quantity?.toLocaleString() || '0'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-400">Current Price</div>
+                      <div className="text-white font-semibold mt-1">
+                        {formatCurrency(position.currentPrice)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-400">Market Value</div>
+                      <div className="text-white font-semibold mt-1">
+                        {formatCurrency(position.marketValue)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-400">Unrealized P&L</div>
+                      <div className={`font-semibold mt-1 ${getValueColorClass(position.unrealizedPnL)}`}>
+                        {formatCurrency(position.unrealizedPnL)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between text-xs text-gray-400">
+                    <span>Avg Entry: {formatCurrency(position.avgEntryPrice)}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default PortfolioOverview
+export default PortfolioOverview;

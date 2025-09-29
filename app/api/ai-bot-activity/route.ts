@@ -352,7 +352,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       // Check for specific error types and provide solutions
       if (error.message.includes('401') || error.message.includes('authentication')) {
         console.error('🚨 Authentication failed - check Alpaca API keys')
-        console.error('💡 Suggestion: Verify ALPACA_API_KEY_ID and ALPACA_SECRET_KEY environment variables')
+        console.error('💡 Suggestion: Verify APCA_API_KEY_ID_ID and APCA_API_SECRET_KEY environment variables')
       }
       if (error.message.includes('insufficient') || error.message.includes('buying_power')) {
         console.error('💰 Insufficient buying power')
