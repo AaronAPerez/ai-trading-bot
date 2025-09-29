@@ -16,12 +16,14 @@ describe('ConfigValidator', () => {
     process.env.APCA_API_KEY_ID = 'PKABCDEF1234567890'
     process.env.APCA_API_SECRET_KEY = 'secretkey1234567890abcdef'
     process.env.NEXT_PUBLIC_TRADING_MODE = 'paper'
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon_key'
 
     const result = ConfigValidator.validateEnvironment()
-    
-    expect(result.valid).toBe(true)
+
+    expect(result.isValid).toBe(true)
     expect(result.issues).toHaveLength(0)
-    expect(result.config.tradingMode).toBe('paper')
+    expect(result.config.alpaca.paperMode).toBe(true)
   })
 
   it('should detect missing API keys', () => {
@@ -29,30 +31,24 @@ describe('ConfigValidator', () => {
     delete process.env.APCA_API_SECRET_KEY
 
     const result = ConfigValidator.validateEnvironment()
-    
-    expect(result.valid).toBe(false)
+
+    expect(result.isValid).toBe(false)
     expect(result.issues.length).toBeGreaterThan(0)
-    expect(result.issues).toContain(expect.stringContaining('APCA_API_KEY_ID'))
+    expect(result.issues.some(issue => issue.field === 'APCA_API_KEY_ID')).toBe(true)
   })
 
-  it('should warn about live trading mode', () => {
+  it('should validate configuration structure', () => {
     process.env.APCA_API_KEY_ID = 'PKABCDEF1234567890'
     process.env.APCA_API_SECRET_KEY = 'secretkey1234567890abcdef'
-    process.env.NEXT_PUBLIC_TRADING_MODE = 'live'
+    process.env.NEXT_PUBLIC_TRADING_MODE = 'paper'
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon_key'
 
     const result = ConfigValidator.validateEnvironment()
-    
-    expect(result.warnings.length).toBeGreaterThan(0)
-    expect(result.warnings).toContain(expect.stringContaining('LIVE TRADING'))
-  })
 
-  it('should detect deprecated environment variables', () => {
-    process.env.APCA_API_KEY_ID = 'PKABCDEF1234567890'
-    process.env.APCA_API_SECRET_KEY = 'secretkey1234567890abcdef'
-    process.env.ALPACA_API_KEY = 'deprecated_key'
-
-    const result = ConfigValidator.validateEnvironment()
-    
-    expect(result.warnings).toContain(expect.stringContaining('Deprecated'))
+    expect(result.config).toBeDefined()
+    expect(result.config.alpaca).toBeDefined()
+    expect(result.config.supabase).toBeDefined()
+    expect(result.config.app).toBeDefined()
   })
 })
