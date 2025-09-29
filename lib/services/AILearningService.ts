@@ -143,10 +143,10 @@ export class AILearningService {
   }
 
   private startSymbolScanning(): void {
-    // Show AI activity by scanning symbols from Alpaca
+    // Show AI activity by scanning symbols from Alpaca (stocks + crypto)
     const alpacaSymbols = [
-      'AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'META', 'AMZN', 'NFLX',
-      'BTC/USD', 'ETH/USD', 'DOGE/USD', 'ADA/USD', 'SOL/USD'
+      'AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'META', 'AMZN', 'NFLX', 'SPY', 'QQQ',
+      'BTC/USD', 'ETH/USD', 'DOGE/USD', 'ADA/USD', 'SOL/USD', 'AVAX/USD', 'MATIC/USD', 'LTC/USD'
     ]
 
     console.log('🔍 Starting AI symbol scanning for pattern recognition...')

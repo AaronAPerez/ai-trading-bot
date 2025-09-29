@@ -20,11 +20,13 @@ import { Brain } from 'lucide-react'
 import OptimizedAILearning from "./OptimizedAILearning"
 import AIInsightsDashboard from "./AIInsightsDashboard"
 import { useAILearningManager } from "@/hooks/useAILearningManager"
+import LiveTradesDisplay from "../trading/LiveTradesDisplay"
+import MarketStatusDisplay from "../market/MarketStatusDisplay"
 
 import PortfolioOverview from "./PortfolioOverview"
 import DashboardLayout from "./DashboardLayout"
 
-// Default bot configuration
+// Default bot configuration with auto-execution enabled
 const defaultBotConfig = {
   alpaca: {
     baseUrl: 'https://paper-api.alpaca.markets',
@@ -36,11 +38,28 @@ const defaultBotConfig = {
     riskLevel: 0.02
   },
   mode: 'BALANCED' as const,
+  strategies: [
+    { id: 'ml_enhanced', name: 'ML Enhanced', enabled: true, weight: 0.4 },
+    { id: 'technical', name: 'Technical Analysis', enabled: true, weight: 0.3 },
+    { id: 'sentiment', name: 'Sentiment Analysis', enabled: true, weight: 0.3 }
+  ],
+  riskManagement: {
+    maxPositionSize: 0.05,
+    maxDailyLoss: 0.02,
+    maxDrawdown: 0.10,
+    minConfidence: 0.75,
+    stopLossPercent: 0.05,
+    takeProfitPercent: 0.10
+  },
+  executionSettings: {
+    autoExecute: true, // Enable auto-execution by default
+    minConfidenceForOrder: 0.75
+  },
   maxPositionSize: 10,
   stopLossPercent: 5,
   takeProfitPercent: 15,
   minimumConfidence: 75,
-  watchlistSymbols: ['AAPL', 'MSFT', 'GOOGL', 'TSLA']
+  watchlistSymbols: ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'SPY', 'QQQ', 'BTC/USD', 'ETH/USD', 'DOGE/USD']
 }
 
 export default function AITradingDashboard() {
@@ -269,24 +288,24 @@ export default function AITradingDashboard() {
       {/* AI Trading Engine Header with Control Button */}
       <div className="flex items-center justify-between mb-6">
         {/* Live Balance Display - Spanning 2 columns */}
-        {/* <div className="col-span-2"> */}
-        <LiveBalanceDisplay
-          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-          showChangeIndicators={true}
-        />
-        {/* </div> */}
+        <div className="col-span-2">
+          <LiveBalanceDisplay
+            refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+            showChangeIndicators={true}
+          />
+        </div>
 
-        {/* <div className="flex items-center space-x-3"> */}
-        {/* <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
-                </svg>
-              </div> */}
-        {/* <div>
-                <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
-                <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
-              </div> */}
-        {/* </div> */}
+        {/* <div className="flex items-center space-x-3">
+          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white">AI Trading Engine</h2>
+            <p className="text-gray-300">Advanced algorithmic trading powered by machine learning</p>
+          </div>
+        </div> */}
 
         {/* AI Trading Control - Top Right */}
         <div className="flex items-center space-x-4">
@@ -355,10 +374,10 @@ export default function AITradingDashboard() {
             onClick={persistentBotState.isRunning ? handleStop : () => handleStart(defaultBotConfig)}
             disabled={isStoppingBot || tradingBot.isStarting}
             className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${isStoppingBot || tradingBot.isStarting
-                ? 'bg-gray-600 cursor-not-allowed text-gray-300'
-                : persistentBotState.isRunning
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
+              ? 'bg-gray-600 cursor-not-allowed text-gray-300'
+              : persistentBotState.isRunning
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
               }`}
           >
             {isStoppingBot ? (
@@ -415,8 +434,8 @@ export default function AITradingDashboard() {
               </div>
             </div> */}
 
-            {/* Live AI Activity Stream */}
-            {/* <div className="p-4">
+        {/* Live AI Activity Stream */}
+        {/* <div className="p-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between mb-3">
                   <h6 className="text-sm font-semibold text-white">Live Activity Feed</h6>
@@ -425,8 +444,8 @@ export default function AITradingDashboard() {
                   </div>
                 </div> */}
 
-                {/* Activity Stream with enhanced styling */}
-                {/* <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+        {/* Activity Stream with enhanced styling */}
+        {/* <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
                   {aiActivity.activities.slice(0, 6).map((activity) => (
                     <div key={activity.id} className="ai-activity-card flex items-start space-x-2 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/30 transition-all text-xs">
                       <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ai-pulse ${activity.type === 'trade' ? 'bg-green-400 ai-glow-green' :
@@ -454,8 +473,8 @@ export default function AITradingDashboard() {
                   )}
                 </div> */}
 
-                {/* Real-time AI metrics from Supabase */}
-                {/* {aiActivity.metrics && (
+        {/* Real-time AI metrics from Supabase */}
+        {/* {aiActivity.metrics && (
                   <div className="mt-4 pt-3 border-t border-blue-700/30">
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div className="bg-gray-800/30 rounded-lg p-2">
@@ -477,14 +496,14 @@ export default function AITradingDashboard() {
         {/* AI Quick Stats - Secondary Column */}
         {/* <div className="xl:col-span-1">
           <div className="bg-gradient-to-br from-green-900/50 to-blue-900/50 rounded-lg border border-green-700/50 shadow-2xl h-full"> */}
-            {/* <div className="p-4 border-b border-green-700/30">
+        {/* <div className="p-4 border-b border-green-700/30">
               <div className="flex items-center space-x-2">
                 <div className={`w-3 h-3 rounded-full ${aiLearningManager.isActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></div>
                 <h4 className="text-lg font-semibold ai-gradient-text">🧠 AI Learning Status</h4>
               </div>
             </div> */}
-            {/* <div className="p-4 space-y-4"> */}
-              {/* <div className="space-y-3">
+        {/* <div className="p-4 space-y-4"> */}
+        {/* <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-300">Learning Engine</span>
                   <span className="text-sm font-medium text-white">
@@ -505,7 +524,7 @@ export default function AITradingDashboard() {
                 </div>
               </div> */}
 
-              {/* <div className="bg-gray-800/30 rounded-lg p-3">
+        {/* <div className="bg-gray-800/30 rounded-lg p-3">
                 <div className="text-xs text-gray-300 mb-2">Data Sources</div>
                 <div className="space-y-1 text-xs">
                   <div className="flex items-center justify-between">
@@ -518,7 +537,7 @@ export default function AITradingDashboard() {
                   </div>
                 </div>
               </div> */}
-            {/* </div>
+        {/* </div>
           </div>
         </div> */}
 
@@ -542,55 +561,14 @@ export default function AITradingDashboard() {
         />
       </div>
 
-      {/* Secondary Trading Data Section */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-        {/* Trading Activity - Takes full width below AI section */}
-        <div className="xl:col-span-3">
-          <div className="bg-gray-900/40 rounded-lg border border-gray-700/50">
-            <div className="p-4 border-b border-gray-700/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z" />
-                  </svg>
-                  <h4 className="text-lg font-semibold text-white">Complete Trading Activity</h4>
-                  <span className="text-xs text-gray-500">(Alpaca API + AI Trades from Supabase)</span>
-                </div>
-                <div className="text-xs text-gray-400">
-                  Real-time data from Alpaca API
-                </div>
-              </div>
-            </div>
-            {/* <div className="p-4">
-              <TradesOrdersTable
-                maxItems={15}
-                compact={false}
-                showTrades={true}
-                showOrders={true}
-                useRealData={true}
-                defaultTab="orders"
-                refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-              />
-            </div> */}
-          </div>
-        </div>
+      {/* Market Status Section */}
+      <div className="mb-8">
+        <MarketStatusDisplay />
       </div>
 
-      {/* AI Live Trades Section */}
-      <div className="border-t border-gray-700/50">
-        <div className="p-4 pb-2">
-          <div className="flex items-center space-x-2 mb-3">
-            <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-            <h5 className="text-sm font-semibold text-white">AI Live Trades</h5>
-          </div>
-          <AILiveTradesTable
-            maxItems={5}
-            compact={true}
-            showHeader={false}
-          />
-        </div>
+      {/* Live Trading Activity Section */}
+      <div className="mb-8">
+        <LiveTradesDisplay />
       </div>
 
 
