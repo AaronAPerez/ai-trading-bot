@@ -10,6 +10,12 @@ const { TextEncoder, TextDecoder } = require('util')
 global.TextEncoder = TextEncoder
 global.TextDecoder = TextDecoder
 
+// Polyfill for ReadableStream (needed for undici fetch)
+if (typeof ReadableStream === 'undefined') {
+  const { ReadableStream: NodeReadableStream } = require('stream/web')
+  global.ReadableStream = NodeReadableStream
+}
+
 // Mock Next.js server Request/Response for rate-limiter
 global.Request = class Request {
   constructor(url, init) {
@@ -37,6 +43,21 @@ global.Response = class Response {
 // Load real environment variables for tests (from .env.local or .env)
 require('dotenv').config({ path: '.env.local' })
 require('dotenv').config({ path: '.env' })
+
+// Save real fetch implementation for integration tests
+// Node 18+ has native fetch support, but jsdom doesn't expose it
+// We need to import it explicitly
+try {
+  // Try to get fetch from undici (what Node.js uses internally for fetch)
+  const { fetch: undiciFetch } = require('undici')
+  global.realFetch = undiciFetch
+  console.log('✅ Real fetch loaded from undici for integration tests')
+} catch (e) {
+  // If undici import fails, the global fetch won't be available either
+  console.error('Failed to load undici fetch:', e.message)
+  console.warn('Real fetch not available, integration tests will be skipped')
+  global.realFetch = () => Promise.reject(new Error('fetch not available'))
+}
 
 // Provide fetch mock for jsdom environment
 // Tests can override this mock with specific responses

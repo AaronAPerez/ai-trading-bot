@@ -230,10 +230,15 @@ export class AlpacaRateLimiter {
     retries: number = 3
   ): Promise<T> {
     await this.waitAndRecord(endpoint)
-    
+
     try {
       return await requestFn()
     } catch (error: any) {
+      // In test environment, log the error for debugging
+      if (process.env.NODE_ENV === 'test') {
+        console.error(`[RateLimiter] Error for ${endpoint}:`, error)
+      }
+
       // Handle rate limit errors with exponential backoff
       if (error.status === 429 && retries > 0) {
         const backoffTime = Math.pow(2, 4 - retries) * 1000 // 1s, 2s, 4s
@@ -241,6 +246,8 @@ export class AlpacaRateLimiter {
         await this.sleep(backoffTime)
         return this.request(requestFn, endpoint, retries - 1)
       }
+
+      // Always re-throw the error
       throw error
     }
   }

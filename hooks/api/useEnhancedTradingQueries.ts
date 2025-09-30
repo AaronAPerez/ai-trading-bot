@@ -6,7 +6,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useUnifiedTradingStore, usePortfolioActions, useAIActions } from '@/store/unifiedTradingStore'
+import { useUnifiedTradingStore } from '@/store/unifiedTradingStore'
 import type { Position, PortfolioPerformance } from '@/store/slices/portfolioSlice'
 import type { AIRecommendation } from '@/store/slices/aiSlice'
 
@@ -31,8 +31,6 @@ export const queryKeys = {
  * Hook for fetching account data with Zustand sync
  */
 export function useAccountQuery(options?: { refetchInterval?: number }) {
-  const { setPerformance } = usePortfolioActions()
-
   return useQuery({
     queryKey: queryKeys.account,
     queryFn: async () => {
@@ -44,7 +42,7 @@ export function useAccountQuery(options?: { refetchInterval?: number }) {
     refetchInterval: options?.refetchInterval || 30000, // 30 seconds
     staleTime: 10000, // 10 seconds
     onSuccess: (data) => {
-      // Sync with Zustand store
+      // Sync with Zustand store - access store directly to avoid hook dependency
       if (data) {
         const performance: PortfolioPerformance = {
           totalValue: parseFloat(data.portfolio_value),
@@ -59,7 +57,7 @@ export function useAccountQuery(options?: { refetchInterval?: number }) {
           longMarketValue: parseFloat(data.long_market_value),
           shortMarketValue: parseFloat(data.short_market_value || '0')
         }
-        setPerformance(performance)
+        useUnifiedTradingStore.getState().setPerformance(performance)
       }
     }
   })
@@ -69,8 +67,6 @@ export function useAccountQuery(options?: { refetchInterval?: number }) {
  * Hook for fetching positions with Zustand sync
  */
 export function usePositionsQuery(options?: { refetchInterval?: number }) {
-  const { setPositions } = usePortfolioActions()
-
   return useQuery({
     queryKey: queryKeys.positions,
     queryFn: async () => {
@@ -82,7 +78,7 @@ export function usePositionsQuery(options?: { refetchInterval?: number }) {
     refetchInterval: options?.refetchInterval || 10000, // 10 seconds
     staleTime: 5000, // 5 seconds
     onSuccess: (data) => {
-      // Sync with Zustand store
+      // Sync with Zustand store - access store directly to avoid hook dependency
       if (data && Array.isArray(data)) {
         const positions: Position[] = data.map((pos: any) => ({
           symbol: pos.symbol,
@@ -96,7 +92,7 @@ export function usePositionsQuery(options?: { refetchInterval?: number }) {
           costBasis: parseFloat(pos.cost_basis),
           lastUpdated: new Date()
         }))
-        setPositions(positions)
+        useUnifiedTradingStore.getState().setPositions(positions)
       }
     }
   })
@@ -124,8 +120,6 @@ export function useMarketQuoteQuery(symbol: string) {
  * Hook for fetching AI recommendations with Zustand sync
  */
 export function useAIRecommendationsQuery() {
-  const { setRecommendations } = useAIActions()
-
   return useQuery({
     queryKey: queryKeys.recommendations,
     queryFn: async () => {
@@ -137,9 +131,9 @@ export function useAIRecommendationsQuery() {
     refetchInterval: 15000, // 15 seconds
     staleTime: 10000,
     onSuccess: (data) => {
-      // Sync with Zustand store
+      // Sync with Zustand store - access store directly to avoid hook dependency
       if (data) {
-        setRecommendations(data)
+        useUnifiedTradingStore.getState().setRecommendations(data)
       }
     }
   })
@@ -263,11 +257,10 @@ export function useCancelOrderMutation() {
  */
 export function useExecuteRecommendationMutation() {
   const queryClient = useQueryClient()
-  const { markAsExecuting, markAsExecuted } = useAIActions()
 
   return useMutation({
     mutationFn: async (recommendation: AIRecommendation) => {
-      markAsExecuting(recommendation.id)
+      useUnifiedTradingStore.getState().markAsExecuting(recommendation.id)
 
       const response = await fetch('/api/ai/execute-recommendation', {
         method: 'POST',
@@ -279,15 +272,15 @@ export function useExecuteRecommendationMutation() {
       return response.json()
     },
     onSuccess: (data, recommendation) => {
-      markAsExecuted(recommendation.id)
-      
+      useUnifiedTradingStore.getState().markAsExecuted(recommendation.id)
+
       // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: queryKeys.orders })
       queryClient.invalidateQueries({ queryKey: queryKeys.positions })
       queryClient.invalidateQueries({ queryKey: queryKeys.recommendations })
     },
     onError: (err, recommendation) => {
-      markAsExecuted(recommendation.id)
+      useUnifiedTradingStore.getState().markAsExecuted(recommendation.id)
     }
   })
 }
