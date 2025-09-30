@@ -3,17 +3,10 @@
 // jest.config.js
 // ===============================================
 
-const nextJest = require('next/jest')
-
-const createJestConfig = nextJest({
-  // Provide the path to your Next.js app to load next.config.js and .env files in your test environment
-  dir: './',
-})
-
 // Custom Jest configuration
 const customJestConfig = {
   // Setup files to run before tests
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs'],
 
   // Test environment
   testEnvironment: 'jest-environment-jsdom',
@@ -67,10 +60,16 @@ const customJestConfig = {
     '**/?(*.)+(spec|test).[jt]s?(x)',
   ],
 
-  // Transform files with babel-jest
+  // Transform files with babel
   transform: {
-    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
+    '^.+\\.(ts|tsx)$': ['babel-jest', {
+      configFile: './babel.config.js'
+    }],
   },
+
+  transformIgnorePatterns: [
+    'node_modules/(?!(next)/)',
+  ],
 
   // Module file extensions
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
@@ -85,8 +84,8 @@ const customJestConfig = {
   verbose: true,
 }
 
-// Export Jest configuration
-module.exports = createJestConfig(customJestConfig)
+// Export Jest configuration directly (not using next/jest to avoid SWC issues)
+module.exports = customJestConfig
 // module.exports = {
 //   testEnvironment: 'node',
 //   preset: 'ts-jest',

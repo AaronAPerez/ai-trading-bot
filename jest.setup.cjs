@@ -1,25 +1,58 @@
 // ===============================================
 // JEST SETUP FILE - Testing Utilities and Mocks
-// jest.setup.js
+// jest.setup.cjs
 // ===============================================
 
-import '@testing-library/jest-dom'
-import { TextEncoder, TextDecoder } from 'util'
+require('@testing-library/jest-dom')
+const { TextEncoder, TextDecoder } = require('util')
 
 // Polyfill for TextEncoder/TextDecoder
 global.TextEncoder = TextEncoder
 global.TextDecoder = TextDecoder
 
-// Mock environment variables for tests
-process.env.NEXT_PUBLIC_APCA_API_KEY_ID = 'test-api-key'
-process.env.APCA_API_SECRET_KEY = 'test-secret-key'
-process.env.NEXT_PUBLIC_TRADING_MODE = 'paper'
-process.env.ALPACA_BASE_URL = 'https://paper-api.alpaca.markets'
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
+// Mock Next.js server Request/Response for rate-limiter
+global.Request = class Request {
+  constructor(url, init) {
+    this.url = url
+    this.init = init
+  }
+  headers = new Map()
+  method = 'GET'
+  json = async () => ({})
+  text = async () => ''
+  clone = () => this
+}
 
-// Mock fetch globally
-global.fetch = jest.fn()
+global.Response = class Response {
+  constructor(body, init) {
+    this.body = body
+    this.init = init
+  }
+  headers = new Map()
+  status = 200
+  json = async () => ({})
+  text = async () => ''
+}
+
+// Load real environment variables for tests (from .env.local or .env)
+require('dotenv').config({ path: '.env.local' })
+require('dotenv').config({ path: '.env' })
+
+// Provide fetch mock for jsdom environment
+// Tests can override this mock with specific responses
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: new Headers(),
+    json: async () => ({}),
+    text: async () => '',
+    blob: async () => new Blob(),
+    arrayBuffer: async () => new ArrayBuffer(0),
+    clone: function() { return this },
+  })
+)
 
 // Mock WebSocket
 global.WebSocket = jest.fn().mockImplementation(() => ({
