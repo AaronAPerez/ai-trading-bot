@@ -2,12 +2,13 @@
 
 // ===============================================
 // WEBSOCKET REACT HOOKS - Store Integration
+// MIGRATED TO UNIFIED TRADING STORE
 // src/hooks/useWebSocket.ts
 // ===============================================
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { AlpacaWebSocketClient, WebSocketManager } from '@/lib/websocket/WebSocketClient'
-import { useTradingStore } from '@/store/tradingStore'
+import { useUnifiedTradingStore, useMarketActions, usePortfolioActions, useAIActions } from '@/store/unifiedTradingStore'
 import type {
   MarketDataUpdate,
   AccountUpdate,
@@ -43,28 +44,30 @@ export const useWebSocket = () => {
   const isMountedRef = useRef(true)
 
   // Store actions - memoized to prevent infinite loops
+  const marketActionsHook = useMarketActions()
+  const portfolioActionsHook = usePortfolioActions()
+  const aiActionsHook = useAIActions()
+
   const marketActions = useMemo(() => ({
-    updatePrice: useTradingStore.getState().updatePrice,
-    updateMarketData: useTradingStore.getState().updateMarketData,
-    setConnectionStatus: useTradingStore.getState().setConnectionStatus
-  }), [])
+    updateQuote: marketActionsHook.updateQuote,
+    updateQuotes: marketActionsHook.updateQuotes,
+    setConnectionStatus: (status: string) => {
+      // Connection status update if needed
+      console.log('Connection status:', status)
+    }
+  }), [marketActionsHook])
 
   const portfolioActions = useMemo(() => ({
-    updateOrder: useTradingStore.getState().updateOrder,
-    updatePositions: useTradingStore.getState().updatePositions
-  }), [])
+    updatePosition: portfolioActionsHook.updatePosition,
+    setPositions: portfolioActionsHook.setPositions
+  }), [portfolioActionsHook])
 
   const aiActions = useMemo(() => ({
-    addRecommendation: useTradingStore.getState().addRecommendation,
-    updateRecommendation: useTradingStore.getState().updateRecommendation
-  }), [])
+    addRecommendation: aiActionsHook.addRecommendation,
+    updateRecommendation: aiActionsHook.updateRecommendation
+  }), [aiActionsHook])
 
-  const botActions = useMemo(() => ({
-    updateBotMetrics: useTradingStore.getState().updateBotMetrics,
-    addBotActivity: useTradingStore.getState().addBotActivity
-  }), [])
-
-  const watchlist = useTradingStore(useCallback((state) => state.watchlist, []))
+  const watchlist = useUnifiedTradingStore(useCallback((state) => state.watchlist, []))
 
   /**
    * Map connection ID to status key
@@ -88,31 +91,41 @@ export const useWebSocket = () => {
     // Market data events
     eventEmitter.on('quote', (update: MarketDataUpdate) => {
       const quote = update.data as Quote
-      marketActions.updatePrice(quote.symbol, (quote.bid + quote.ask) / 2)
+      const avgPrice = (quote.bid + quote.ask) / 2
+      marketActions.updateQuote(quote.symbol, {
+        symbol: quote.symbol,
+        lastPrice: avgPrice,
+        bid: quote.bid,
+        ask: quote.ask,
+        timestamp: new Date().toISOString()
+      })
     })
 
     eventEmitter.on('trade', (update: MarketDataUpdate) => {
       const trade = update.data as Trade
-      marketActions.updatePrice(trade.symbol, trade.price)
+      marketActions.updateQuote(trade.symbol, {
+        symbol: trade.symbol,
+        lastPrice: trade.price,
+        volume: trade.size,
+        timestamp: new Date().toISOString()
+      })
     })
 
     eventEmitter.on('bar', (update: MarketDataUpdate) => {
       const bar = update.data as MarketData
-      marketActions.updateMarketData(bar.symbol, bar)
-      marketActions.updatePrice(bar.symbol, bar.close)
+      marketActions.updateQuote(bar.symbol, {
+        symbol: bar.symbol,
+        lastPrice: bar.close,
+        timestamp: new Date().toISOString()
+      })
     })
 
     // Account updates
     eventEmitter.on('accountUpdate', (update: AccountUpdate) => {
       switch (update.type) {
-        case 'order':
-          const orderUpdate = update.data
-          portfolioActions.updateOrder(orderUpdate.id, orderUpdate)
-          break
-
         case 'position':
           const positionUpdate = update.data
-          portfolioActions.updatePositions([positionUpdate])
+          portfolioActions.updatePosition(positionUpdate.symbol, positionUpdate)
           break
       }
     })
@@ -152,17 +165,14 @@ export const useWebSocket = () => {
       aiActions.addRecommendation(update.data)
     })
 
-    wsManager.on('botActivity', (update: BotUpdate) => {
-      botActions.addBotActivity(update.data)
-    })
-
-    wsManager.on('botMetrics', (update: BotUpdate) => {
-      botActions.updateBotMetrics(update.data)
-    })
-
     // Price updates from internal sources
     wsManager.on('priceUpdate', (data: { symbol: string; price: number; change?: number }) => {
-      marketActions.updatePrice(data.symbol, data.price)
+      marketActions.updateQuote(data.symbol, {
+        symbol: data.symbol,
+        lastPrice: data.price,
+        change: data.change,
+        timestamp: new Date().toISOString()
+      })
     })
 
     // Connection status
@@ -177,7 +187,7 @@ export const useWebSocket = () => {
         setConnectionStatus(prev => ({ ...prev, internalWs: false }))
       }
     })
-  }, [aiActions, botActions, marketActions])
+  }, [aiActions, marketActions])
 
   /**
    * Initialize WebSocket connections
@@ -386,14 +396,14 @@ export const useRealTimeMarketData = (symbols?: string[]) => {
   const { subscribeToSymbols, unsubscribeFromSymbols, connectionStatus } = useWebSocket()
   const [prices, setPrices] = useState<Record<string, { price: number; timestamp: Date }>>({})
 
-  // Get price updates from store
-  const priceUpdates = useTradingStore(useCallback((state) => state.priceUpdates, []))
+  // Get quotes from store
+  const quotes = useUnifiedTradingStore(useCallback((state) => state.quotes, []))
 
   // Subscribe to symbols on mount
   useEffect(() => {
     if (symbols && symbols.length > 0 && connectionStatus.marketData) {
       subscribeToSymbols(symbols)
-      
+
       return () => {
         unsubscribeFromSymbols(symbols)
       }
@@ -402,8 +412,17 @@ export const useRealTimeMarketData = (symbols?: string[]) => {
 
   // Update prices when store changes
   useEffect(() => {
-    setPrices(priceUpdates)
-  }, [priceUpdates])
+    const priceData: Record<string, { price: number; timestamp: Date }> = {}
+    Object.values(quotes).forEach(quote => {
+      if (quote) {
+        priceData[quote.symbol] = {
+          price: quote.lastPrice,
+          timestamp: new Date(quote.timestamp)
+        }
+      }
+    })
+    setPrices(priceData)
+  }, [quotes])
 
   return {
     prices,
@@ -418,8 +437,7 @@ export const useRealTimeMarketData = (symbols?: string[]) => {
 export const useTradingUpdates = () => {
   const { connectionStatus, sendInternalMessage } = useWebSocket()
   // Get data from store
-  const orders = useTradingStore(useCallback((state) => state.orders, []))
-  const positions = useTradingStore(useCallback((state) => state.positions, []))
+  const positions = useUnifiedTradingStore(useCallback((state) => state.positions, []))
 
   const sendOrderUpdate = useCallback((orderData: object) => {
     return sendInternalMessage({
@@ -430,7 +448,6 @@ export const useTradingUpdates = () => {
   }, [sendInternalMessage])
 
   return {
-    orders,
     positions,
     isConnected: connectionStatus.tradingUpdates,
     sendOrderUpdate
@@ -444,9 +461,7 @@ export const useBotWebSocket = () => {
   const { connectionStatus, sendInternalMessage } = useWebSocket()
 
   // Get data from store
-  const recommendations = useTradingStore(useCallback((state) => state.recommendations, []))
-  const activities = useTradingStore(useCallback((state) => state.botActivityLogs, []))
-  const metrics = useTradingStore(useCallback((state) => state.botMetrics, []))
+  const recommendations = useUnifiedTradingStore(useCallback((state) => state.recommendations, []))
 
   const sendBotCommand = useCallback((command: string, data?: unknown) => {
     return sendInternalMessage({
@@ -469,8 +484,6 @@ export const useBotWebSocket = () => {
 
   return {
     recommendations,
-    activities,
-    metrics,
     isConnected: connectionStatus.internalWs,
     sendBotCommand,
     sendRecommendationFeedback

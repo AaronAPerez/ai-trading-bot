@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '@/lib/stores/authStore'
+import { useAuth } from '@/store/authStore'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
