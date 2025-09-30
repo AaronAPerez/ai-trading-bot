@@ -283,7 +283,90 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
       </header>
 
       {/* Mobile Sidebar Navigation */}
+      <nav
+        id="sidebar-menu"
+        className={`fixed inset-y-0 left-0 z-50 w-64 sm:w-80 bg-gray-800 border-r border-gray-700 transform transition-transform duration-300 ease-in-out md:hidden ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } shadow-2xl`}
+        aria-label="Mobile navigation"
+        aria-hidden={!isSidebarOpen}
+      >
+        <div className="flex flex-col h-full">
+          {/* Sidebar Header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <div className="flex items-center space-x-2">
+              <span className="text-2xl" aria-hidden="true">📱</span>
+              <span className="text-lg font-bold">Menu</span>
+            </div>
+            <button
+              onClick={toggleSidebar}
+              className="p-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors duration-200 touch-manipulation"
+              aria-label="Close navigation menu"
+              type="button"
+            >
+              <span className="text-2xl" aria-hidden="true">✕</span>
+            </button>
+          </div>
 
+          {/* Navigation Items */}
+          <div className="flex-1 overflow-y-auto py-4">
+            {navigationItems.map((item) => (
+              <a
+                key={item.id}
+                href={item.path}
+                onClick={() => {
+                  setIsSidebarOpen(false);
+                  announceToScreenReader(`Navigating to ${item.label}`);
+                }}
+                className="flex items-center justify-between px-4 py-4 text-gray-300 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 transition-all duration-200 min-h-[56px] touch-manipulation border-b border-gray-700/50"
+                aria-label={item.ariaLabel}
+                tabIndex={isSidebarOpen ? 0 : -1}
+              >
+                <div className="flex items-center space-x-3">
+                  <span className="text-2xl" aria-hidden="true">{item.icon}</span>
+                  <span className="text-base font-medium">{item.label}</span>
+                </div>
+                <span className="text-xl text-gray-500" aria-hidden="true">›</span>
+              </a>
+            ))}
+          </div>
+
+          {/* Sidebar Footer - Bot Stats */}
+          {botStatus.isRunning && (
+            <div className="p-4 border-t border-gray-700 bg-gray-900/50">
+              <div className="text-xs text-gray-400 mb-3 font-semibold uppercase tracking-wider">
+                Bot Statistics
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs">Uptime</div>
+                  <div className="font-bold text-white mt-1">
+                    {formatUptime(botStatus.uptime)}
+                  </div>
+                </div>
+                <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs">Trades</div>
+                  <div className="font-bold text-white mt-1">
+                    {botStatus.tradesExecuted}
+                  </div>
+                </div>
+                <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs">Success Rate</div>
+                  <div className="font-bold text-green-400 mt-1">
+                    {botStatus.successRate}%
+                  </div>
+                </div>
+                <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs">P&L</div>
+                  <div className={`font-bold mt-1 ${botStatus.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${Math.abs(botStatus.totalPnL).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </nav>
 
       {/* Overlay for mobile sidebar */}
       {isSidebarOpen && (
