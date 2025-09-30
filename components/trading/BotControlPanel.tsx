@@ -1,6 +1,6 @@
 /**
  * Accessible Bot Control Panel Component
- * 
+ *
  * Features:
  * - Form validation with inline error messages
  * - Keyboard navigation through controls
@@ -9,6 +9,8 @@
  * - Loading states with accessible feedback
  * - Success/error announcements
  */
+
+import React, { useState, useCallback } from 'react'
 
 interface BotConfig {
   mode: 'CONSERVATIVE' | 'BALANCED' | 'AGGRESSIVE';
