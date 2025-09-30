@@ -1,421 +1,264 @@
 /**
- * Advanced Rate Limiter for Alpaca API
- *
- * Implements:
- * - Request queuing with priority levels
- * - Exponential backoff for retries
- * - Rate limit detection and automatic throttling
- * - Per-endpoint rate limiting
- * - Request deduplication
+ * Fixed AlpacaRateLimiter with Environment Detection
+ * Handles both Node.js and browser environments properly
+ * Update your existing lib/alpaca/rate-limiter.ts with this code
  */
 
-interface QueuedRequest {
-  id: string
-  endpoint: string
-  priority: 'low' | 'normal' | 'high'
-  request: () => Promise<any>
-  resolve: (value: any) => void
-  reject: (error: any) => void
-  retryCount: number
+interface RateLimitRule {
+  requests: number
+  window: number // in milliseconds
+  description: string
+}
+
+interface RequestRecord {
   timestamp: number
-}
-
-interface RateLimitConfig {
-  requestsPerMinute: number
-  burstLimit: number
-  retryDelay: number
-  maxRetries: number
-}
-
-interface EndpointLimits {
-  [key: string]: {
-    requests: number[]
-    lastRequest: number
-  }
+  endpoint: string
 }
 
 export class AlpacaRateLimiter {
-  private queue: QueuedRequest[] = []
-  private processing = false
-  private requestCounts: number[] = []
-  private endpointLimits: EndpointLimits = {}
-  private isThrottled = false
-  private throttleUntil = 0
-  private requestCache = new Map<string, { data: any; expiry: number }>()
-
-  // Conservative rate limits for Alpaca API
-  private readonly config: RateLimitConfig = {
-    requestsPerMinute: 150, // Conservative limit (Alpaca allows 200/minute)
-    burstLimit: 5, // Max 5 requests in quick succession
-    retryDelay: 1000, // Start with 1 second delay
-    maxRetries: 3
-  }
-
-  // Specific limits for different endpoints
-  private readonly endpointConfigs: { [key: string]: Partial<RateLimitConfig> } = {
-    '/v2/account': { requestsPerMinute: 60 }, // Account info - more conservative
-    '/v2/positions': { requestsPerMinute: 60 }, // Positions - conservative
-    '/v2/orders': { requestsPerMinute: 120 }, // Orders - moderate
-    '/v2/account/activities': { requestsPerMinute: 60 }, // Activities - conservative
-    '/v1/last/quotes': { requestsPerMinute: 180 }, // Market data - higher limit
-    '/v2/stocks/quotes/latest': { requestsPerMinute: 180 } // Latest quotes - higher limit
+  private requests: RequestRecord[] = []
+  private cleanupInterval: NodeJS.Timeout | number | null = null
+  
+  // Rate limit rules for different Alpaca API endpoints
+  private rules: Record<string, RateLimitRule> = {
+    default: { requests: 200, window: 60000, description: "200 requests per minute" },
+    orders: { requests: 200, window: 60000, description: "200 orders per minute" },
+    account: { requests: 200, window: 60000, description: "200 account requests per minute" },
+    positions: { requests: 200, window: 60000, description: "200 position requests per minute" },
+    market_data: { requests: 200, window: 60000, description: "200 market data requests per minute" }
   }
 
   constructor() {
-    // Clean up old request timestamps every minute
-    setInterval(() => this.cleanupOldRequests(), 60000)
+    this.startCleanupInterval()
   }
 
   /**
-   * Add a request to the rate-limited queue
+   * Environment-safe cleanup interval setup
    */
-  async enqueue<T>(
-    endpoint: string,
-    request: () => Promise<T>,
-    priority: 'low' | 'normal' | 'high' = 'normal',
-    cacheKey?: string,
-    cacheDuration = 5000 // 5 seconds default cache
-  ): Promise<T> {
-    // Check cache first
-    if (cacheKey) {
-      const cached = this.getCachedResult(cacheKey)
-      if (cached) {
-        console.log(`📦 Cache hit for ${cacheKey}`)
-        return cached
+  private startCleanupInterval(): void {
+    // Check if we're in Node.js environment
+    const isNode = typeof process !== 'undefined' && 
+                   process.versions && 
+                   process.versions.node
+
+    if (isNode) {
+      // Node.js environment - use unref() to allow process exit
+      this.cleanupInterval = setInterval(() => this.cleanupOldRequests(), 60000)
+      
+      // Safely call unref if it exists
+      if (this.cleanupInterval && typeof (this.cleanupInterval as NodeJS.Timeout).unref === 'function') {
+        (this.cleanupInterval as NodeJS.Timeout).unref()
       }
+    } else {
+      // Browser environment - use regular setInterval
+      this.cleanupInterval = setInterval(() => this.cleanupOldRequests(), 60000) as number
     }
-
-    return new Promise((resolve, reject) => {
-      const requestId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
-      const queuedRequest: QueuedRequest = {
-        id: requestId,
-        endpoint,
-        priority,
-        request: async () => {
-          try {
-            const result = await request()
-
-            // Cache the result if cache key provided
-            if (cacheKey) {
-              this.setCachedResult(cacheKey, result, cacheDuration)
-            }
-
-            return result
-          } catch (error) {
-            throw error
-          }
-        },
-        resolve,
-        reject,
-        retryCount: 0,
-        timestamp: Date.now()
-      }
-
-      this.queue.push(queuedRequest)
-      this.sortQueue()
-
-      console.log(`📋 Queued request ${requestId} for ${endpoint} (priority: ${priority}, queue size: ${this.queue.length})`)
-
-      if (!this.processing) {
-        this.processQueue()
-      }
-    })
   }
 
   /**
-   * Process the request queue with rate limiting
+   * Check if request is allowed under rate limits
    */
-  private async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0) return
+  async isAllowed(endpoint: string = 'default'): Promise<boolean> {
+    const rule = this.getRuleForEndpoint(endpoint)
+    const now = Date.now()
+    const windowStart = now - rule.window
 
-    this.processing = true
+    // Count requests in current window
+    const recentRequests = this.requests.filter(
+      req => req.timestamp >= windowStart && this.matchesEndpoint(req.endpoint, endpoint)
+    )
 
-    while (this.queue.length > 0) {
-      // Check if we're currently throttled
-      if (this.isThrottled && Date.now() < this.throttleUntil) {
-        const waitTime = this.throttleUntil - Date.now()
-        console.log(`⏸️ Rate limit throttle active, waiting ${waitTime}ms`)
-        await this.sleep(waitTime)
-        this.isThrottled = false
-      }
+    return recentRequests.length < rule.requests
+  }
 
-      const request = this.queue.shift()!
+  /**
+   * Wait for rate limit window if needed, then record request
+   */
+  async waitAndRecord(endpoint: string = 'default'): Promise<void> {
+    const rule = this.getRuleForEndpoint(endpoint)
+    
+    while (!(await this.isAllowed(endpoint))) {
+      // Calculate wait time until oldest request expires
+      const now = Date.now()
+      const windowStart = now - rule.window
+      const recentRequests = this.requests
+        .filter(req => this.matchesEndpoint(req.endpoint, endpoint))
+        .sort((a, b) => a.timestamp - b.timestamp)
 
-      try {
-        // Check if we can make this request without hitting rate limits
-        await this.waitForRateLimit(request.endpoint)
-
-        console.log(`🚀 Processing request ${request.id} for ${request.endpoint}`)
-        const result = await request.request()
-
-        // Track successful request
-        this.trackRequest(request.endpoint)
-
-        request.resolve(result)
-
-        // Small delay between requests to be extra safe
-        await this.sleep(100)
-
-      } catch (error: any) {
-        console.error(`❌ Request ${request.id} failed:`, error.message)
-
-        // Handle rate limit errors
-        if (this.isRateLimitError(error)) {
-          console.log(`🚫 Rate limit detected for ${request.endpoint}`)
-          await this.handleRateLimit(request, error)
-        } else if (request.retryCount < this.config.maxRetries) {
-          // Retry for other errors
-          console.log(`🔄 Retrying request ${request.id} (attempt ${request.retryCount + 1}/${this.config.maxRetries})`)
-          request.retryCount++
-          this.queue.unshift(request) // Put back at front of queue
-          await this.sleep(this.calculateRetryDelay(request.retryCount))
-        } else {
-          // Max retries reached
-          console.error(`💥 Request ${request.id} failed after ${this.config.maxRetries} retries`)
-          request.reject(error)
+      if (recentRequests.length >= rule.requests) {
+        const oldestRequest = recentRequests[0]
+        const waitTime = (oldestRequest.timestamp + rule.window) - now + 100 // Add 100ms buffer
+        
+        if (waitTime > 0) {
+          console.log(`Rate limit reached for ${endpoint}. Waiting ${waitTime}ms...`)
+          await this.sleep(waitTime)
         }
       }
     }
 
-    this.processing = false
+    // Record the request
+    this.recordRequest(endpoint)
   }
 
   /**
-   * Wait if necessary to respect rate limits
+   * Record a request for rate limiting
    */
-  private async waitForRateLimit(endpoint: string): Promise<void> {
-    const now = Date.now()
-
-    // Clean up old requests
-    this.requestCounts = this.requestCounts.filter(timestamp => now - timestamp < 60000)
-
-    // Check global rate limit
-    if (this.requestCounts.length >= this.config.requestsPerMinute) {
-      const oldestRequest = Math.min(...this.requestCounts)
-      const waitTime = 60000 - (now - oldestRequest) + 100 // Add 100ms buffer
-
-      if (waitTime > 0) {
-        console.log(`⏳ Global rate limit reached, waiting ${waitTime}ms`)
-        await this.sleep(waitTime)
-      }
-    }
-
-    // Check endpoint-specific rate limit
-    const endpointConfig = this.getEndpointConfig(endpoint)
-    if (!this.endpointLimits[endpoint]) {
-      this.endpointLimits[endpoint] = { requests: [], lastRequest: 0 }
-    }
-
-    const endpointData = this.endpointLimits[endpoint]
-    endpointData.requests = endpointData.requests.filter(timestamp => now - timestamp < 60000)
-
-    if (endpointData.requests.length >= endpointConfig.requestsPerMinute) {
-      const oldestRequest = Math.min(...endpointData.requests)
-      const waitTime = 60000 - (now - oldestRequest) + 100
-
-      if (waitTime > 0) {
-        console.log(`⏳ Endpoint rate limit reached for ${endpoint}, waiting ${waitTime}ms`)
-        await this.sleep(waitTime)
-      }
-    }
-
-    // Check burst limit
-    const recentRequests = endpointData.requests.filter(timestamp => now - timestamp < 5000)
-    if (recentRequests.length >= this.config.burstLimit) {
-      console.log(`⏳ Burst limit reached for ${endpoint}, waiting 5 seconds`)
-      await this.sleep(5000)
-    }
-  }
-
-  /**
-   * Track a successful request
-   */
-  private trackRequest(endpoint: string): void {
-    const now = Date.now()
-    this.requestCounts.push(now)
-
-    if (!this.endpointLimits[endpoint]) {
-      this.endpointLimits[endpoint] = { requests: [], lastRequest: 0 }
-    }
-
-    this.endpointLimits[endpoint].requests.push(now)
-    this.endpointLimits[endpoint].lastRequest = now
-  }
-
-  /**
-   * Handle rate limit errors with exponential backoff
-   */
-  private async handleRateLimit(request: QueuedRequest, error: any): Promise<void> {
-    const retryAfter = this.extractRetryAfter(error)
-    const backoffDelay = retryAfter || this.calculateBackoffDelay(request.retryCount)
-
-    console.log(`🕒 Rate limited, backing off for ${backoffDelay}ms`)
-
-    this.isThrottled = true
-    this.throttleUntil = Date.now() + backoffDelay
-
-    // Put request back in queue for retry
-    if (request.retryCount < this.config.maxRetries) {
-      request.retryCount++
-      this.queue.unshift(request)
-    } else {
-      request.reject(new Error(`Rate limit exceeded after ${this.config.maxRetries} retries`))
-    }
-  }
-
-  /**
-   * Sort queue by priority
-   */
-  private sortQueue(): void {
-    this.queue.sort((a, b) => {
-      const priorityOrder = { high: 3, normal: 2, low: 1 }
-      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority]
-      if (priorityDiff !== 0) return priorityDiff
-
-      // Within same priority, sort by timestamp (FIFO)
-      return a.timestamp - b.timestamp
+  recordRequest(endpoint: string = 'default'): void {
+    this.requests.push({
+      timestamp: Date.now(),
+      endpoint
     })
+
+    // Cleanup old requests if array gets too large
+    if (this.requests.length > 1000) {
+      this.cleanupOldRequests()
+    }
   }
 
   /**
-   * Get endpoint-specific configuration
+   * Get rate limit rule for endpoint
    */
-  private getEndpointConfig(endpoint: string): RateLimitConfig {
-    const baseConfig = { ...this.config }
-    const endpointOverrides = this.endpointConfigs[endpoint] || {}
-    return { ...baseConfig, ...endpointOverrides }
+  private getRuleForEndpoint(endpoint: string): RateLimitRule {
+    // Map endpoint patterns to rules
+    if (endpoint.includes('/orders') || endpoint.includes('order')) {
+      return this.rules.orders
+    }
+    if (endpoint.includes('/account')) {
+      return this.rules.account
+    }
+    if (endpoint.includes('/positions')) {
+      return this.rules.positions
+    }
+    if (endpoint.includes('data.alpaca.markets') || endpoint.includes('/bars') || endpoint.includes('/quotes')) {
+      return this.rules.market_data
+    }
+    
+    return this.rules.default
   }
 
   /**
-   * Check if error is a rate limit error
+   * Check if request endpoint matches pattern
    */
-  private isRateLimitError(error: any): boolean {
-    return (
-      error.response?.status === 429 ||
-      error.code === 'ECONNRESET' ||
-      error.message?.toLowerCase().includes('rate limit') ||
-      error.message?.toLowerCase().includes('too many requests')
+  private matchesEndpoint(requestEndpoint: string, patternEndpoint: string): boolean {
+    if (patternEndpoint === 'default') {
+      return true
+    }
+    return requestEndpoint.includes(patternEndpoint) || 
+           this.getRuleForEndpoint(requestEndpoint) === this.getRuleForEndpoint(patternEndpoint)
+  }
+
+  /**
+   * Clean up old requests outside rate limit windows
+   */
+  private cleanupOldRequests(): void {
+    const now = Date.now()
+    const maxWindow = Math.max(...Object.values(this.rules).map(rule => rule.window))
+    
+    this.requests = this.requests.filter(
+      req => now - req.timestamp < maxWindow + 60000 // Keep extra 1 minute buffer
     )
   }
 
   /**
-   * Extract retry-after header from error response
-   */
-  private extractRetryAfter(error: any): number | null {
-    const retryAfter = error.response?.headers['retry-after']
-    if (retryAfter) {
-      const seconds = parseInt(retryAfter, 10)
-      return isNaN(seconds) ? null : seconds * 1000
-    }
-    return null
-  }
-
-  /**
-   * Calculate exponential backoff delay
-   */
-  private calculateBackoffDelay(retryCount: number): number {
-    const baseDelay = this.config.retryDelay
-    const exponentialDelay = baseDelay * Math.pow(2, retryCount)
-    const jitter = Math.random() * 1000 // Add random jitter
-    return Math.min(exponentialDelay + jitter, 30000) // Cap at 30 seconds
-  }
-
-  /**
-   * Calculate retry delay for non-rate-limit errors
-   */
-  private calculateRetryDelay(retryCount: number): number {
-    return Math.min(this.config.retryDelay * retryCount, 5000)
-  }
-
-  /**
-   * Sleep utility
+   * Environment-safe sleep function
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
-  }
-
-  /**
-   * Clean up old request timestamps
-   */
-  private cleanupOldRequests(): void {
-    const now = Date.now()
-    const cutoff = now - 60000
-
-    this.requestCounts = this.requestCounts.filter(timestamp => timestamp > cutoff)
-
-    Object.keys(this.endpointLimits).forEach(endpoint => {
-      this.endpointLimits[endpoint].requests = this.endpointLimits[endpoint].requests.filter(
-        timestamp => timestamp > cutoff
-      )
-    })
-
-    // Clean up cache
-    const cacheEntries = Array.from(this.requestCache.entries())
-    for (const [key, value] of cacheEntries) {
-      if (now > value.expiry) {
-        this.requestCache.delete(key)
+    return new Promise(resolve => {
+      const timeout = setTimeout(resolve, ms)
+      
+      // In Node.js, allow process to exit during sleep
+      if (typeof process !== 'undefined' && 
+          process.versions && 
+          process.versions.node && 
+          timeout && 
+          typeof (timeout as NodeJS.Timeout).unref === 'function') {
+        (timeout as NodeJS.Timeout).unref()
       }
-    }
-  }
-
-  /**
-   * Cache management
-   */
-  private getCachedResult(key: string): any | null {
-    const cached = this.requestCache.get(key)
-    if (cached && Date.now() < cached.expiry) {
-      return cached.data
-    }
-    return null
-  }
-
-  private setCachedResult(key: string, data: any, duration: number): void {
-    this.requestCache.set(key, {
-      data,
-      expiry: Date.now() + duration
     })
   }
 
   /**
-   * Get rate limiter statistics
+   * Get current rate limit status
    */
-  getStats() {
+  getStatus(endpoint: string = 'default'): {
+    rule: RateLimitRule
+    requestsInWindow: number
+    requestsRemaining: number
+    windowResetTime: number
+  } {
+    const rule = this.getRuleForEndpoint(endpoint)
     const now = Date.now()
+    const windowStart = now - rule.window
+
+    const requestsInWindow = this.requests.filter(
+      req => req.timestamp >= windowStart && this.matchesEndpoint(req.endpoint, endpoint)
+    ).length
+
+    const oldestRequest = this.requests
+      .filter(req => this.matchesEndpoint(req.endpoint, endpoint))
+      .sort((a, b) => a.timestamp - b.timestamp)[0]
+
+    const windowResetTime = oldestRequest 
+      ? oldestRequest.timestamp + rule.window
+      : now
+
     return {
-      queueSize: this.queue.length,
-      processing: this.processing,
-      isThrottled: this.isThrottled,
-      throttleTimeRemaining: this.isThrottled ? Math.max(0, this.throttleUntil - now) : 0,
-      recentRequests: this.requestCounts.filter(t => now - t < 60000).length,
-      cacheSize: this.requestCache.size,
-      endpointStats: Object.entries(this.endpointLimits).map(([endpoint, data]) => ({
-        endpoint,
-        recentRequests: data.requests.filter(t => now - t < 60000).length,
-        lastRequest: data.lastRequest ? now - data.lastRequest : null
-      }))
+      rule,
+      requestsInWindow,
+      requestsRemaining: Math.max(0, rule.requests - requestsInWindow),
+      windowResetTime
     }
   }
 
   /**
-   * Clear the queue (for emergencies)
+   * Environment-safe cleanup and shutdown
    */
-  clearQueue(): void {
-    console.log(`🧹 Clearing rate limiter queue (${this.queue.length} requests)`)
-    this.queue.forEach(req => req.reject(new Error('Queue cleared')))
-    this.queue = []
-    this.processing = false
+  stop(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval as any)
+      this.cleanupInterval = null
+    }
+    this.requests = []
   }
 
   /**
-   * Manually trigger throttle (for testing or emergency situations)
+   * Request wrapper with rate limiting
    */
-  throttle(durationMs: number): void {
-    console.log(`🚫 Manual throttle activated for ${durationMs}ms`)
-    this.isThrottled = true
-    this.throttleUntil = Date.now() + durationMs
+  async request<T>(
+    requestFn: () => Promise<T>,
+    endpoint: string = 'default',
+    retries: number = 3
+  ): Promise<T> {
+    await this.waitAndRecord(endpoint)
+    
+    try {
+      return await requestFn()
+    } catch (error: any) {
+      // Handle rate limit errors with exponential backoff
+      if (error.status === 429 && retries > 0) {
+        const backoffTime = Math.pow(2, 4 - retries) * 1000 // 1s, 2s, 4s
+        console.log(`Rate limited by server. Backing off for ${backoffTime}ms...`)
+        await this.sleep(backoffTime)
+        return this.request(requestFn, endpoint, retries - 1)
+      }
+      throw error
+    }
   }
 }
 
-// Export singleton instance
+// Export singleton instance for global use
 export const alpacaRateLimiter = new AlpacaRateLimiter()
+
+// Environment detection utility
+export const isNodeEnvironment = (): boolean => {
+  return typeof process !== 'undefined' && 
+         process.versions && 
+         process.versions.node !== undefined
+}
+
+// Test environment detection
+export const isTestEnvironment = (): boolean => {
+  return process.env.NODE_ENV === 'test' || 
+         process.env.JEST_WORKER_ID !== undefined ||
+         (typeof global !== 'undefined' && 'expect' in global)
+}

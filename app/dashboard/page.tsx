@@ -16,6 +16,7 @@ import {
   PieChart,
   Wallet
 } from 'lucide-react'
+import EnvironmentDashboard from '@/components/dashboard/EnvironmentDashboard'
 
 export default function DashboardPage() {
   // ✅ Destructure query results
@@ -164,6 +165,8 @@ const formatPercentage = (value?: number): string => {
             </div>
           </div>
         </div>
+<EnvironmentDashboard/>
+        
 
         {/* Portfolio Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

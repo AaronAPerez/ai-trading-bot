@@ -12,7 +12,17 @@
       "Bash(npm run dev:*)",
       "Bash(cd:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(wmic process where ProcessId=39304 delete:*)"
+      "Bash(wmic process where ProcessId=39304 delete:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(timeout:*)",
+      "Bash(wmic process where:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx next build:*)",
+      "Bash(npm ls:*)",
+      "Bash(test:*)",
+      "Bash(bash:*)",
+      "Bash(npm install:*)",
+      "Bash(npx jest:*)"
     ],
     "deny": [],
     "ask": []
