@@ -320,9 +320,9 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {positions.map((position) => (
+                  {positions.map((position, index) => (
                     <tr
-                      key={position.symbol}
+                      key={`${position.symbol}-${index}`}
                       className="hover:bg-gray-700/30 transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -356,9 +356,9 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
 
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-700">
-              {positions.map((position) => (
+              {positions.map((position, index) => (
                 <article
-                  key={position.symbol}
+                  key={`${position.symbol}-mobile-${index}`}
                   className="p-4 hover:bg-gray-700/30 transition-colors"
                   aria-label={`Position in ${position.symbol}`}
                 >
