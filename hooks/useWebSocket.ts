@@ -43,31 +43,8 @@ export const useWebSocket = () => {
   const internalWsRef = useRef<WebSocketManager | null>(null)
   const isMountedRef = useRef(true)
 
-  // Store actions - memoized to prevent infinite loops
-  const marketActionsHook = useMarketActions()
-  const portfolioActionsHook = usePortfolioActions()
-  const aiActionsHook = useAIActions()
-
-  const marketActions = useMemo(() => ({
-    updateQuote: marketActionsHook.updateQuote,
-    updateQuotes: marketActionsHook.updateQuotes,
-    setConnectionStatus: (status: string) => {
-      // Connection status update if needed
-      console.log('Connection status:', status)
-    }
-  }), [marketActionsHook])
-
-  const portfolioActions = useMemo(() => ({
-    updatePosition: portfolioActionsHook.updatePosition,
-    setPositions: portfolioActionsHook.setPositions
-  }), [portfolioActionsHook])
-
-  const aiActions = useMemo(() => ({
-    addRecommendation: aiActionsHook.addRecommendation,
-    updateRecommendation: aiActionsHook.updateRecommendation
-  }), [aiActionsHook])
-
-  const watchlist = useUnifiedTradingStore(useCallback((state) => state.watchlist, []))
+  // Get store reference directly to avoid dependency issues
+  const watchlist = useUnifiedTradingStore((state) => state.watchlist)
 
   /**
    * Map connection ID to status key
@@ -87,12 +64,13 @@ export const useWebSocket = () => {
    */
   const setupAlpacaEventListeners = useCallback((client: AlpacaWebSocketClient) => {
     const eventEmitter = client.getEventEmitter()
+    const store = useUnifiedTradingStore.getState()
 
     // Market data events
     eventEmitter.on('quote', (update: MarketDataUpdate) => {
       const quote = update.data as Quote
       const avgPrice = (quote.bid + quote.ask) / 2
-      marketActions.updateQuote(quote.symbol, {
+      store.updateQuote(quote.symbol, {
         symbol: quote.symbol,
         lastPrice: avgPrice,
         bid: quote.bid,
@@ -103,7 +81,7 @@ export const useWebSocket = () => {
 
     eventEmitter.on('trade', (update: MarketDataUpdate) => {
       const trade = update.data as Trade
-      marketActions.updateQuote(trade.symbol, {
+      store.updateQuote(trade.symbol, {
         symbol: trade.symbol,
         lastPrice: trade.price,
         volume: trade.size,
@@ -113,7 +91,7 @@ export const useWebSocket = () => {
 
     eventEmitter.on('bar', (update: MarketDataUpdate) => {
       const bar = update.data as MarketData
-      marketActions.updateQuote(bar.symbol, {
+      store.updateQuote(bar.symbol, {
         symbol: bar.symbol,
         lastPrice: bar.close,
         timestamp: new Date().toISOString()
@@ -125,7 +103,7 @@ export const useWebSocket = () => {
       switch (update.type) {
         case 'position':
           const positionUpdate = update.data
-          portfolioActions.updatePosition(positionUpdate.symbol, positionUpdate)
+          store.updatePosition(positionUpdate.symbol, positionUpdate)
           break
       }
     })
@@ -137,7 +115,6 @@ export const useWebSocket = () => {
           ...prev,
           [getConnectionKey(connectionId)]: true
         }))
-        marketActions.setConnectionStatus('connected')
       }
     })
 
@@ -147,27 +124,28 @@ export const useWebSocket = () => {
           ...prev,
           [getConnectionKey(connectionId)]: false
         }))
-        marketActions.setConnectionStatus('disconnected')
       }
     })
 
     eventEmitter.on('reconnectFailed', () => {
-      marketActions.setConnectionStatus('disconnected')
+      // Handle reconnection failed
     })
-  }, [marketActions, portfolioActions, getConnectionKey])
+  }, [getConnectionKey])
 
   /**
    * Setup internal WebSocket event listeners
    */
   const setupInternalEventListeners = useCallback((wsManager: WebSocketManager) => {
+    const store = useUnifiedTradingStore.getState()
+
     // Bot updates
     wsManager.on('botRecommendation', (update: BotUpdate) => {
-      aiActions.addRecommendation(update.data)
+      store.addRecommendation(update.data)
     })
 
     // Price updates from internal sources
     wsManager.on('priceUpdate', (data: { symbol: string; price: number; change?: number }) => {
-      marketActions.updateQuote(data.symbol, {
+      store.updateQuote(data.symbol, {
         symbol: data.symbol,
         lastPrice: data.price,
         change: data.change,
@@ -187,7 +165,7 @@ export const useWebSocket = () => {
         setConnectionStatus(prev => ({ ...prev, internalWs: false }))
       }
     })
-  }, [aiActions, marketActions])
+  }, [])
 
   /**
    * Initialize WebSocket connections
@@ -203,6 +181,8 @@ export const useWebSocket = () => {
 
       if (!apiKey || !apiSecret) {
         console.warn('⚠️ Alpaca API credentials not found, WebSocket disabled')
+        // Mark as initialized even without credentials to prevent infinite loop
+        setIsInitialized(true)
         return
       }
 
@@ -289,8 +269,9 @@ export const useWebSocket = () => {
 
     } catch (error) {
       console.error('❌ Failed to initialize WebSocket connections:', error)
+      setIsInitialized(true) // Mark as initialized to prevent retries
     }
-  }, [isInitialized, watchlist, setupAlpacaEventListeners, setupInternalEventListeners])
+  }, [isInitialized, setupAlpacaEventListeners, setupInternalEventListeners])
 
   /**
    * Subscribe to new symbols
@@ -359,18 +340,25 @@ export const useWebSocket = () => {
     }
   }, [])
 
-  // Initialize on mount
+  // Initialize on mount ONCE
   useEffect(() => {
     isMountedRef.current = true
-    initializeConnections()
+
+    // Only initialize if not already initialized
+    if (!isInitialized) {
+      initializeConnections()
+    }
 
     // Cleanup on unmount
-    return cleanup
-  }, [initializeConnections, cleanup])
+    return () => {
+      cleanup()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty deps - only run once on mount
 
   // Subscribe to watchlist changes
   useEffect(() => {
-    if (isInitialized && watchlist.length > 0) {
+    if (isInitialized && watchlist.length > 0 && alpacaClientRef.current) {
       subscribeToSymbols(watchlist)
     }
   }, [watchlist, isInitialized, subscribeToSymbols])

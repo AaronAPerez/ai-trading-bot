@@ -41,14 +41,14 @@ export async function middleware(request: NextRequest) {
     // Protect dashboard routes
     if (request.nextUrl.pathname.startsWith('/dashboard')) {
       if (!user) {
-        return NextResponse.redirect(new URL('/auth/signin', request.url))
+        return NextResponse.redirect(new URL('/', request.url))
       }
     }
 
-    // Protect admin routes  
+    // Protect admin routes
     if (request.nextUrl.pathname.startsWith('/admin')) {
       if (!user) {
-        return NextResponse.redirect(new URL('/auth/signin', request.url))
+        return NextResponse.redirect(new URL('/', request.url))
       }
     }
 
@@ -58,10 +58,10 @@ export async function middleware(request: NextRequest) {
     }
 
   } catch (error) {
-    // If there's an error getting the user, redirect to signin for protected routes
-    if (request.nextUrl.pathname.startsWith('/dashboard') || 
+    // If there's an error getting the user, redirect to landing page for protected routes
+    if (request.nextUrl.pathname.startsWith('/dashboard') ||
         request.nextUrl.pathname.startsWith('/admin')) {
-      return NextResponse.redirect(new URL('/auth/signin', request.url))
+      return NextResponse.redirect(new URL('/', request.url))
     }
   }
 

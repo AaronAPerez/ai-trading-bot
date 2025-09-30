@@ -7,7 +7,6 @@ import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  Activity,
   AlertCircle,
   ArrowRight,
   Bot,
@@ -224,7 +223,7 @@ const formatPercentage = (value?: number): string => {
               portfolio={account}
               positions={positionsArray}
               isLoading={accountLoading || positionsLoading}
-              error={accountError || positionsError}
+              error={(accountError || positionsError)?.message || null}
             />
           </div>
 
