@@ -25,8 +25,11 @@ export const WebSocketDemo: React.FC = () => {
   // Use WebSocket hooks
   const { isInitialized, connectionStatus, subscribeToSymbols, sendInternalMessage } = useWebSocket()
   const { prices, isConnected } = useRealTimeMarketData(['AAPL', 'TSLA', 'NVDA', 'MSFT'])
-  const { recommendations, activities, metrics } = useBotWebSocket()
+  const { recommendations, sendBotCommand } = useBotWebSocket()
   const { healthScore, summary } = useWebSocketMonitoring()
+
+  // Mock activities for demo purposes (can be replaced with actual activity tracking)
+  const activities: any[] = []
 
   // Test symbols
   const testSymbols = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN']
