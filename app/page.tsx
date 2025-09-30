@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/lib/stores/authStore'
+import { useAuth } from '@/store/authStore'
 import LandingPage from '@/components/landing/LandingPage'
 
 export default function Home() {

@@ -3,7 +3,8 @@
 // WEBSOCKET STATUS COMPONENT
 // ===============================================
 
-import { Wifi, WifiOff, Activity, AlertCircle } from 'lucide-react'
+import { useWebSocketMonitoring } from '@/hooks/useWebSocketMonitoring'
+import { Wifi, WifiOff, Activity } from 'lucide-react'
 
 export const WebSocketStatusIndicator: React.FC = () => {
   const { connectionStatus, healthScore } = useWebSocketMonitoring()

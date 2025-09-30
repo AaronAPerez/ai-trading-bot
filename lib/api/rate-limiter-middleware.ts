@@ -25,7 +25,7 @@ export async function withRateLimit<T>(
   request: () => Promise<T>,
   priority: 'low' | 'normal' | 'high' = 'normal'
 ): Promise<T> {
-  return rateLimiter.enqueue(endpoint, request, priority)
+  return rateLimiter.request(request, endpoint)
 }
 
 /**

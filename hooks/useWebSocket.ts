@@ -2,12 +2,13 @@
 
 // ===============================================
 // WEBSOCKET REACT HOOKS - Store Integration
+// MIGRATED TO UNIFIED TRADING STORE
 // src/hooks/useWebSocket.ts
 // ===============================================
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { AlpacaWebSocketClient, WebSocketManager } from '@/lib/websocket/WebSocketClient'
-import { useTradingStore } from '@/store/tradingStore'
+import { useUnifiedTradingStore, useMarketActions, usePortfolioActions, useAIActions } from '@/store/unifiedTradingStore'
 import type {
   MarketDataUpdate,
   AccountUpdate,
@@ -42,29 +43,8 @@ export const useWebSocket = () => {
   const internalWsRef = useRef<WebSocketManager | null>(null)
   const isMountedRef = useRef(true)
 
-  // Store actions - memoized to prevent infinite loops
-  const marketActions = useMemo(() => ({
-    updatePrice: useTradingStore.getState().updatePrice,
-    updateMarketData: useTradingStore.getState().updateMarketData,
-    setConnectionStatus: useTradingStore.getState().setConnectionStatus
-  }), [])
-
-  const portfolioActions = useMemo(() => ({
-    updateOrder: useTradingStore.getState().updateOrder,
-    updatePositions: useTradingStore.getState().updatePositions
-  }), [])
-
-  const aiActions = useMemo(() => ({
-    addRecommendation: useTradingStore.getState().addRecommendation,
-    updateRecommendation: useTradingStore.getState().updateRecommendation
-  }), [])
-
-  const botActions = useMemo(() => ({
-    updateBotMetrics: useTradingStore.getState().updateBotMetrics,
-    addBotActivity: useTradingStore.getState().addBotActivity
-  }), [])
-
-  const watchlist = useTradingStore(useCallback((state) => state.watchlist, []))
+  // Get store reference directly to avoid dependency issues
+  const watchlist = useUnifiedTradingStore((state) => state.watchlist)
 
   /**
    * Map connection ID to status key
@@ -84,35 +64,46 @@ export const useWebSocket = () => {
    */
   const setupAlpacaEventListeners = useCallback((client: AlpacaWebSocketClient) => {
     const eventEmitter = client.getEventEmitter()
+    const store = useUnifiedTradingStore.getState()
 
     // Market data events
     eventEmitter.on('quote', (update: MarketDataUpdate) => {
       const quote = update.data as Quote
-      marketActions.updatePrice(quote.symbol, (quote.bid + quote.ask) / 2)
+      const avgPrice = (quote.bid + quote.ask) / 2
+      store.updateQuote(quote.symbol, {
+        symbol: quote.symbol,
+        lastPrice: avgPrice,
+        bid: quote.bid,
+        ask: quote.ask,
+        timestamp: new Date().toISOString()
+      })
     })
 
     eventEmitter.on('trade', (update: MarketDataUpdate) => {
       const trade = update.data as Trade
-      marketActions.updatePrice(trade.symbol, trade.price)
+      store.updateQuote(trade.symbol, {
+        symbol: trade.symbol,
+        lastPrice: trade.price,
+        volume: trade.size,
+        timestamp: new Date().toISOString()
+      })
     })
 
     eventEmitter.on('bar', (update: MarketDataUpdate) => {
       const bar = update.data as MarketData
-      marketActions.updateMarketData(bar.symbol, bar)
-      marketActions.updatePrice(bar.symbol, bar.close)
+      store.updateQuote(bar.symbol, {
+        symbol: bar.symbol,
+        lastPrice: bar.close,
+        timestamp: new Date().toISOString()
+      })
     })
 
     // Account updates
     eventEmitter.on('accountUpdate', (update: AccountUpdate) => {
       switch (update.type) {
-        case 'order':
-          const orderUpdate = update.data
-          portfolioActions.updateOrder(orderUpdate.id, orderUpdate)
-          break
-
         case 'position':
           const positionUpdate = update.data
-          portfolioActions.updatePositions([positionUpdate])
+          store.updatePosition(positionUpdate.symbol, positionUpdate)
           break
       }
     })
@@ -124,7 +115,6 @@ export const useWebSocket = () => {
           ...prev,
           [getConnectionKey(connectionId)]: true
         }))
-        marketActions.setConnectionStatus('connected')
       }
     })
 
@@ -134,35 +124,33 @@ export const useWebSocket = () => {
           ...prev,
           [getConnectionKey(connectionId)]: false
         }))
-        marketActions.setConnectionStatus('disconnected')
       }
     })
 
     eventEmitter.on('reconnectFailed', () => {
-      marketActions.setConnectionStatus('disconnected')
+      // Handle reconnection failed
     })
-  }, [marketActions, portfolioActions, getConnectionKey])
+  }, [getConnectionKey])
 
   /**
    * Setup internal WebSocket event listeners
    */
   const setupInternalEventListeners = useCallback((wsManager: WebSocketManager) => {
+    const store = useUnifiedTradingStore.getState()
+
     // Bot updates
     wsManager.on('botRecommendation', (update: BotUpdate) => {
-      aiActions.addRecommendation(update.data)
-    })
-
-    wsManager.on('botActivity', (update: BotUpdate) => {
-      botActions.addBotActivity(update.data)
-    })
-
-    wsManager.on('botMetrics', (update: BotUpdate) => {
-      botActions.updateBotMetrics(update.data)
+      store.addRecommendation(update.data)
     })
 
     // Price updates from internal sources
     wsManager.on('priceUpdate', (data: { symbol: string; price: number; change?: number }) => {
-      marketActions.updatePrice(data.symbol, data.price)
+      store.updateQuote(data.symbol, {
+        symbol: data.symbol,
+        lastPrice: data.price,
+        change: data.change,
+        timestamp: new Date().toISOString()
+      })
     })
 
     // Connection status
@@ -177,7 +165,7 @@ export const useWebSocket = () => {
         setConnectionStatus(prev => ({ ...prev, internalWs: false }))
       }
     })
-  }, [aiActions, botActions, marketActions])
+  }, [])
 
   /**
    * Initialize WebSocket connections
@@ -193,6 +181,8 @@ export const useWebSocket = () => {
 
       if (!apiKey || !apiSecret) {
         console.warn('⚠️ Alpaca API credentials not found, WebSocket disabled')
+        // Mark as initialized even without credentials to prevent infinite loop
+        setIsInitialized(true)
         return
       }
 
@@ -279,8 +269,9 @@ export const useWebSocket = () => {
 
     } catch (error) {
       console.error('❌ Failed to initialize WebSocket connections:', error)
+      setIsInitialized(true) // Mark as initialized to prevent retries
     }
-  }, [isInitialized, watchlist, setupAlpacaEventListeners, setupInternalEventListeners])
+  }, [isInitialized, setupAlpacaEventListeners, setupInternalEventListeners])
 
   /**
    * Subscribe to new symbols
@@ -349,18 +340,25 @@ export const useWebSocket = () => {
     }
   }, [])
 
-  // Initialize on mount
+  // Initialize on mount ONCE
   useEffect(() => {
     isMountedRef.current = true
-    initializeConnections()
+
+    // Only initialize if not already initialized
+    if (!isInitialized) {
+      initializeConnections()
+    }
 
     // Cleanup on unmount
-    return cleanup
-  }, [initializeConnections, cleanup])
+    return () => {
+      cleanup()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty deps - only run once on mount
 
   // Subscribe to watchlist changes
   useEffect(() => {
-    if (isInitialized && watchlist.length > 0) {
+    if (isInitialized && watchlist.length > 0 && alpacaClientRef.current) {
       subscribeToSymbols(watchlist)
     }
   }, [watchlist, isInitialized, subscribeToSymbols])
@@ -386,14 +384,14 @@ export const useRealTimeMarketData = (symbols?: string[]) => {
   const { subscribeToSymbols, unsubscribeFromSymbols, connectionStatus } = useWebSocket()
   const [prices, setPrices] = useState<Record<string, { price: number; timestamp: Date }>>({})
 
-  // Get price updates from store
-  const priceUpdates = useTradingStore(useCallback((state) => state.priceUpdates, []))
+  // Get quotes from store
+  const quotes = useUnifiedTradingStore(useCallback((state) => state.quotes, []))
 
   // Subscribe to symbols on mount
   useEffect(() => {
     if (symbols && symbols.length > 0 && connectionStatus.marketData) {
       subscribeToSymbols(symbols)
-      
+
       return () => {
         unsubscribeFromSymbols(symbols)
       }
@@ -402,8 +400,17 @@ export const useRealTimeMarketData = (symbols?: string[]) => {
 
   // Update prices when store changes
   useEffect(() => {
-    setPrices(priceUpdates)
-  }, [priceUpdates])
+    const priceData: Record<string, { price: number; timestamp: Date }> = {}
+    Object.values(quotes).forEach(quote => {
+      if (quote) {
+        priceData[quote.symbol] = {
+          price: quote.lastPrice,
+          timestamp: new Date(quote.timestamp)
+        }
+      }
+    })
+    setPrices(priceData)
+  }, [quotes])
 
   return {
     prices,
@@ -418,8 +425,7 @@ export const useRealTimeMarketData = (symbols?: string[]) => {
 export const useTradingUpdates = () => {
   const { connectionStatus, sendInternalMessage } = useWebSocket()
   // Get data from store
-  const orders = useTradingStore(useCallback((state) => state.orders, []))
-  const positions = useTradingStore(useCallback((state) => state.positions, []))
+  const positions = useUnifiedTradingStore(useCallback((state) => state.positions, []))
 
   const sendOrderUpdate = useCallback((orderData: object) => {
     return sendInternalMessage({
@@ -430,7 +436,6 @@ export const useTradingUpdates = () => {
   }, [sendInternalMessage])
 
   return {
-    orders,
     positions,
     isConnected: connectionStatus.tradingUpdates,
     sendOrderUpdate
@@ -444,9 +449,7 @@ export const useBotWebSocket = () => {
   const { connectionStatus, sendInternalMessage } = useWebSocket()
 
   // Get data from store
-  const recommendations = useTradingStore(useCallback((state) => state.recommendations, []))
-  const activities = useTradingStore(useCallback((state) => state.botActivityLogs, []))
-  const metrics = useTradingStore(useCallback((state) => state.botMetrics, []))
+  const recommendations = useUnifiedTradingStore(useCallback((state) => state.recommendations, []))
 
   const sendBotCommand = useCallback((command: string, data?: unknown) => {
     return sendInternalMessage({
@@ -469,8 +472,6 @@ export const useBotWebSocket = () => {
 
   return {
     recommendations,
-    activities,
-    metrics,
     isConnected: connectionStatus.internalWs,
     sendBotCommand,
     sendRecommendationFeedback
