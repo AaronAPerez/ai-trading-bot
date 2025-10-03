@@ -326,6 +326,7 @@ export interface ExecutionResult {
 }
 
 export interface OrderRequest {
+  qty: void
   symbol: string
   quantity?: number
   notional?: number

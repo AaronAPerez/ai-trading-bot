@@ -7,12 +7,12 @@
 
 import React, { useState, useEffect } from 'react'
 import {
-  useWebSocket,
-  useRealTimeMarketData,
-  useBotWebSocket,
-  useWebSocketMonitoring,
-  WebSocketStatusIndicator
-} from '@/hooks/useWebSocket'
+  useWebSocketConnection,
+  useWebSocketHealth,
+  usePriceTicker
+} from '@/hooks/useWebSocketConnection'
+import { useRealTimeMarketData } from '@/hooks/useRealTimeMarketData'
+import { useBotWebSocket } from '@/hooks/useBotWebSocket'
 
 // ===============================================
 // WEBSOCKET DEMO COMPONENT
@@ -23,10 +23,10 @@ export const WebSocketDemo: React.FC = () => {
   const [connectionTest, setConnectionTest] = useState<string>('')
 
   // Use WebSocket hooks
-  const { isInitialized, connectionStatus, subscribeToSymbols, sendInternalMessage } = useWebSocket()
-  const { prices, isConnected } = useRealTimeMarketData(['AAPL', 'TSLA', 'NVDA', 'MSFT'])
-  const { recommendations, sendBotCommand } = useBotWebSocket()
-  const { healthScore, summary } = useWebSocketMonitoring()
+  const { status, isConnected, subscribe, stats } = useWebSocketConnection(['AAPL', 'TSLA', 'NVDA', 'MSFT'])
+  const health = useWebSocketHealth()
+  const prices = usePriceTicker(['AAPL', 'TSLA', 'NVDA', 'MSFT'])
+  const { recommendations } = useBotWebSocket()
 
   // Mock activities for demo purposes (can be replaced with actual activity tracking)
   const activities: any[] = []
@@ -81,10 +81,10 @@ export const WebSocketDemo: React.FC = () => {
 
   // Subscribe to symbols on mount
   useEffect(() => {
-    if (isInitialized) {
-      subscribeToSymbols(testSymbols)
+    if (isConnected) {
+      subscribe(testSymbols)
     }
-  }, [isInitialized, subscribeToSymbols])
+  }, [isConnected])
 
   // Fetch stats on mount
   useEffect(() => {
@@ -109,47 +109,51 @@ export const WebSocketDemo: React.FC = () => {
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Connection Status</h2>
-          <WebSocketStatusIndicator />
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+            status === 'connected' ? 'bg-green-100 text-green-700' :
+            status === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
+            status === 'reconnecting' ? 'bg-orange-100 text-orange-700' :
+            'bg-red-100 text-red-700'
+          }`}>
+            {status}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div className="text-center">
-            <div className={`text-2xl font-bold ${isInitialized ? 'text-green-600' : 'text-red-600'}`}>
-              {isInitialized ? '✅' : '❌'}
-            </div>
-            <div className="text-sm text-gray-600">Initialized</div>
-          </div>
-
-          <div className="text-center">
             <div className={`text-2xl font-bold ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-              {isConnected ? '📡' : '📡'}
+              {isConnected ? '✅' : '❌'}
             </div>
-            <div className="text-sm text-gray-600">Market Data</div>
+            <div className="text-sm text-gray-600">Connected</div>
           </div>
 
           <div className="text-center">
             <div className={`text-2xl font-bold text-blue-600`}>
-              {healthScore}%
+              {health.subscribedSymbols}
             </div>
-            <div className="text-sm text-gray-600">Health Score</div>
+            <div className="text-sm text-gray-600">Subscribed</div>
           </div>
 
           <div className="text-center">
-            <div className="text-2xl font-bold text-purple-600">
-              {summary.connected}/{summary.total}
+            <div className={`text-2xl font-bold text-purple-600`}>
+              {health.reconnectAttempts}
             </div>
-            <div className="text-sm text-gray-600">Connections</div>
+            <div className="text-sm text-gray-600">Reconnects</div>
+          </div>
+
+          <div className="text-center">
+            <div className={`text-2xl font-bold ${health.isAuthenticated ? 'text-green-600' : 'text-red-600'}`}>
+              {health.isAuthenticated ? '🔐' : '🔓'}
+            </div>
+            <div className="text-sm text-gray-600">Auth Status</div>
           </div>
         </div>
 
         {/* Connection Details */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-          {Object.entries(connectionStatus).map(([key, connected]) => (
-            <div key={key} className="flex items-center space-x-2">
-              <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'}`} />
-              <span className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-            </div>
-          ))}
+        <div className="text-sm space-y-1">
+          <div>Status: <span className="font-medium">{health.status}</span></div>
+          <div>Queued Messages: <span className="font-medium">{health.queuedMessages}</span></div>
+          <div>Last Update: <span className="font-medium">{health.lastUpdate.toLocaleTimeString()}</span></div>
         </div>
       </div>
 
@@ -201,11 +205,16 @@ export const WebSocketDemo: React.FC = () => {
               <div className="flex justify-between items-center">
                 <span className="font-semibold">{symbol}</span>
                 <span className="text-lg font-bold">
-                  ${typeof data.price === 'number' ? data.price.toFixed(2) : '0.00'}
+                  ${data.price.toFixed(2)}
                 </span>
               </div>
-              <div className="text-xs text-gray-500">
-                {data.timestamp && new Date(data.timestamp).toLocaleTimeString()}
+              <div className="flex items-center gap-2 text-xs">
+                <span className={data.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                  {data.changePercent >= 0 ? '↑' : '↓'} {Math.abs(data.changePercent).toFixed(2)}%
+                </span>
+                <span className="text-gray-500">
+                  {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}
+                </span>
               </div>
             </div>
           ))}

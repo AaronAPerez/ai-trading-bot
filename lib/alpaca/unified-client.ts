@@ -7,6 +7,9 @@ import { APIErrors } from '../api/error-handler'
  * Replaces inconsistent API calls across the codebase
  */
 export class UnifiedAlpacaClient {
+  getLatestPrice(symbol: string) {
+      throw new Error("Method not implemented.")
+  }
   private baseUrl: string
   private headers: HeadersInit
 

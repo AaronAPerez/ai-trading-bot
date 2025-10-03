@@ -16,6 +16,7 @@ import {
   Wallet
 } from 'lucide-react'
 import EnvironmentDashboard from '@/components/dashboard/EnvironmentDashboard'
+import LiveAIActivity from '@/components/dashboard/LiveAIActivity'
 
 export default function DashboardPage() {
   // ✅ Destructure query results
@@ -218,13 +219,16 @@ const formatPercentage = (value?: number): string => {
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           {/* Portfolio Overview */}
-          <div className="xl:col-span-2">
+          <div className="xl:col-span-2 space-y-6">
             <PortfolioOverview
               portfolio={account}
               positions={positionsArray}
               isLoading={accountLoading || positionsLoading}
               error={(accountError || positionsError)?.message || null}
             />
+
+            {/* Live AI Activity Feed */}
+            <LiveAIActivity />
           </div>
 
           {/* Quick Actions */}
@@ -281,4 +285,3 @@ const formatPercentage = (value?: number): string => {
     </div>
   )
 }
-

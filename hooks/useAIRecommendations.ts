@@ -5,8 +5,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useAIStore, useBotWebSocket } from '@/hooks/useWebSocket'
+import { useBotWebSocket } from '@/hooks/useWebSocket'
 import type { AIRecommendation } from '@/types/trading'
+import { useAIStore } from '@/store/slices/aiSlice'
 
 // ===============================================
 // MAIN AI RECOMMENDATIONS HOOK

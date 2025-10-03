@@ -17,7 +17,6 @@ import useRealAITrading from "@/hooks/useRealAITrading"
 import LiveBalanceDisplay from "./LiveBalanceDisplay"
 import { ClientSafeTime } from "@/components/ui/ClientSafeTime"
 import { Brain } from 'lucide-react'
-import OptimizedAILearning from "./OptimizedAILearning"
 import AIInsightsDashboard from "./AIInsightsDashboard"
 import { useAILearningManager } from "@/hooks/useAILearningManager"
 import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
@@ -26,6 +25,9 @@ import LiveTradesDisplay from "../trading/LiveTradesDisplay"
 import MarketStatusDisplay from "../market/MarketStatusDisplay"
 
 import PortfolioOverview from "./PortfolioOverview"
+import TradingChartDashboard from '../TradingChartDashboard'
+import { LiveTrades } from './LiveTrades'
+import LiveAIActivity from './LiveAIActivity'
 
 // Default bot configuration with auto-execution enabled
 const defaultBotConfig = {
@@ -410,9 +412,8 @@ export default function AITradingDashboard() {
               {realTimeMetrics.isLoading && (
                 <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
               )}
-              <div className={`w-2 h-2 rounded-full ${
-                realTimeMetrics.metrics.isLearningActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
-              }`}></div>
+              <div className={`w-2 h-2 rounded-full ${realTimeMetrics.metrics.isLearningActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+                }`}></div>
             </div>
           </div>
 
@@ -565,10 +566,9 @@ export default function AITradingDashboard() {
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-300">Risk Score</span>
               <div className="flex items-center space-x-2">
-                <span className={`text-lg font-bold ${
-                  realTimeMetrics.metrics.riskScore > 70 ? 'text-red-400' :
-                  realTimeMetrics.metrics.riskScore > 40 ? 'text-yellow-400' : 'text-green-400'
-                }`}>
+                <span className={`text-lg font-bold ${realTimeMetrics.metrics.riskScore > 70 ? 'text-red-400' :
+                    realTimeMetrics.metrics.riskScore > 40 ? 'text-yellow-400' : 'text-green-400'
+                  }`}>
                   {realTimeMetrics.isLoading ? (
                     <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
                   ) : (
@@ -582,14 +582,28 @@ export default function AITradingDashboard() {
             </div>
 
             <div className="mt-4 pt-4 border-t border-green-700/30">
-              <div className="text-xs text-gray-400 mb-2">Real-time P&L from Alpaca</div>
-              <div className="space-y-1">
+              <div className="text-xs text-gray-400 mb-2">Real-time Alpaca Portfolio</div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Invested Amount</span>
+                  <div className="flex items-center space-x-1">
+                    <span className="font-bold text-blue-400">
+                      {realTimeMetrics.isLoading ? (
+                        <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
+                      ) : (
+                        `$${realTimeMetrics.metrics.investedAmount.toFixed(2)}`
+                      )}
+                    </span>
+                    {realTimeMetrics.metrics.positionCount > 0 && (
+                      <span className="text-xs text-gray-400">({realTimeMetrics.metrics.positionCount} pos)</span>
+                    )}
+                  </div>
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-300">Total P&L</span>
                   <div className="flex items-center space-x-1">
-                    <span className={`font-bold ${
-                      realTimeMetrics.metrics.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                    }`}>
+                    <span className={`font-bold ${realTimeMetrics.metrics.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}>
                       {realTimeMetrics.isLoading ? (
                         <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
                       ) : (
@@ -604,9 +618,8 @@ export default function AITradingDashboard() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-300">Daily P&L</span>
                   <div className="flex items-center space-x-1">
-                    <span className={`font-bold ${
-                      realTimeMetrics.metrics.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                    }`}>
+                    <span className={`font-bold ${realTimeMetrics.metrics.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}>
                       {realTimeMetrics.isLoading ? (
                         <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
                       ) : (
@@ -620,106 +633,8 @@ export default function AITradingDashboard() {
           </div>
         </div>
 
-        {/* Live Activity Feed - Real-time Database Data */}
-        <div className="bg-gradient-to-br from-blue-900/50 to-indigo-900/50 rounded-xl p-6 border border-blue-700/50">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${
-                realTimeActivity.hasRecentActivity ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
-              }`}></div>
-              <h3 className="text-lg font-semibold text-white">Live AI Activity</h3>
-            </div>
-            <div className="flex items-center space-x-2">
-              {realTimeActivity.isLoading && (
-                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-              )}
-              <div className="text-xs text-blue-400">
-                {realTimeActivity.isLoading ? (
-                  <div className="animate-pulse bg-gray-600 h-3 w-16 rounded"></div>
-                ) : (
-                  `${realTimeActivity.activities.length} activities`
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {realTimeActivity.isLoading ? (
-              // Loading skeleton
-              Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-start space-x-3 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30 animate-pulse">
-                  <div className="w-2 h-2 bg-gray-600 rounded-full mt-2 flex-shrink-0"></div>
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <div className="h-4 bg-gray-600 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-                  </div>
-                </div>
-              ))
-            ) : realTimeActivity.activities.length > 0 ? (
-              realTimeActivity.activities.slice(0, 6).map((activity) => (
-                <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/30 transition-all">
-                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                    activity.type === 'trade' ? 'bg-green-400' :
-                    activity.type === 'info' ? 'bg-blue-400' :
-                    activity.type === 'recommendation' ? 'bg-yellow-400' :
-                    activity.type === 'error' ? 'bg-red-400' :
-                    activity.type === 'risk' ? 'bg-orange-400' :
-                    activity.type === 'system' ? 'bg-purple-400' : 'bg-gray-400'
-                  }`}></div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-white font-medium truncate">{activity.message}</div>
-                    {activity.symbol && (
-                      <div className="text-xs text-blue-300 font-mono">{activity.symbol}</div>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-gray-400">
-                        {new Date(activity.timestamp).toLocaleTimeString()}
-                      </div>
-                      <div className={`text-xs px-2 py-1 rounded ${
-                        activity.status === 'completed' ? 'bg-green-900/30 text-green-300' :
-                        activity.status === 'failed' ? 'bg-red-900/30 text-red-300' :
-                        'bg-yellow-900/30 text-yellow-300'
-                      }`}>
-                        {activity.status}
-                      </div>
-                    </div>
-                    {activity.confidence && (
-                      <div className="text-xs text-purple-300 mt-1">
-                        Confidence: {(activity.confidence * 100).toFixed(1)}%
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <Brain className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <div className="text-sm">
-                  {persistentBotState.isRunning ? 'Waiting for AI activity...' : 'Start AI to see live activity'}
-                </div>
-                <div className="text-xs text-gray-500 mt-2">
-                  Data sourced from Supabase database
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Activity Stats */}
-          {realTimeActivity.activities.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-blue-700/30">
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div className="bg-gray-800/30 rounded-lg p-2">
-                  <div className="text-gray-400">Recent Trades</div>
-                  <div className="text-green-400 font-bold">{realTimeActivity.recentTradesCount}</div>
-                </div>
-                <div className="bg-gray-800/30 rounded-lg p-2">
-                  <div className="text-gray-400">Total Activities</div>
-                  <div className="text-blue-400 font-bold">{realTimeActivity.stats.totalActivities}</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Live Activity Feed - Real-time Console Capture */}
+        <LiveAIActivity />
       </div>
 
       {/* Advanced AI Insights Dashboard */}
@@ -819,6 +734,7 @@ export default function AITradingDashboard() {
         onDismiss={notifications.dismissNotification}
         autoHideDuration={notifications.autoHideDuration}
       />
+
     </div>
   )
 }

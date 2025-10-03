@@ -420,66 +420,194 @@ function startBotLogic(sessionId: string, config: any) {
   console.log(`⏰ AI Trading Logic scheduled every 30 seconds for session ${sessionId}`)
 }
 
-// Execute actual trades via Alpaca API
+// Execute actual trades via Alpaca API with comprehensive risk checks
 async function executeTradeViaAlpaca(userId: string, symbol: string, signal: string, confidence: number, sessionId: string) {
   try {
     console.log(`🔄 Executing ${signal} order for ${symbol} via Alpaca API...`)
 
-    // Calculate position size (1-5 shares for demo)
-    const quantity = Math.floor(1 + Math.random() * 4)
+    // 1. Get account information for risk checks
+    const account = await alpacaClient.getAccount()
+    const buyingPower = parseFloat(account.buying_power)
+    const portfolioValue = parseFloat(account.portfolio_value)
+    const equity = parseFloat(account.equity)
 
-    // Call Alpaca API to place order using unified client
+    console.log(`💰 Account Status: Equity: $${equity.toFixed(2)}, Buying Power: $${buyingPower.toFixed(2)}`)
+
+    // 2. Check if account is blocked or restricted
+    if (account.trading_blocked || account.account_blocked) {
+      throw new Error('Trading is blocked on this account')
+    }
+
+    // 3. Get current market price
+    let currentPrice = 0
+    try {
+      const quote = await alpacaClient.getLatestQuote(symbol)
+      currentPrice = quote?.quote?.ap || quote?.ap || 0
+
+      if (currentPrice === 0) {
+        const trade = await alpacaClient.getLatestTrade(symbol)
+        currentPrice = trade?.trade?.p || trade?.p || 0
+      }
+
+      if (currentPrice === 0) {
+        throw new Error('Unable to get current market price')
+      }
+
+      console.log(`📊 Current ${symbol} price: $${currentPrice.toFixed(2)}`)
+    } catch (priceError) {
+      console.error(`❌ Price fetch error:`, priceError)
+      throw new Error(`Unable to fetch price for ${symbol}`)
+    }
+
+    // 4. Calculate position size based on portfolio percentage (max 5% per trade)
+    const config = botState.config
+    const maxPositionPercent = config?.executionSettings?.orderSizePercent || 0.02 // Default 2%
+    const maxPositionValue = portfolioValue * maxPositionPercent
+
+    let quantity = Math.floor(maxPositionValue / currentPrice)
+
+    // Ensure minimum of 1 share and maximum based on buying power
+    quantity = Math.max(1, Math.min(quantity, Math.floor(buyingPower / currentPrice)))
+
+    const estimatedValue = quantity * currentPrice
+
+    console.log(`📐 Position Sizing: ${quantity} shares @ $${currentPrice.toFixed(2)} = $${estimatedValue.toFixed(2)} (${((estimatedValue/portfolioValue)*100).toFixed(2)}% of portfolio)`)
+
+    // 5. Risk checks before execution
+    const riskChecks = {
+      hasEnoughBuyingPower: estimatedValue <= buyingPower,
+      withinPositionLimit: estimatedValue <= maxPositionValue,
+      minimumValue: estimatedValue >= 1, // At least $1
+      maximumValue: estimatedValue <= portfolioValue * 0.10, // Max 10% of portfolio per trade
+      accountNotRestricted: !account.trading_blocked && !account.account_blocked,
+      marketHours: true // Will be enhanced with actual market hours check
+    }
+
+    const allChecksPassed = Object.values(riskChecks).every(check => check === true)
+
+    if (!allChecksPassed) {
+      const failedChecks = Object.entries(riskChecks)
+        .filter(([_, passed]) => !passed)
+        .map(([check]) => check)
+
+      throw new Error(`Risk checks failed: ${failedChecks.join(', ')}`)
+    }
+
+    console.log(`✅ All risk checks passed`)
+
+    // 6. Check for existing positions to avoid over-concentration
+    let existingPosition = null
+    try {
+      existingPosition = await alpacaClient.getPosition(symbol)
+
+      if (existingPosition) {
+        const existingValue = Math.abs(parseFloat(existingPosition.market_value))
+        const totalExposure = existingValue + estimatedValue
+        const exposurePercent = (totalExposure / portfolioValue) * 100
+
+        console.log(`📊 Existing position: ${existingPosition.qty} shares (${existingValue.toFixed(2)} value)`)
+        console.log(`📊 Total exposure after trade: $${totalExposure.toFixed(2)} (${exposurePercent.toFixed(2)}% of portfolio)`)
+
+        // Prevent excessive concentration (max 15% per symbol)
+        if (exposurePercent > 15) {
+          throw new Error(`Total exposure to ${symbol} would exceed 15% of portfolio (${exposurePercent.toFixed(2)}%)`)
+        }
+      }
+    } catch (positionError: any) {
+      if (positionError.message?.includes('position does not exist')) {
+        console.log(`📊 No existing position in ${symbol}`)
+      } else {
+        console.warn(`⚠️ Unable to check existing position:`, positionError)
+      }
+    }
+
+    // 7. Execute the trade via Alpaca API
+    console.log(`🚀 Placing ${signal} order: ${quantity} shares of ${symbol}`)
+
     const orderResult = await alpacaClient.createOrder({
       symbol,
       qty: quantity,
-      side: signal.toLowerCase(),
+      side: signal.toLowerCase() as 'buy' | 'sell',
       type: 'market',
-      time_in_force: 'day'
+      time_in_force: 'day',
+      client_order_id: `bot_${sessionId}_${Date.now()}`
     })
 
     if (orderResult) {
-
-      console.log(`✅ ${signal} order placed: ${quantity} shares of ${symbol}`)
-      console.log(`📋 Order ID: ${orderResult.id || orderResult.orderId}`)
+      console.log(`✅ ${signal} order placed successfully!`)
+      console.log(`📋 Order ID: ${orderResult.id}`)
       console.log(`📊 Order Status: ${orderResult.status}`)
+      console.log(`💵 Order Value: $${estimatedValue.toFixed(2)}`)
 
-      // Get current market price for value calculation (approximation)
-      const estimatedPrice = 100 + Math.random() * 300 // Simulate market price for demo
-      const estimatedValue = quantity * estimatedPrice
-
-      // Log successful trade to Supabase
+      // 8. Log successful trade to Supabase
       await supabaseService.logBotActivity(userId, {
         type: 'trade',
         symbol: symbol,
-        message: `${signal} ${quantity} shares of ${symbol} - Order placed via Alpaca API (ID: ${orderResult.id || orderResult.orderId})`,
+        message: `✅ ${signal} ${quantity} shares of ${symbol} @ $${currentPrice.toFixed(2)} - Order placed via Alpaca (ID: ${orderResult.id})`,
         status: 'completed',
         details: JSON.stringify({
-          orderId: orderResult.id || orderResult.orderId,
+          orderId: orderResult.id,
           quantity,
           side: signal,
+          price: currentPrice,
+          estimatedValue,
           confidence,
           sessionId,
           orderStatus: orderResult.status,
-          estimatedValue,
-          alpacaResponse: orderResult
+          riskChecks,
+          portfolioImpact: {
+            percentOfPortfolio: ((estimatedValue/portfolioValue)*100).toFixed(2),
+            buyingPowerRemaining: (buyingPower - estimatedValue).toFixed(2),
+            existingPosition: existingPosition ? parseFloat(existingPosition.qty) : 0
+          },
+          alpacaResponse: {
+            id: orderResult.id,
+            status: orderResult.status,
+            created_at: orderResult.created_at,
+            filled_avg_price: orderResult.filled_avg_price
+          }
         })
       })
 
-      // Save trade to trade_history table
+      // 9. Save trade to trade_history table
       await supabaseService.saveTrade(userId, {
         symbol,
         side: signal.toLowerCase(),
         quantity,
-        price: estimatedPrice, // Estimated market price
-        value: estimatedValue, // Estimated total value
+        price: currentPrice,
+        value: estimatedValue,
         timestamp: new Date().toISOString(),
         status: orderResult.status === 'filled' ? 'FILLED' : 'PENDING',
-        order_id: orderResult.id || orderResult.orderId,
+        order_id: orderResult.id,
         ai_confidence: confidence
       })
 
-      console.log(`💾 Trade saved to Supabase: ${signal} ${quantity} ${symbol} @ $${estimatedPrice.toFixed(2)}`)
+      console.log(`💾 Trade saved to Supabase: ${signal} ${quantity} ${symbol} @ $${currentPrice.toFixed(2)}`)
 
+      // 10. Broadcast via WebSocket
+      try {
+        const wsServer = getWebSocketServerManager().getServer()
+        if (wsServer) {
+          wsServer.broadcast({
+            type: 'trade_executed',
+            timestamp: new Date().toISOString(),
+            data: {
+              symbol,
+              side: signal,
+              quantity,
+              price: currentPrice,
+              value: estimatedValue,
+              orderId: orderResult.id,
+              confidence,
+              sessionId
+            }
+          })
+        }
+      } catch (wsError) {
+        console.warn('WebSocket broadcast failed:', wsError)
+      }
+
+      return orderResult
     }
 
   } catch (error) {
@@ -489,15 +617,20 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
     await supabaseService.logBotActivity(userId, {
       type: 'error',
       symbol: symbol,
-      message: `Trade execution error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `❌ Trade execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       status: 'failed',
       details: JSON.stringify({
         error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
         symbol,
         signal,
-        sessionId
+        confidence,
+        sessionId,
+        timestamp: new Date().toISOString()
       })
     })
+
+    throw error
   }
 }
 

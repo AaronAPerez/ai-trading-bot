@@ -147,7 +147,7 @@ export function useGenerateRecommendations() {
 // ===============================================
 
 /**
- * Place a new order
+ * Place a new order with optimistic updates and rollback
  */
 export function usePlaceOrder() {
   const queryClient = useQueryClient()
@@ -174,17 +174,55 @@ export function usePlaceOrder() {
 
       return await response.json()
     },
+    // Optimistic update: immediately update UI before server responds
+    onMutate: async (newOrder) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: tradingQueryKeys.orders })
+
+      // Snapshot the previous value
+      const previousOrders = queryClient.getQueryData(tradingQueryKeys.orders)
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(tradingQueryKeys.orders, (old: any) => {
+        if (!old) return old
+        const optimisticOrder = {
+          id: `optimistic_${Date.now()}`,
+          symbol: newOrder.symbol,
+          qty: newOrder.qty,
+          side: newOrder.side,
+          type: newOrder.type,
+          status: 'PENDING_NEW',
+          created_at: new Date().toISOString(),
+          ...newOrder,
+        }
+        return [optimisticOrder, ...old]
+      })
+
+      // Return context with snapshot for rollback
+      return { previousOrders }
+    },
+    onError: (err, newOrder, context) => {
+      // Rollback to previous state on error
+      if (context?.previousOrders) {
+        queryClient.setQueryData(tradingQueryKeys.orders, context.previousOrders)
+      }
+      console.error('Order placement failed, rolled back:', err)
+    },
     onSuccess: () => {
-      // Invalidate related queries
+      // Invalidate and refetch to get server state
       queryClient.invalidateQueries({ queryKey: tradingQueryKeys.positions })
       queryClient.invalidateQueries({ queryKey: tradingQueryKeys.account })
+      queryClient.invalidateQueries({ queryKey: tradingQueryKeys.orders })
+    },
+    // Always refetch after error or success to ensure consistency
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: tradingQueryKeys.orders })
     },
   })
 }
 
 /**
- * Cancel an existing order
+ * Cancel an existing order with optimistic updates and rollback
  */
 export function useCancelOrder() {
   const queryClient = useQueryClient()
@@ -201,7 +239,35 @@ export function useCancelOrder() {
 
       return await response.json()
     },
+    // Optimistic update: immediately mark order as cancelled
+    onMutate: async (orderId) => {
+      await queryClient.cancelQueries({ queryKey: tradingQueryKeys.orders })
+
+      const previousOrders = queryClient.getQueryData(tradingQueryKeys.orders)
+
+      // Optimistically update order status
+      queryClient.setQueryData(tradingQueryKeys.orders, (old: any) => {
+        if (!old) return old
+        return old.map((order: any) =>
+          order.id === orderId
+            ? { ...order, status: 'PENDING_CANCEL' }
+            : order
+        )
+      })
+
+      return { previousOrders }
+    },
+    onError: (err, orderId, context) => {
+      // Rollback on error
+      if (context?.previousOrders) {
+        queryClient.setQueryData(tradingQueryKeys.orders, context.previousOrders)
+      }
+      console.error('Order cancellation failed, rolled back:', err)
+    },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: tradingQueryKeys.orders })
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: tradingQueryKeys.orders })
     },
   })
@@ -309,6 +375,84 @@ export function useMarketBars(
 }
 
 // ===============================================
+// BOT METRICS HOOKS
+// ===============================================
+
+/**
+ * Fetch bot metrics from database
+ */
+export function useBotMetrics(userId: string) {
+  return useQuery({
+    queryKey: ['bot-metrics', userId] as const,
+    queryFn: async () => {
+      const response = await fetch(`/api/bot/metrics?userId=${userId}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch bot metrics')
+      }
+      return await response.json()
+    },
+    enabled: !!userId,
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 10000,
+  })
+}
+
+/**
+ * Fetch portfolio history/snapshots
+ */
+export function usePortfolioHistory(userId: string, days: number = 30) {
+  return useQuery({
+    queryKey: ['portfolio-history', userId, days] as const,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/portfolio/history?userId=${userId}&days=${days}`
+      )
+      if (!response.ok) {
+        throw new Error('Failed to fetch portfolio history')
+      }
+      return await response.json()
+    },
+    enabled: !!userId,
+    refetchInterval: 300000, // Refetch every 5 minutes
+    staleTime: 60000,
+  })
+}
+
+/**
+ * Create portfolio snapshot
+ */
+export function useCreateSnapshot() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (params: {
+      userId: string
+      snapshotDate: string
+      accountData: any
+      positions: any[]
+    }) => {
+      const response = await fetch('/api/portfolio/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create snapshot')
+      }
+
+      return await response.json()
+    },
+    onSuccess: (data, variables) => {
+      // Invalidate portfolio history
+      queryClient.invalidateQueries({
+        queryKey: ['portfolio-history', variables.userId]
+      })
+    },
+  })
+}
+
+// ===============================================
 // COMBINED DASHBOARD HOOK
 // ===============================================
 
@@ -320,24 +464,39 @@ export function useTradingDashboard(userId: string) {
   const positions = usePositions()
   const recommendations = useRecommendations(userId)
   const orders = useOrders()
+  const botMetrics = useBotMetrics(userId)
+  const portfolioHistory = usePortfolioHistory(userId, 7) // Last 7 days
 
   return {
     account: account.data,
     positions: positions.data,
     recommendations: recommendations.data,
     orders: orders.data,
-    isLoading: account.isLoading || positions.isLoading || recommendations.isLoading,
-    isError: account.isError || positions.isError || recommendations.isError,
+    botMetrics: botMetrics.data,
+    portfolioHistory: portfolioHistory.data,
+    isLoading:
+      account.isLoading ||
+      positions.isLoading ||
+      recommendations.isLoading ||
+      botMetrics.isLoading,
+    isError:
+      account.isError ||
+      positions.isError ||
+      recommendations.isError ||
+      botMetrics.isError,
     errors: {
       account: account.error,
       positions: positions.error,
       recommendations: recommendations.error,
+      botMetrics: botMetrics.error,
     },
     refetch: () => {
       account.refetch()
       positions.refetch()
       recommendations.refetch()
       orders.refetch()
+      botMetrics.refetch()
+      portfolioHistory.refetch()
     },
   }
 }

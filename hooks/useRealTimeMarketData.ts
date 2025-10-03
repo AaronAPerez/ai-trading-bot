@@ -1,47 +1,96 @@
+'use client';
+
+import { useEffect, useState, useRef } from 'react';
+import { getEnhancedWebSocketService, AlpacaMessage } from '@/lib/services/enhancedWebSocketService';
+import { useMarketStore } from '@/store/slices/marketSlice';
 
 // ===============================================
-// SPECIALIZED WEBSOCKET HOOKS
+// REAL-TIME MARKET DATA HOOK
 // ===============================================
-
-import { useMarketStore } from "@/store/slices/marketSlice";
-import { useState, useEffect } from "react";
-import { useWebSocket } from "./useWebSocket";
 
 /**
- * Hook for real-time market data updates
+ * Hook for subscribing to real-time market data
  */
-export const useRealTimeMarketData = (symbols?: string[]) => {
-  const { subscribeToSymbols, unsubscribeFromSymbols, connectionStatus } = useWebSocket()
-  const [prices, setPrices] = useState<Record<string, { price: number; timestamp: Date; change: number }>>({})
-  
-  const marketStore = useMarketStore()
+export function useRealTimeMarketData(symbols: string[]) {
+  const wsService = useRef(getEnhancedWebSocketService());
+  const { updateQuote, addBar, setConnected, setConnectionStatus } = useMarketStore();
+  const [latestData, setLatestData] = useState<Record<string, AlpacaMessage>>({});
 
-  // Subscribe to symbols on mount
   useEffect(() => {
-    if (symbols && symbols.length > 0 && connectionStatus.marketData) {
-      subscribeToSymbols(symbols)
-      
-      return () => {
-        unsubscribeFromSymbols(symbols)
-      }
-    }
-  }, [symbols, connectionStatus.marketData, subscribeToSymbols, unsubscribeFromSymbols])
+    const service = wsService.current;
+    const unsubscribers: Array<() => void> = [];
 
-  // Listen to price updates from store
-  useEffect(() => {
-    const unsubscribe = useMarketStore.subscribe(
-      (state) => state.priceUpdates,
-      (priceUpdates) => {
-        setPrices(priceUpdates)
-      }
-    )
+    // Connect and subscribe
+    service.connect(symbols)
+      .then(() => {
+        setConnected(true);
+        setConnectionStatus('connected');
 
-    return unsubscribe
-  }, [])
+        // Subscribe to quotes (q)
+        const unsubQuotes = service.on('q', (data: AlpacaMessage) => {
+          if (data.S && data.bp && data.ap) {
+            updateQuote(data.S, {
+              symbol: data.S,
+              lastPrice: (data.bp + data.ap) / 2, // Mid price
+              bid: data.bp,
+              ask: data.ap,
+              bidSize: data.bs || 0,
+              askSize: data.as || 0,
+              timestamp: new Date(data.t || Date.now()).toISOString(),
+            });
+
+            setLatestData(prev => ({ ...prev, [data.S!]: data }));
+          }
+        });
+
+        // Subscribe to trades (t)
+        const unsubTrades = service.on('t', (data: AlpacaMessage) => {
+          if (data.S && data.p) {
+            updateQuote(data.S, {
+              symbol: data.S,
+              lastPrice: data.p,
+              volume: data.s || 0,
+              timestamp: new Date(data.t || Date.now()).toISOString(),
+            });
+
+            setLatestData(prev => ({ ...prev, [data.S!]: data }));
+          }
+        });
+
+        // Subscribe to bars (b)
+        const unsubBars = service.on('b', (data: AlpacaMessage) => {
+          if (data.S && data.o && data.h && data.l && data.c) {
+            addBar(data.S, {
+              symbol: data.S,
+              timestamp: new Date(data.t || Date.now()).toISOString(),
+              open: data.o,
+              high: data.h,
+              low: data.l,
+              close: data.c,
+              volume: data.v || 0,
+            });
+
+            setLatestData(prev => ({ ...prev, [data.S!]: data }));
+          }
+        });
+
+        unsubscribers.push(unsubQuotes, unsubTrades, unsubBars);
+      })
+      .catch((error) => {
+        console.error('Failed to connect WebSocket:', error);
+        setConnected(false);
+        setConnectionStatus('disconnected');
+      });
+
+    // Cleanup on unmount
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [symbols.join(',')]);
 
   return {
-    prices,
-    isConnected: connectionStatus.marketData || connectionStatus.cryptoData,
-    connectionStatus
-  }
+    latestData,
+    subscribe: (newSymbols: string[]) => wsService.current.subscribe(newSymbols),
+    unsubscribe: (oldSymbols: string[]) => wsService.current.unsubscribe(oldSymbols),
+  };
 }

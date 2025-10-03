@@ -1,9 +1,10 @@
 // src/lib/trading/core-trading-hooks.ts
-import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { supabase } from '@/lib/supabase/client'
-import { alpacaClient } from '@/lib/alpaca/unified-client'
-import create from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
+
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '../supabaseClient'
+import { alpacaClient } from '../alpaca/unified-client'
+
 
 // ===== TYPES =====
 export interface TradingPosition {
@@ -153,52 +154,52 @@ export const useRiskManagement = () => {
 }
 
 // ===== ZUSTAND STORE FOR TRADING STATE =====
-interface TradingStore {
-  tradingMode: 'paper' | 'live'
-  maxRiskPerTrade: number
-  setTradingMode: (mode: 'paper' | 'live') => void
-  setMaxRiskPerTrade: (risk: number) => void
-}
+// interface TradingStore {
+//   tradingMode: 'paper' | 'live'
+//   maxRiskPerTrade: number
+//   setTradingMode: (mode: 'paper' | 'live') => void
+//   setMaxRiskPerTrade: (risk: number) => void
+// }
 
-export const useTradingStore = create<TradingStore>(
-  devtools(
-    persist(
-      (set) => ({
-        tradingMode: 'paper',
-        maxRiskPerTrade: 0.02, // 2% of portfolio
-        setTradingMode: (mode) => set({ tradingMode: mode }),
-        setMaxRiskPerTrade: (risk) => set({ maxRiskPerTrade: risk })
-      }),
-      { name: 'trading-store' }
-    )
-  )
-)
+// export const useTradingStore = create<TradingStore>(
+//   devtools(
+//     persist(
+//       (set) => ({
+//         tradingMode: 'paper',
+//         maxRiskPerTrade: 0.02, // 2% of portfolio
+//         setTradingMode: (mode) => set({ tradingMode: mode }),
+//         setMaxRiskPerTrade: (risk) => set({ maxRiskPerTrade: risk })
+//       }),
+//       { name: 'trading-store' }
+//     )
+//   )
+// )
 
 // ===== COMPREHENSIVE ORDER MANAGEMENT =====
-export const useOrderManagement = () => {
-  const placeOrderMutation = usePlaceOrderMutation()
-  const { calculatePortfolioRisk } = useRiskManagement()
-  const { data: positions } = usePositionsQuery()
-  const tradingStore = useTradingStore()
+// export const useOrderManagement = () => {
+//   const placeOrderMutation = usePlaceOrderMutation()
+//   const { calculatePortfolioRisk } = useRiskManagement()
+//   const { data: positions } = usePositionsQuery()
+//   const tradingStore = useTradingStore()
   
-  const executeTradeWithRiskCheck = async (orderRequest: OrderRequest) => {
-    const { totalRisk, riskBreakdown } = calculatePortfolioRisk()
-    const maxRiskPerTrade = tradingStore.maxRiskPerTrade
+//   const executeTradeWithRiskCheck = async (orderRequest: OrderRequest) => {
+//     const { totalRisk, riskBreakdown } = calculatePortfolioRisk()
+//     const maxRiskPerTrade = tradingStore.maxRiskPerTrade
     
-    // Risk calculation logic
-    const potentialRisk = orderRequest.qty * 
-      (await alpacaClient.getLatestPrice(orderRequest.symbol))
+//     // Risk calculation logic
+//     const potentialRisk = orderRequest.qty * 
+//       (await alpacaClient.getLatestPrice(orderRequest.symbol))
     
-    if (potentialRisk > (totalRisk * maxRiskPerTrade)) {
-      throw new Error('Trade exceeds risk tolerance')
-    }
+//     if (potentialRisk > (totalRisk * maxRiskPerTrade)) {
+//       throw new Error('Trade exceeds risk tolerance')
+//     }
     
-    return placeOrderMutation.mutateAsync(orderRequest)
-  }
+//     return placeOrderMutation.mutateAsync(orderRequest)
+//   }
   
-  return {
-    executeTradeWithRiskCheck,
-    cancelOrder: alpacaClient.cancelOrder,
-    cancelAllOrders: alpacaClient.cancelAllOrders
-  }
-}
+//   return {
+//     executeTradeWithRiskCheck,
+//     cancelOrder: alpacaClient.cancelOrder,
+//     cancelAllOrders: alpacaClient.cancelAllOrders
+//   }
+// }

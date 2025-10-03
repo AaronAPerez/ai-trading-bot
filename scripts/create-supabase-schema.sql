@@ -129,3 +129,64 @@ CREATE POLICY "Users can insert own learning data" ON ai_learning_data FOR INSER
 
 CREATE POLICY "Anyone can view market sentiment" ON market_sentiment FOR SELECT USING (true);
 CREATE POLICY "Service role can insert market sentiment" ON market_sentiment FOR INSERT WITH CHECK (true);
+
+-- Create portfolio_snapshots table
+CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  snapshot_date DATE NOT NULL,
+  total_value DECIMAL NOT NULL,
+  cash DECIMAL NOT NULL,
+  equity DECIMAL NOT NULL,
+  buying_power DECIMAL NOT NULL,
+  long_market_value DECIMAL DEFAULT 0,
+  short_market_value DECIMAL DEFAULT 0,
+  day_pnl DECIMAL DEFAULT 0,
+  total_pnl DECIMAL DEFAULT 0,
+  positions_count INTEGER DEFAULT 0,
+  positions_data JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, snapshot_date)
+);
+
+-- Create risk_assessments table
+CREATE TABLE IF NOT EXISTS risk_assessments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  symbol TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('BUY', 'SELL')),
+  quantity DECIMAL NOT NULL,
+  entry_price DECIMAL NOT NULL,
+  stop_loss DECIMAL NOT NULL,
+  target_price DECIMAL NOT NULL,
+  risk_amount DECIMAL NOT NULL,
+  potential_reward DECIMAL NOT NULL,
+  risk_reward_ratio DECIMAL NOT NULL,
+  position_size_percent DECIMAL NOT NULL,
+  account_risk_percent DECIMAL NOT NULL,
+  overall_risk_score DECIMAL NOT NULL,
+  risk_level TEXT NOT NULL CHECK (risk_level IN ('LOW', 'MEDIUM', 'HIGH', 'EXTREME')),
+  warnings JSONB,
+  recommendations JSONB,
+  assessed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for new tables
+CREATE INDEX IF NOT EXISTS idx_portfolio_snapshots_user_id ON portfolio_snapshots(user_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_snapshots_date ON portfolio_snapshots(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_user_id ON risk_assessments(user_id);
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_symbol ON risk_assessments(symbol);
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_assessed_at ON risk_assessments(assessed_at);
+
+-- Enable RLS on new tables
+ALTER TABLE portfolio_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE risk_assessments ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies for new tables
+CREATE POLICY "Users can view own portfolio snapshots" ON portfolio_snapshots FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Users can insert own portfolio snapshots" ON portfolio_snapshots FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Users can update own portfolio snapshots" ON portfolio_snapshots FOR UPDATE USING (user_id = auth.uid());
+
+CREATE POLICY "Users can view own risk assessments" ON risk_assessments FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Users can insert own risk assessments" ON risk_assessments FOR INSERT WITH CHECK (user_id = auth.uid());
