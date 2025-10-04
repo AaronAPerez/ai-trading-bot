@@ -52,7 +52,21 @@ interface AlpacaAccount {
   daychange_percent: string
 }
 
-export default function UserHeader() {
+interface BotStatus {
+  isRunning: boolean
+  uptime: number
+  tradesExecuted: number
+  successRate: number
+  totalPnL: number
+}
+
+interface UserHeaderProps {
+  botStatus?: BotStatus
+  isOnline?: boolean
+  isLiveTrading?: boolean
+}
+
+export default function UserHeader({ botStatus, isOnline = true, isLiveTrading = false }: UserHeaderProps) {
   const { user, signOut } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
@@ -62,7 +76,7 @@ export default function UserHeader() {
   // Navigation menu items
   const navigationItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, path: '/dashboard' },
-    { id: 'trading', label: 'AI Trading', icon: Activity, path: '/trading' },
+    { id: 'trading', label: 'AI Trading', icon: Activity, path: '/dashboard/trading' },
     // { id: 'positions', label: 'Positions', icon: PieChart, path: '/positions' },
     { id: 'orders', label: 'Orders', icon: BarChart3, path: '/orders' },
     // { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
@@ -130,6 +144,12 @@ export default function UserHeader() {
     }
   }
 
+  const formatUptime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
+  }
+
   if (!user) return null
 
   return (
@@ -182,7 +202,42 @@ export default function UserHeader() {
           </div>
 
           {/* Account Info & User Actions */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 md:space-x-4">
+            {/* Connection Status */}
+            {/* <div className="hidden sm:flex items-center space-x-2 px-2 md:px-3 py-1.5 rounded-lg bg-gray-800/50 border border-gray-700/50">
+              <span className="text-sm" aria-hidden="true">
+                {isOnline ? '📡' : '🔴'}
+              </span>
+              <span className="text-xs md:text-sm font-medium text-gray-300 hidden md:inline">
+                {isOnline ? 'Online' : 'Offline'}
+              </span>
+            </div> */}
+
+            {/* Bot Status */}
+            {/* {botStatus && (
+              <div className="hidden sm:flex items-center space-x-2 px-2 md:px-3 py-1.5 rounded-lg bg-gray-800/50 border border-gray-700/50">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    botStatus.isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-400'
+                  }`}
+                />
+                <span className="text-xs md:text-sm font-medium text-gray-300 hidden md:inline">
+                  {botStatus.isRunning ? 'Active' : 'Stopped'}
+                </span>
+              </div>
+            )} */}
+
+            {/* Trading Mode Badge */}
+            <div
+              className={`hidden lg:flex items-center px-3 py-1.5 rounded-lg text-xs font-bold ${
+                isLiveTrading
+                  ? 'bg-red-900/50 text-red-300 border border-red-500/50'
+                  : 'bg-blue-900/50 text-blue-300 border border-blue-500/50'
+              }`}
+            >
+              {isLiveTrading ? '🔴 LIVE' : '📝 PAPER'}
+            </div>
+
             {/* Portfolio Value - Desktop only */}
             {accountData && !isLoading && (
               <div className="hidden lg:flex items-center space-x-6">
@@ -371,6 +426,33 @@ export default function UserHeader() {
                     <span className="text-xs font-mono text-white">
                       {accountData.account_number}
                     </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Bot Status */}
+            {botStatus && botStatus.isRunning && (
+              <div className="px-4 py-3 border-t border-gray-700/50">
+                <div className="text-xs text-gray-400 mb-2 font-semibold uppercase">Bot Statistics</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-gray-800/50 rounded-lg p-2">
+                    <div className="text-xs text-gray-400">Uptime</div>
+                    <div className="text-sm font-bold text-white">{formatUptime(botStatus.uptime)}</div>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-lg p-2">
+                    <div className="text-xs text-gray-400">Trades</div>
+                    <div className="text-sm font-bold text-white">{botStatus.tradesExecuted}</div>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-lg p-2">
+                    <div className="text-xs text-gray-400">Success</div>
+                    <div className="text-sm font-bold text-green-400">{botStatus.successRate}%</div>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-lg p-2">
+                    <div className="text-xs text-gray-400">P&L</div>
+                    <div className={`text-sm font-bold ${botStatus.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      ${Math.abs(botStatus.totalPnL).toFixed(2)}
+                    </div>
                   </div>
                 </div>
               </div>

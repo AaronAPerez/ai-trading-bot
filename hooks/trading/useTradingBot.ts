@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useBotStore } from '@/store/slices/botSlice'
 import { useWebSocketContext } from '@/hooks/useWebSocketContext'
+import { CryptoWatchlistManager } from '@/lib/crypto/CryptoWatchlist'
 import type { BotConfiguration } from '@/types/trading'
 
 // Global singleton to track if status has been checked
@@ -105,9 +106,10 @@ export const useTradingBot = () => {
               orderSizePercent: 0.02, // 2% of portfolio per trade
               slippageTolerance: 0.01
             },
-            watchlist: [
-              'AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'META', 'AMZN', 'NFLX'
-            ]
+            watchlist: CryptoWatchlistManager.getHybridWatchlist(
+              ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'META', 'AMZN', 'NFLX'],
+              5 // Include top 5 crypto symbols for 24/7 trading
+            )
           }
         })
       })

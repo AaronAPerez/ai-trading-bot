@@ -16,6 +16,8 @@ import {
 import { useCompleteLiveOrders } from '@/hooks/useLiveOrders'
 import { useTradingStore } from '@/store/tradingStore'
 import { useQuery } from '@tanstack/react-query'
+import { getAssetIcon } from '@/components/icons/AssetIcons'
+import LiveAIActivity from '../dashboard/LiveAIActivity'
 
 interface Trade {
   id: string
@@ -175,6 +177,7 @@ export default function LiveTradesDisplay() {
                         <span className={`font-bold text-sm ${getSideColor(trade.side)}`}>
                           {trade.side.toUpperCase()}
                         </span>
+                        {getAssetIcon(trade.symbol, 'sm')}
                         <span className="text-white font-mono text-sm">
                           {trade.symbol}
                         </span>
@@ -255,9 +258,11 @@ export default function LiveTradesDisplay() {
         </div>
       </div>
 
+      <LiveAIActivity/>
+
       {/* Live AI Activity Feed */}
-      <div className="bg-gradient-to-br from-gray-900/80 to-purple-900/30 rounded-lg border border-gray-700/50 shadow-2xl">
-        <div className="p-4 border-b border-gray-700/50">
+      {/* <div className="bg-gradient-to-br from-gray-900/80 to-purple-900/30 rounded-lg border border-gray-700/50 shadow-2xl"> */}
+        {/* <div className="p-4 border-b border-gray-700/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Activity className="w-5 h-5 text-purple-400" />
@@ -307,9 +312,12 @@ export default function LiveTradesDisplay() {
                         {activity.type.toUpperCase()}
                       </span>
                       {activity.symbol && (
-                        <span className="text-xs font-mono text-gray-300">
-                          {activity.symbol}
-                        </span>
+                        <>
+                          {getAssetIcon(activity.symbol, 'sm')}
+                          <span className="text-xs font-mono text-gray-300">
+                            {activity.symbol}
+                          </span>
+                        </>
                       )}
                     </div>
                     <span className="text-xs text-gray-400">
@@ -328,10 +336,10 @@ export default function LiveTradesDisplay() {
                   )}
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-      </div>
+            </div> */}
+          {/* )} */}
+        {/* </div> */}
+      {/* </div> */}
     </div>
   )
 }

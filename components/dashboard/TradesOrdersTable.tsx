@@ -181,7 +181,7 @@ export default function TradesOrdersTable({
               )}
             </div>
           </div>
-          <div className="flex items-center space-x-2 text-xs text-gray-400">
+          {/* <div className="flex items-center space-x-2 text-xs text-gray-400">
             {useRealData && !hasError && (
               <>
                 <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
@@ -200,7 +200,7 @@ export default function TradesOrdersTable({
                 <span>Demo Data</span>
               </>
             )}
-          </div>
+          </div> */}
         </div>
       </div>
 

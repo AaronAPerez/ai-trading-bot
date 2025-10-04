@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { CryptoWatchlistManager } from '@/lib/crypto/CryptoWatchlist'
-import { Activity, TrendingUp, Clock, Zap } from 'lucide-react'
+import { Activity, TrendingUp, Clock, Zap, Bitcoin } from 'lucide-react'
 
 interface CryptoQuote {
   symbol: string
@@ -10,6 +10,38 @@ interface CryptoQuote {
   change24h: number
   volume: number
   timestamp: string
+}
+
+// Helper to get crypto icon based on symbol
+const getCryptoIcon = (symbol: string) => {
+  const iconClass = "w-5 h-5"
+
+  if (symbol.includes('BTC')) {
+    return <Bitcoin className={`${iconClass} text-orange-400`} />
+  }
+  if (symbol.includes('ETH')) {
+    return <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor" style={{ color: '#627EEA' }}>
+      <path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z"/>
+    </svg>
+  }
+  if (symbol.includes('LTC')) {
+    return <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor" style={{ color: '#345D9D' }}>
+      <path d="M12 0c6.627 0 12 5.373 12 12s-5.373 12-12 12S0 18.627 0 12 5.373 0 12 0zm-2.5 7v4.171l-1.5.484v1.345l1.5-.484V17h6v-1.5h-4.5v-3.079l2-.645v-1.346l-2 .645V7h-1.5z"/>
+    </svg>
+  }
+  if (symbol.includes('AVAX')) {
+    return <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor" style={{ color: '#E84142' }}>
+      <path d="M17.197 10.804l-3.51-6.08c-.532-.922-1.852-.922-2.384 0l-3.51 6.08c-.532.923.133 2.077 1.192 2.077h7.02c1.059 0 1.724-1.154 1.192-2.077z"/>
+      <path d="M6.803 13.196l3.51 6.08c.532.922 1.852.922 2.384 0l3.51-6.08c.532-.923-.133-2.077-1.192-2.077h-7.02c-1.059 0-1.724 1.154-1.192 2.077z"/>
+    </svg>
+  }
+  if (symbol.includes('MATIC')) {
+    return <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor" style={{ color: '#8247E5' }}>
+      <path d="M17.003 14.382l-3.126 1.805v3.61l-1.877 1.084-1.877-1.084v-3.61l-3.126-1.805v-3.61l1.877-1.084 1.877 1.084v3.61l1.877-1.084 1.877 1.084v-3.61l-3.126-1.805V5.857l1.877-1.084 1.877 1.084v3.61l3.126 1.805v3.61l-1.877 1.084z"/>
+    </svg>
+  }
+  // Default crypto icon
+  return <Bitcoin className={`${iconClass} text-yellow-400`} />
 }
 
 export function CryptoTradingPanel() {
@@ -131,7 +163,7 @@ export function CryptoTradingPanel() {
       {/* Live Crypto Prices */}
       <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
         <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-blue-400" />
+          <Bitcoin className="w-5 h-5 text-orange-400" />
           Live Crypto Prices
         </h3>
 
@@ -148,7 +180,10 @@ export function CryptoTradingPanel() {
                 className="bg-black/30 border border-gray-700 rounded-lg p-3 hover:border-blue-500/50 transition-colors"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-white">{quote.symbol}</span>
+                  <div className="flex items-center gap-2">
+                    {getCryptoIcon(quote.symbol)}
+                    <span className="font-semibold text-white">{quote.symbol}</span>
+                  </div>
                   <span className={`text-xs font-medium ${
                     quote.change24h >= 0 ? 'text-green-400' : 'text-red-400'
                   }`}>
@@ -182,8 +217,9 @@ export function CryptoTradingPanel() {
           {marketInfo.recommended_for_ai.map((symbol: string) => (
             <div
               key={symbol}
-              className="px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-full text-sm text-blue-400 font-medium"
+              className="px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-full text-sm text-blue-400 font-medium flex items-center gap-1.5"
             >
+              {getCryptoIcon(symbol)}
               {symbol}
             </div>
           ))}

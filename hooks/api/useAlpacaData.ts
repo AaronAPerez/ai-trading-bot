@@ -31,10 +31,11 @@ export function useAlpacaPositions(refreshInterval?: number) {
     queryFn: async () => {
       const response = await fetch('/api/alpaca/positions')
       if (!response.ok) throw new Error('Failed to fetch positions')
-      const data = await response.json()
-      return data || []
+      const result = await response.json()
+      return result.success ? result.data : []
     },
     refetchInterval: refreshInterval || false, // Only poll when specified
+    staleTime: 2000,
   })
 }
 

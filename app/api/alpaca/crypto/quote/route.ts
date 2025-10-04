@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         }
       })
     } catch (sdkError) {
-      console.log(`SDK failed for ${symbol}, trying direct API...`)
+      // SDK method not available, using direct API (this is normal for crypto)
 
       // Fallback: Try direct API call with slash format
       const dataUrl = 'https://data.alpaca.markets'
