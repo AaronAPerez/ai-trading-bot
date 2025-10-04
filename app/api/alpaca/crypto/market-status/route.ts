@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { alpacaClient } from '@/lib/alpaca/unified-client'
 
 export async function GET(request: NextRequest) {
   try {
-    const status = await alpacaClient.getCryptoMarketStatus()
+    // Crypto markets are always open - no need for API call
+    const status = {
+      is_open: true,
+      market_type: 'crypto',
+      next_close: null,
+      next_open: null,
+      message: 'Crypto markets are open 24/7'
+    }
 
     return NextResponse.json(status)
   } catch (error) {
