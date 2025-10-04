@@ -1,7 +1,6 @@
 "use client"
 
 import React from 'react'
-import { useQuery } from '@tanstack/react-query'
 import {
   TrendingUp,
   TrendingDown,
@@ -10,23 +9,27 @@ import {
   Activity,
   CheckCircle,
   AlertCircle,
-  Zap
+  Zap,
+  Database,
+  RefreshCw
 } from 'lucide-react'
+import { useCompleteLiveOrders } from '@/hooks/useLiveOrders'
+import { useTradingStore } from '@/store/tradingStore'
+import { useQuery } from '@tanstack/react-query'
 
 interface Trade {
   id: string
   symbol: string
   side: 'buy' | 'sell'
-  quantity: number
+  qty?: string
+  filled_qty: string
   status: string
-  orderId: string
-  filledPrice?: number
-  price?: number
-  value?: number
-  submittedAt: string
-  ai_confidence?: number
-  displaySide?: string
-  displayStatus?: string
+  filled_avg_price?: string
+  limit_price?: string
+  submitted_at: string
+  filled_at?: string
+  type: string
+  time_in_force: string
 }
 
 interface BotActivity {
@@ -40,17 +43,16 @@ interface BotActivity {
 }
 
 export default function LiveTradesDisplay() {
-  // Fetch recent orders from Alpaca API
-  const { data: ordersData, isLoading: isLoadingOrders } = useQuery({
-    queryKey: ['live-orders'],
-    queryFn: async () => {
-      const response = await fetch('/api/alpaca/orders?limit=10&status=all')
-      if (!response.ok) throw new Error('Failed to fetch orders')
-      const data = await response.json()
-      return data.orders || []
-    },
-    refetchInterval: 5000, // Refresh every 5 seconds
-  })
+  // Use complete live orders hook with Alpaca API, Zustand, React Query, and Supabase integration
+  const {
+    liveOrders,
+    isLoadingLive,
+    orderHistory,
+    statistics,
+    isSyncing,
+    storeOrders,
+    refetchLive
+  } = useCompleteLiveOrders()
 
   // Fetch recent bot activities from Supabase
   const { data: activitiesData, isLoading: isLoadingActivities } = useQuery({
@@ -64,7 +66,7 @@ export default function LiveTradesDisplay() {
     refetchInterval: 3000, // Refresh every 3 seconds
   })
 
-  const trades: Trade[] = ordersData || []
+  const trades: Trade[] = liveOrders || []
   const activities: BotActivity[] = activitiesData || []
 
   const getStatusIcon = (status: string) => {
@@ -110,7 +112,7 @@ export default function LiveTradesDisplay() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Live Trading Orders */}
+      {/* Live Trading Orders - Alpaca API + Zustand + React Query + Supabase */}
       <div className="bg-gradient-to-br from-gray-900/80 to-blue-900/30 rounded-lg border border-gray-700/50 shadow-2xl">
         <div className="p-4 border-b border-gray-700/50">
           <div className="flex items-center justify-between">
@@ -118,82 +120,136 @@ export default function LiveTradesDisplay() {
               <DollarSign className="w-5 h-5 text-green-400" />
               <h4 className="text-lg font-semibold text-white">Live Trading Orders</h4>
             </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
-              <span className="text-sm text-gray-300">
-                {trades.length} orders
-              </span>
+            <div className="flex items-center space-x-3">
+              {/* Data Source Indicators */}
+              <div className="flex items-center space-x-1">
+                <Database className="w-3 h-3 text-blue-400" />
+                <span className="text-xs text-blue-400">Alpaca</span>
+              </div>
+              {isSyncing && (
+                <div className="flex items-center space-x-1">
+                  <RefreshCw className="w-3 h-3 text-purple-400 animate-spin" />
+                  <span className="text-xs text-purple-400">Syncing</span>
+                </div>
+              )}
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
+                <span className="text-sm text-gray-300">
+                  {trades.length} orders
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
         <div className="p-4">
-          {isLoadingOrders ? (
+          {isLoadingLive ? (
             <div className="text-center py-8 text-gray-400">
               <Activity className="w-8 h-8 mx-auto mb-2 animate-spin" />
-              <div>Loading trades...</div>
+              <div>Loading trades from Alpaca...</div>
             </div>
           ) : trades.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <TrendingUp className="w-8 h-8 mx-auto mb-2" />
               <div>No trades yet</div>
               <div className="text-sm">Start the AI bot to see live trades</div>
+              <div className="text-xs text-gray-500 mt-2">
+                Real-time data from Alpaca API
+              </div>
             </div>
           ) : (
             <div className="space-y-3 max-h-80 overflow-y-auto">
-              {trades.map((trade) => (
-                <div
-                  key={trade.id}
-                  className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30 hover:border-blue-500/30 transition-all"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      {getSideIcon(trade.side)}
-                      <span className={`font-bold text-sm ${getSideColor(trade.side)}`}>
-                        {trade.side.toUpperCase()}
-                      </span>
-                      <span className="text-white font-mono text-sm">
-                        {trade.symbol}
-                      </span>
+              {trades.map((trade) => {
+                const quantity = trade.qty || trade.filled_qty || '0'
+                const price = trade.filled_avg_price || trade.limit_price
+                const value = price ? parseFloat(quantity) * parseFloat(price) : 0
+
+                return (
+                  <div
+                    key={trade.id}
+                    className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30 hover:border-blue-500/30 transition-all"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        {getSideIcon(trade.side)}
+                        <span className={`font-bold text-sm ${getSideColor(trade.side)}`}>
+                          {trade.side.toUpperCase()}
+                        </span>
+                        <span className="text-white font-mono text-sm">
+                          {trade.symbol}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {trade.type.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {getStatusIcon(trade.status)}
+                        <span className="text-xs text-gray-300">
+                          {trade.status.toUpperCase()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(trade.status)}
-                      <span className="text-xs text-gray-300">
-                        {trade.status.toUpperCase()}
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-300">
+                        <span className="font-medium">{parseFloat(quantity).toFixed(2)}</span> shares
+                        {price && (
+                          <span className="ml-2">@ {formatCurrency(parseFloat(price))}</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {formatTime(trade.submitted_at)}
+                      </div>
+                    </div>
+
+                    {trade.filled_at && (
+                      <div className="mt-1 flex items-center space-x-2">
+                        <CheckCircle className="w-3 h-3 text-green-400" />
+                        <span className="text-xs text-green-300">
+                          Filled at {formatTime(trade.filled_at)}
+                        </span>
+                      </div>
+                    )}
+
+                    {value > 0 && (
+                      <div className="mt-1 text-right">
+                        <span className="text-sm font-medium text-white">
+                          {formatCurrency(value)}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Zustand Store Indicator */}
+                    <div className="mt-2 pt-2 border-t border-gray-700/30 flex items-center justify-between">
+                      <div className="flex items-center space-x-1">
+                        <Database className="w-3 h-3 text-purple-400" />
+                        <span className="text-xs text-purple-300">Zustand Store</span>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {trade.time_in_force}
                       </span>
                     </div>
                   </div>
+                )
+              })}
+            </div>
+          )}
 
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-300">
-                      <span className="font-medium">{trade.quantity}</span> shares
-                      {trade.filledPrice && (
-                        <span className="ml-2">@ {formatCurrency(trade.filledPrice)}</span>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      {formatTime(trade.submittedAt)}
-                    </div>
-                  </div>
-
-                  {trade.ai_confidence && (
-                    <div className="mt-2 flex items-center space-x-2">
-                      <Zap className="w-3 h-3 text-yellow-400" />
-                      <span className="text-xs text-yellow-300">
-                        AI Confidence: {(trade.ai_confidence * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  )}
-
-                  {trade.value && (
-                    <div className="mt-1 text-right">
-                      <span className="text-sm font-medium text-white">
-                        {formatCurrency(trade.value)}
-                      </span>
-                    </div>
-                  )}
+          {/* Statistics Footer */}
+          {statistics && (
+            <div className="mt-4 pt-4 border-t border-gray-700/30">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-gray-800/30 rounded p-2">
+                  <div className="text-gray-400">Total Orders</div>
+                  <div className="text-white font-bold">{statistics.total || 0}</div>
                 </div>
-              ))}
+                <div className="bg-gray-800/30 rounded p-2">
+                  <div className="text-gray-400">Fill Rate</div>
+                  <div className="text-green-400 font-bold">
+                    {statistics.fillRate ? `${(statistics.fillRate * 100).toFixed(1)}%` : '0%'}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

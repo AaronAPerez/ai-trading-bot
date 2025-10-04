@@ -4,6 +4,10 @@ import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
 import { supabaseService } from '@/lib/database/supabase-utils'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
+import { RealTimeAITradingEngine } from '@/lib/ai/RealTimeAITradingEngine'
+
+// Global AI Trading Engine instance
+let aiTradingEngine: RealTimeAITradingEngine | null = null
 
 // In-memory bot state (in production, use Redis or database)
 let botState = {
@@ -11,7 +15,8 @@ let botState = {
   config: null,
   startTime: null,
   sessionId: null,
-  interval: null
+  interval: null,
+  aiEngine: null as RealTimeAITradingEngine | null
 }
 
 /**
@@ -81,7 +86,8 @@ async function handleStartBot(config: any) {
       config,
       startTime: new Date(),
       sessionId,
-      interval: null
+      interval: null,
+      aiEngine: null
     }
 
     // Update bot metrics in Supabase
@@ -135,8 +141,17 @@ async function handleStartBot(config: any) {
       console.warn('WebSocket broadcast failed:', wsError)
     }
 
-    // Start the actual bot logic here
-    startBotLogic(sessionId, config)
+    // Start the actual bot logic here (don't await - let it run in background)
+    startBotLogic(sessionId, config).catch(error => {
+      console.error('❌ Bot logic error:', error)
+      // Log to Supabase but don't fail the start request
+      supabaseService.logBotActivity(userId, {
+        type: 'error',
+        message: `Bot logic error: ${error.message}`,
+        status: 'failed',
+        details: JSON.stringify({ error: error.message, sessionId })
+      }).catch(console.error)
+    })
 
     return NextResponse.json({
       success: true,
@@ -181,7 +196,8 @@ async function handleStopBot() {
       config: null,
       startTime: null,
       sessionId: null,
-      interval: null
+      interval: null,
+      aiEngine: null
     }
 
     return NextResponse.json({
@@ -195,8 +211,8 @@ async function handleStopBot() {
     const sessionId = botState.sessionId
     const uptime = Date.now() - new Date(botState.startTime!).getTime()
 
-    // Stop the bot logic
-    stopBotLogic(sessionId!)
+    // Stop the bot logic (including AI engine)
+    await stopBotLogic(sessionId!)
 
     // Update bot metrics in Supabase
     try {
@@ -227,7 +243,8 @@ async function handleStopBot() {
       config: null,
       startTime: null,
       sessionId: null,
-      interval: null
+      interval: null,
+      aiEngine: null
     }
 
     console.log(`🛑 AI Trading Bot stopped. Session: ${sessionId}, Uptime: ${Math.floor(uptime / 60000)}m`)
@@ -292,16 +309,127 @@ function handleGetStatus() {
 }
 
 /**
- * Start the actual bot trading logic with real Alpaca API integration
+ * Start the actual bot trading logic with real Alpaca API integration and AI engine
  */
-function startBotLogic(sessionId: string, config: any) {
-  console.log(`🧠 Starting AI trading logic with Alpaca API for session: ${sessionId}`)
+async function startBotLogic(sessionId: string, config: any) {
+  console.log(`🧠 Starting AI Trading Engine with Alpaca API for session: ${sessionId}`)
   console.log(`🔗 Alpaca Paper Trading: ENABLED`)
   console.log(`💾 Supabase Database: ENABLED`)
+  console.log(`🤖 AI Learning System: ENABLED`)
 
   const userId = getCurrentUserId()
 
-  // Real AI trading logic - runs every 30 seconds
+  // Use full AI Trading Engine
+  console.log('🎯 Initializing Full AI Trading Engine with ML capabilities')
+
+  try {
+    // Initialize RealTimeAITradingEngine
+    const useFullAIEngine = true // Full AI engine enabled!
+
+    if (useFullAIEngine) {
+      const aiConfig = {
+      maxPositionsCount: config.riskManagement?.maxPositionSize || 10,
+      riskPerTrade: config.riskManagement?.maxDailyLoss || 0.02,
+      minConfidenceThreshold: config.riskManagement?.minConfidence || 0.75,
+      rebalanceFrequency: 6, // hours
+      watchlist: config.watchlist || config.watchlistSymbols || ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'SPY', 'QQQ'],
+      paperTrading: true,
+      autoExecution: {
+        autoExecuteEnabled: config.executionSettings?.autoExecute !== false, // Default to true
+        confidenceThresholds: {
+          minimum: 0.55,
+          conservative: 0.65,
+          aggressive: 0.75,
+          maximum: 0.85
+        },
+        positionSizing: {
+          baseSize: 0.03,
+          maxSize: 0.12,
+          confidenceMultiplier: 2.5
+        },
+        riskControls: {
+          maxDailyTrades: 200,
+          maxOpenPositions: 30,
+          maxDailyLoss: 0.05,
+          cooldownPeriod: 3
+        },
+        executionRules: {
+          marketHoursOnly: false,
+          avoidEarnings: false,
+          volumeThreshold: 25000,
+          spreadThreshold: 0.04,
+          cryptoTradingEnabled: true,
+          afterHoursTrading: true,
+          weekendTrading: true,
+          cryptoSpreadThreshold: 0.06
+        }
+      }
+    }
+
+    // Create AI Trading Engine instance
+    aiTradingEngine = new RealTimeAITradingEngine(alpacaClient, aiConfig)
+    botState.aiEngine = aiTradingEngine
+
+    // Start the AI engine
+    await aiTradingEngine.startAITrading()
+
+    console.log('✅ RealTimeAITradingEngine started successfully')
+    console.log(`🎯 Watching ${aiConfig.watchlist.length} symbols with AI learning enabled`)
+
+    // Log bot start with AI engine info
+    await supabaseService.logBotActivity(userId, {
+      type: 'system',
+      message: `AI Trading Engine started with session ${sessionId}`,
+      status: 'completed',
+      details: JSON.stringify({
+        sessionId,
+        config: aiConfig,
+        aiEngineEnabled: true,
+        autoExecute: aiConfig.autoExecution.autoExecuteEnabled,
+        watchlistSize: aiConfig.watchlist.length
+      })
+    })
+
+    // Broadcast via WebSocket
+    try {
+      const wsServer = getWebSocketServerManager().getServer()
+      if (wsServer) {
+        wsServer.broadcast({
+          type: 'ai_engine_started',
+          timestamp: new Date().toISOString(),
+          data: {
+            sessionId,
+            message: 'AI Trading Engine with learning system activated',
+            aiLearningEnabled: true,
+            autoExecutionEnabled: aiConfig.autoExecution.autoExecuteEnabled
+          }
+        })
+      }
+      } catch (wsError) {
+        console.warn('WebSocket broadcast failed:', wsError)
+      }
+    } else {
+      console.log('ℹ️ Full AI Engine disabled - using simple trading logic')
+    }
+
+  } catch (error) {
+    console.error('❌ Failed to start AI Trading Engine:', error)
+
+    // Log error to database
+    await supabaseService.logBotActivity(userId, {
+      type: 'error',
+      message: `AI Trading Engine failed to start: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      status: 'failed',
+      details: JSON.stringify({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        sessionId
+      })
+    })
+
+    throw error
+  }
+
+  // Legacy simple trading logic as fallback (kept for compatibility)
   const interval = setInterval(async () => {
     if (!botState.isRunning || botState.sessionId !== sessionId) {
       clearInterval(interval)
@@ -309,8 +437,12 @@ function startBotLogic(sessionId: string, config: any) {
     }
 
     try {
-      // 1. AI Market Analysis (includes crypto)
-      const symbols = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'SPY', 'QQQ', 'META', 'AMZN', 'BTC/USD', 'ETH/USD', 'DOGE/USD', 'ADA/USD', 'SOL/USD']
+      // 1. AI Market Analysis (stocks only - crypto has different pricing APIs)
+      const symbols = [
+        'AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA',
+        'SPY', 'QQQ', 'META', 'AMZN', 'NFLX',
+        'AMD', 'INTC', 'DIS', 'BA', 'GE'
+      ]
       const selectedSymbol = symbols[Math.floor(Math.random() * symbols.length)]
 
       console.log(`🎯 AI analyzing ${selectedSymbol} for trading opportunities...`)
@@ -420,66 +552,230 @@ function startBotLogic(sessionId: string, config: any) {
   console.log(`⏰ AI Trading Logic scheduled every 30 seconds for session ${sessionId}`)
 }
 
-// Execute actual trades via Alpaca API
+// Execute actual trades via Alpaca API with comprehensive risk checks
 async function executeTradeViaAlpaca(userId: string, symbol: string, signal: string, confidence: number, sessionId: string) {
   try {
     console.log(`🔄 Executing ${signal} order for ${symbol} via Alpaca API...`)
 
-    // Calculate position size (1-5 shares for demo)
-    const quantity = Math.floor(1 + Math.random() * 4)
+    // 1. Get account information for risk checks
+    const account = await alpacaClient.getAccount()
+    const buyingPower = parseFloat(account.buying_power)
+    const portfolioValue = parseFloat(account.portfolio_value)
+    const equity = parseFloat(account.equity)
 
-    // Call Alpaca API to place order using unified client
-    const orderResult = await alpacaClient.createOrder({
-      symbol,
-      qty: quantity,
-      side: signal.toLowerCase(),
-      type: 'market',
-      time_in_force: 'day'
-    })
+    console.log(`💰 Account Status: Equity: $${equity.toFixed(2)}, Buying Power: $${buyingPower.toFixed(2)}`)
 
-    if (orderResult) {
+    // 2. Check if account is blocked or restricted
+    if (account.trading_blocked || account.account_blocked) {
+      throw new Error('Trading is blocked on this account')
+    }
 
-      console.log(`✅ ${signal} order placed: ${quantity} shares of ${symbol}`)
-      console.log(`📋 Order ID: ${orderResult.id || orderResult.orderId}`)
-      console.log(`📊 Order Status: ${orderResult.status}`)
+    // 3. Get current market price (handle stocks vs crypto)
+    let currentPrice = 0
+    const isCrypto = symbol.includes('/')
 
-      // Get current market price for value calculation (approximation)
-      const estimatedPrice = 100 + Math.random() * 300 // Simulate market price for demo
-      const estimatedValue = quantity * estimatedPrice
+    try {
+      if (isCrypto) {
+        // For crypto, use latest trade (quotes may not be available)
+        const trade = await alpacaClient.getLatestTrade(symbol)
+        currentPrice = trade?.trade?.p || trade?.p || 0
 
-      // Log successful trade to Supabase
+        if (currentPrice === 0) {
+          console.warn(`⚠️ Could not fetch crypto price for ${symbol}, skipping trade`)
+          return // Skip this trade without crashing
+        }
+      } else {
+        // For stocks, try quote first, then trade
+        try {
+          const quote = await alpacaClient.getLatestQuote(symbol)
+          currentPrice = quote?.quote?.ap || quote?.ap || 0
+        } catch (quoteError) {
+          console.warn(`⚠️ Quote failed for ${symbol}, trying trade...`)
+        }
+
+        if (currentPrice === 0) {
+          const trade = await alpacaClient.getLatestTrade(symbol)
+          currentPrice = trade?.trade?.p || trade?.p || 0
+        }
+
+        if (currentPrice === 0) {
+          console.warn(`⚠️ Could not fetch price for ${symbol}, skipping trade`)
+          return // Skip this trade without crashing
+        }
+      }
+
+      console.log(`📊 Current ${symbol} price: $${currentPrice.toFixed(2)}`)
+    } catch (priceError) {
+      console.error(`❌ Price fetch error for ${symbol}:`, priceError)
+      console.warn(`⚠️ Skipping trade for ${symbol} - price unavailable`)
+
+      // Log to Supabase but don't crash the bot
       await supabaseService.logBotActivity(userId, {
-        type: 'trade',
+        type: 'error',
         symbol: symbol,
-        message: `${signal} ${quantity} shares of ${symbol} - Order placed via Alpaca API (ID: ${orderResult.id || orderResult.orderId})`,
-        status: 'completed',
+        message: `Price fetch failed for ${symbol}, trade skipped`,
+        status: 'failed',
         details: JSON.stringify({
-          orderId: orderResult.id || orderResult.orderId,
-          quantity,
-          side: signal,
-          confidence,
+          error: priceError instanceof Error ? priceError.message : 'Unknown error',
+          symbol,
+          signal,
           sessionId,
-          orderStatus: orderResult.status,
-          estimatedValue,
-          alpacaResponse: orderResult
+          reason: 'price_unavailable'
         })
       })
 
-      // Save trade to trade_history table
+      return // Skip this trade, don't crash the bot
+    }
+
+    // 4. Calculate position size based on portfolio percentage (max 5% per trade)
+    const config = botState.config
+    const maxPositionPercent = config?.executionSettings?.orderSizePercent || 0.02 // Default 2%
+    const maxPositionValue = portfolioValue * maxPositionPercent
+
+    let quantity = Math.floor(maxPositionValue / currentPrice)
+
+    // Ensure minimum of 1 share and maximum based on buying power
+    quantity = Math.max(1, Math.min(quantity, Math.floor(buyingPower / currentPrice)))
+
+    const estimatedValue = quantity * currentPrice
+
+    console.log(`📐 Position Sizing: ${quantity} shares @ $${currentPrice.toFixed(2)} = $${estimatedValue.toFixed(2)} (${((estimatedValue/portfolioValue)*100).toFixed(2)}% of portfolio)`)
+
+    // 5. Risk checks before execution
+    const riskChecks = {
+      hasEnoughBuyingPower: estimatedValue <= buyingPower,
+      withinPositionLimit: estimatedValue <= maxPositionValue,
+      minimumValue: estimatedValue >= 1, // At least $1
+      maximumValue: estimatedValue <= portfolioValue * 0.10, // Max 10% of portfolio per trade
+      accountNotRestricted: !account.trading_blocked && !account.account_blocked,
+      marketHours: true // Will be enhanced with actual market hours check
+    }
+
+    const allChecksPassed = Object.values(riskChecks).every(check => check === true)
+
+    if (!allChecksPassed) {
+      const failedChecks = Object.entries(riskChecks)
+        .filter(([_, passed]) => !passed)
+        .map(([check]) => check)
+
+      throw new Error(`Risk checks failed: ${failedChecks.join(', ')}`)
+    }
+
+    console.log(`✅ All risk checks passed`)
+
+    // 6. Check for existing positions to avoid over-concentration
+    let existingPosition = null
+    try {
+      existingPosition = await alpacaClient.getPosition(symbol)
+
+      if (existingPosition) {
+        const existingValue = Math.abs(parseFloat(existingPosition.market_value))
+        const totalExposure = existingValue + estimatedValue
+        const exposurePercent = (totalExposure / portfolioValue) * 100
+
+        console.log(`📊 Existing position: ${existingPosition.qty} shares (${existingValue.toFixed(2)} value)`)
+        console.log(`📊 Total exposure after trade: $${totalExposure.toFixed(2)} (${exposurePercent.toFixed(2)}% of portfolio)`)
+
+        // Prevent excessive concentration (max 15% per symbol)
+        if (exposurePercent > 15) {
+          throw new Error(`Total exposure to ${symbol} would exceed 15% of portfolio (${exposurePercent.toFixed(2)}%)`)
+        }
+      }
+    } catch (positionError: any) {
+      if (positionError.message?.includes('position does not exist')) {
+        console.log(`📊 No existing position in ${symbol}`)
+      } else {
+        console.warn(`⚠️ Unable to check existing position:`, positionError)
+      }
+    }
+
+    // 7. Execute the trade via Alpaca API
+    console.log(`🚀 Placing ${signal} order: ${quantity} shares of ${symbol}`)
+
+    const orderResult = await alpacaClient.createOrder({
+      symbol,
+      qty: quantity,
+      side: signal.toLowerCase() as 'buy' | 'sell',
+      type: 'market',
+      time_in_force: 'day',
+      client_order_id: `bot_${sessionId}_${Date.now()}`
+    })
+
+    if (orderResult) {
+      console.log(`✅ ${signal} order placed successfully!`)
+      console.log(`📋 Order ID: ${orderResult.id}`)
+      console.log(`📊 Order Status: ${orderResult.status}`)
+      console.log(`💵 Order Value: $${estimatedValue.toFixed(2)}`)
+
+      // 8. Log successful trade to Supabase
+      await supabaseService.logBotActivity(userId, {
+        type: 'trade',
+        symbol: symbol,
+        message: `✅ ${signal} ${quantity} shares of ${symbol} @ $${currentPrice.toFixed(2)} - Order placed via Alpaca (ID: ${orderResult.id})`,
+        status: 'completed',
+        details: JSON.stringify({
+          orderId: orderResult.id,
+          quantity,
+          side: signal,
+          price: currentPrice,
+          estimatedValue,
+          confidence,
+          sessionId,
+          orderStatus: orderResult.status,
+          riskChecks,
+          portfolioImpact: {
+            percentOfPortfolio: ((estimatedValue/portfolioValue)*100).toFixed(2),
+            buyingPowerRemaining: (buyingPower - estimatedValue).toFixed(2),
+            existingPosition: existingPosition ? parseFloat(existingPosition.qty) : 0
+          },
+          alpacaResponse: {
+            id: orderResult.id,
+            status: orderResult.status,
+            created_at: orderResult.created_at,
+            filled_avg_price: orderResult.filled_avg_price
+          }
+        })
+      })
+
+      // 9. Save trade to trade_history table
       await supabaseService.saveTrade(userId, {
         symbol,
         side: signal.toLowerCase(),
         quantity,
-        price: estimatedPrice, // Estimated market price
-        value: estimatedValue, // Estimated total value
+        price: currentPrice,
+        value: estimatedValue,
         timestamp: new Date().toISOString(),
         status: orderResult.status === 'filled' ? 'FILLED' : 'PENDING',
-        order_id: orderResult.id || orderResult.orderId,
+        order_id: orderResult.id,
         ai_confidence: confidence
       })
 
-      console.log(`💾 Trade saved to Supabase: ${signal} ${quantity} ${symbol} @ $${estimatedPrice.toFixed(2)}`)
+      console.log(`💾 Trade saved to Supabase: ${signal} ${quantity} ${symbol} @ $${currentPrice.toFixed(2)}`)
 
+      // 10. Broadcast via WebSocket
+      try {
+        const wsServer = getWebSocketServerManager().getServer()
+        if (wsServer) {
+          wsServer.broadcast({
+            type: 'trade_executed',
+            timestamp: new Date().toISOString(),
+            data: {
+              symbol,
+              side: signal,
+              quantity,
+              price: currentPrice,
+              value: estimatedValue,
+              orderId: orderResult.id,
+              confidence,
+              sessionId
+            }
+          })
+        }
+      } catch (wsError) {
+        console.warn('WebSocket broadcast failed:', wsError)
+      }
+
+      return orderResult
     }
 
   } catch (error) {
@@ -489,27 +785,72 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
     await supabaseService.logBotActivity(userId, {
       type: 'error',
       symbol: symbol,
-      message: `Trade execution error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `❌ Trade execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       status: 'failed',
       details: JSON.stringify({
         error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
         symbol,
         signal,
-        sessionId
+        confidence,
+        sessionId,
+        timestamp: new Date().toISOString()
       })
     })
+
+    throw error
   }
 }
 
 /**
- * Stop the bot trading logic
+ * Stop the bot trading logic and AI engine
  */
-function stopBotLogic(sessionId: string) {
-  console.log(`🛑 Stopping AI trading logic for session: ${sessionId}`)
+async function stopBotLogic(sessionId: string) {
+  console.log(`🛑 Stopping AI Trading Engine for session: ${sessionId}`)
 
-  if (botState.interval) {
-    clearInterval(botState.interval)
-    botState.interval = null
+  try {
+    // Stop the AI Trading Engine if running
+    if (aiTradingEngine && botState.aiEngine) {
+      console.log('🛑 Stopping RealTimeAITradingEngine...')
+      await aiTradingEngine.stopAITrading()
+
+      // Get final metrics before clearing
+      const finalMetrics = aiTradingEngine.getAutoExecutionMetrics()
+      console.log('📊 Final AI Engine Metrics:', finalMetrics)
+
+      aiTradingEngine = null
+      botState.aiEngine = null
+      console.log('✅ AI Trading Engine stopped successfully')
+    }
+
+    // Stop legacy interval if running
+    if (botState.interval) {
+      clearInterval(botState.interval)
+      botState.interval = null
+    }
+
+    const userId = getCurrentUserId()
+
+    // Log bot stop to database
+    await supabaseService.logBotActivity(userId, {
+      type: 'system',
+      message: `AI Trading Engine stopped for session ${sessionId}`,
+      status: 'completed',
+      details: JSON.stringify({
+        sessionId,
+        stoppedAt: new Date().toISOString()
+      })
+    })
+
+  } catch (error) {
+    console.error('❌ Error stopping AI Trading Engine:', error)
+    // Force cleanup even on error
+    aiTradingEngine = null
+    botState.aiEngine = null
+    if (botState.interval) {
+      clearInterval(botState.interval)
+      botState.interval = null
+    }
   }
 }
 

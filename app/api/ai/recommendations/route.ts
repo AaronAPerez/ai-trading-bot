@@ -4,15 +4,12 @@
 // ===============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { withErrorHandling } from '@/lib/api/error-handler'
 import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
 import type {
   AIRecommendation,
   SafetyChecks,
   MarketData,
-  TechnicalIndicators,
-  SentimentData
 } from '@/types/trading'
 
 // ===============================================

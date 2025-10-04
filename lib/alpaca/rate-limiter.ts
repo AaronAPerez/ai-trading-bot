@@ -27,6 +27,7 @@ export class AlpacaRateLimiter {
     positions: { requests: 200, window: 60000, description: "200 position requests per minute" },
     market_data: { requests: 200, window: 60000, description: "200 market data requests per minute" }
   }
+  enqueue: any
 
   constructor() {
     this.startCleanupInterval()

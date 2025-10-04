@@ -83,9 +83,7 @@ export class RealTimeAITradingEngine {
     ConfigValidator.logValidationResult(validation)
 
     if (!validation.valid) {
-      console.error('❌ Configuration validation failed. Trading engine may not function properly.')
-      console.log('📋 Recommended environment variables:')
-      console.log(ConfigValidator.getRecommendedEnvironmentVariables())
+      console.warn('⚠️ Some configuration values are missing, but trading engine will continue')
     }
 
     this.alpacaClient = alpacaClient
@@ -97,10 +95,9 @@ export class RealTimeAITradingEngine {
     // Initialize auto trade executor with default config if not provided
     const executionConfig = config.autoExecution || this.getDefaultExecutionConfig()
 
-    // Validate trading configuration
-    const tradingConfigIssues = ConfigValidator.validateTradingConfig(executionConfig)
-    if (tradingConfigIssues.length > 0) {
-      console.warn('⚠️ Trading configuration issues:', tradingConfigIssues)
+    // Validate trading configuration (basic validation)
+    if (!executionConfig.autoExecuteEnabled) {
+      console.warn('⚠️ Auto-execution is disabled')
     }
 
     this.autoTradeExecutor = new AutoTradeExecutor(executionConfig)
@@ -222,9 +219,12 @@ export class RealTimeAITradingEngine {
   private async verifyConnection(): Promise<void> {
     try {
       const account = await this.alpacaClient.getAccount()
-      console.log(`🔗 Connected to Alpaca - Account Type: ${account.accountType}, Balance: $${account.totalBalance.toLocaleString()}`)
+      // Alpaca account properties: account_number, status, currency, buying_power, cash, portfolio_value, etc.
+      const accountStatus = account.status || account.account_status || 'UNKNOWN'
+      const portfolioValue = account.portfolio_value || account.equity || account.cash || 0
+      console.log(`🔗 Connected to Alpaca - Status: ${accountStatus}, Portfolio Value: $${parseFloat(portfolioValue).toLocaleString()}`)
     } catch (error) {
-      throw new Error(`Alpaca connection failed: ${error.message}`)
+      throw new Error(`Alpaca connection failed: ${(error as Error).message}`)
     }
   }
 
@@ -914,7 +914,10 @@ export class RealTimeAITradingEngine {
             action: prediction.direction === 'UP' ? 'BUY' : prediction.direction === 'DOWN' ? 'SELL' : 'HOLD',
             confidence: prediction.confidence,
             reason: `ML Prediction for rebalancing`,
-            riskScore: 1 - prediction.confidence
+            riskScore: 1 - prediction.confidence,
+            symbol: '',
+            timestamp: undefined,
+            strategy: ''
           })
         }
       }

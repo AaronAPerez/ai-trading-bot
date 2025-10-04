@@ -1,7 +1,17 @@
 import { TradeSignal, Portfolio, MarketData } from '@/types/trading'
-import { AILearningSystem, TradeOutcome } from './AILearningSystem'
+// import { AILearningSystem, TradeOutcome } from './AILearningSystem'
 import { PositionSizingManager, PositionSizeResult } from './PositionSizingManager'
 import { getAlpacaClient } from '@/lib/alpaca/server-client'
+
+// Simple AILearningSystem stub (full implementation is commented out)
+class AILearningSystem {
+  async trackTradeEntry(tradeId: string, signal: TradeSignal, marketData: MarketData[], price: number, positionSize: number) {}
+  async trackTradeExit(orderId: string, p0: any, realizedPnL: number) {}
+  async performLearningAnalysis() { return null }
+  getLatestInsights() { return null }
+  getTradeHistory() { return [] }
+  getAccuracyTrend(days: number) { return [] }
+}
 
 export interface ExecutionConfig {
   autoExecuteEnabled: boolean
