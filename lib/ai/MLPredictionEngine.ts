@@ -11,6 +11,8 @@ interface MLFeatures {
 }
 
 interface MLPrediction {
+  riskScore: number
+  reasoning: string
   direction: 'UP' | 'DOWN' | 'SIDEWAYS'
   confidence: number
   priceTarget: number

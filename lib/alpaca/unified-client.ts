@@ -324,28 +324,186 @@ export class UnifiedAlpacaClient {
     )
   }
 
+  /**
+   * Get portfolio history
+   */
+  async getPortfolioHistory(params?: {
+    period?: string
+    timeframe?: string
+    date_end?: string
+    extended_hours?: boolean
+  }) {
+    const queryString = params ? new URLSearchParams(params as any).toString() : ''
+    return this.request(
+      `/v2/account/portfolio/history${queryString ? `?${queryString}` : ''}`,
+      {},
+      'normal'
+    )
+  }
+
   // ============ CRYPTO METHODS ============
-  
+
   /**
    * Get latest crypto quote
    */
   async getCryptoQuote(symbol: string) {
-    return this.request(
-      `/v1beta3/crypto/us/latest/quotes?symbols=${symbol}`,
-      {},
-      'normal'
-    )
+    // Use data.alpaca.markets for crypto market data
+    const dataUrl = 'https://data.alpaca.markets'
+    const url = `${dataUrl}/v1beta3/crypto/us/latest/quotes?symbols=${symbol}`
+
+    const response = await fetch(url, {
+      headers: this.headers
+    })
+
+    if (!response.ok) {
+      throw APIErrors.AlpacaAPIError(`Crypto quote error: ${response.status}`, response.status)
+    }
+
+    return response.json()
   }
 
   /**
    * Get latest crypto trade
    */
   async getCryptoTrade(symbol: string) {
+    const dataUrl = 'https://data.alpaca.markets'
+    const url = `${dataUrl}/v1beta3/crypto/us/latest/trades?symbols=${symbol}`
+
+    const response = await fetch(url, {
+      headers: this.headers
+    })
+
+    if (!response.ok) {
+      throw APIErrors.AlpacaAPIError(`Crypto trade error: ${response.status}`, response.status)
+    }
+
+    return response.json()
+  }
+
+  /**
+   * Get historical crypto bars (candlestick data)
+   */
+  async getCryptoBars(symbol: string, options: {
+    start?: string
+    end?: string
+    limit?: number
+    timeframe?: '1Min' | '5Min' | '15Min' | '1Hour' | '1Day'
+  } = {}) {
+    const timeframe = options.timeframe || '1Day'
+    const limit = options.limit || 100
+
+    const params = new URLSearchParams({
+      symbols: symbol,
+      timeframe,
+      limit: limit.toString()
+    })
+
+    if (options.start) params.append('start', options.start)
+    if (options.end) params.append('end', options.end)
+
+    const dataUrl = 'https://data.alpaca.markets'
+    const url = `${dataUrl}/v1beta3/crypto/us/bars?${params.toString()}`
+
+    const response = await fetch(url, {
+      headers: this.headers
+    })
+
+    if (!response.ok) {
+      throw APIErrors.AlpacaAPIError(`Crypto bars error: ${response.status}`, response.status)
+    }
+
+    return response.json()
+  }
+
+  /**
+   * Check if symbol is a crypto asset
+   */
+  isCryptoSymbol(symbol: string): boolean {
+    // Crypto symbols typically end with USD, USDT, or BUSD (e.g., BTCUSD, ETHUSD)
+    return /^[A-Z]+(USD|USDT|BUSD)$/i.test(symbol)
+  }
+
+  /**
+   * Get available crypto assets
+   */
+  async getCryptoAssets() {
+    return this.request('/v2/assets?asset_class=crypto', {}, 'normal')
+  }
+
+  /**
+   * Place a crypto order
+   */
+  async createCryptoOrder(order: {
+    symbol: string
+    qty?: number
+    notional?: number
+    side: 'buy' | 'sell'
+    type: 'market' | 'limit' | 'stop_limit'
+    time_in_force: 'day' | 'gtc' | 'ioc' | 'fok'
+    limit_price?: number
+    stop_price?: number
+    client_order_id?: string
+  }) {
+    // Crypto trading doesn't require extended_hours since it's 24/7
     return this.request(
-      `/v1beta3/crypto/us/latest/trades?symbols=${symbol}`,
-      {},
-      'normal'
+      '/v2/orders',
+      {
+        method: 'POST',
+        body: JSON.stringify(order),
+      },
+      'high'
     )
+  }
+
+  /**
+   * Get crypto market status (crypto markets are always open)
+   */
+  async getCryptoMarketStatus() {
+    return {
+      is_open: true,
+      market_type: 'crypto',
+      next_close: null, // Crypto never closes
+      next_open: null,
+      message: 'Crypto markets are open 24/7'
+    }
+  }
+
+  /**
+   * Get historical bars (candlestick data) for a symbol
+   * Uses data.alpaca.markets endpoint for market data
+   */
+  async getBarsV2(symbol: string, options: {
+    start?: string
+    end?: string
+    limit?: number
+    timeframe?: '1Min' | '5Min' | '15Min' | '1Hour' | '1Day'
+  } = {}) {
+    const timeframe = options.timeframe || '1Day'
+    const limit = options.limit || 100
+
+    // Build query params
+    const params = new URLSearchParams({
+      timeframe,
+      limit: limit.toString()
+    })
+
+    if (options.start) params.append('start', options.start)
+    if (options.end) params.append('end', options.end)
+
+    // Alpaca market data API uses data.alpaca.markets
+    const dataUrl = 'https://data.alpaca.markets'
+    const url = `${dataUrl}/v2/stocks/${symbol}/bars?${params.toString()}`
+
+    const response = await fetch(url, {
+      headers: this.headers
+    })
+
+    if (!response.ok) {
+      throw APIErrors.external(`Alpaca market data error: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return data
   }
 }
 

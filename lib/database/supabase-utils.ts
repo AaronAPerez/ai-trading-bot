@@ -262,6 +262,40 @@ export class SupabaseService {
     }
   }
 
+  async getRecentLearningData(userId: string, limit: number = 1000) {
+    try {
+      const { data, error} = await this._client
+        .from('ai_learning_data')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get recent learning data:', error)
+      return []
+    }
+  }
+
+  async getRecentActivity(userId: string, limit: number = 50) {
+    try {
+      const { data, error } = await this._client
+        .from('bot_activity_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get recent activity:', error)
+      return []
+    }
+  }
+
   async getBotMetrics(userId: string) {
     try {
       const { data, error } = await this._client

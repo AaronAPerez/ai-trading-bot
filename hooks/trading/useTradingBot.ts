@@ -57,27 +57,30 @@ export const useTradingBot = () => {
    * Start the AI trading bot
    */
   const startBot = useCallback(async (config: BotConfiguration) => {
-    if (isStarting) return
+    console.log('🎯 startBot function called, isStarting:', isStarting)
 
-    // Check if bot is already running
-    if (botStore.metrics.isRunning) {
-      console.log('🔄 Bot already running, syncing status...')
-      await checkBotStatus()
+    if (isStarting) {
+      console.warn('⚠️ Bot is already starting, ignoring duplicate request')
       return
     }
 
+    console.log('✅ Proceeding with bot start')
     setIsStarting(true)
     setError(null)
 
     try {
       console.log('🚀 Starting AI Trading Bot...', config)
 
-      // 1. Call the API to start the bot
+      // 1. Call the API to start the bot with timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+
       const response = await fetch('/api/ai/bot-control', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
+        signal: controller.signal,
         body: JSON.stringify({
           action: 'start',
           config: {
@@ -109,7 +112,11 @@ export const useTradingBot = () => {
         })
       })
 
+      clearTimeout(timeoutId)
+      console.log('📡 Response received, status:', response.status)
+
       const result = await response.json()
+      console.log('📦 Response parsed:', result)
 
       if (!response.ok) {
         // Handle specific case where bot is already running
@@ -179,9 +186,25 @@ export const useTradingBot = () => {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      console.error('❌ Failed to start bot:', errorMessage)
 
-      setError(errorMessage)
+      // Handle timeout separately
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.warn('⏱️ Request timeout - verifying bot status on server...')
+
+        // Bot might have started on server despite timeout, so check actual state
+        try {
+          await checkBotStatus()
+          console.log('✅ Bot status synced after timeout')
+          return // Exit without setting error if status check succeeds
+        } catch (statusError) {
+          console.error('❌ Status check failed after timeout:', statusError)
+          setError('Request timeout - please refresh to see current bot status')
+        }
+      } else {
+        console.error('❌ Failed to start bot:', errorMessage)
+        console.error('❌ Full error object:', error)
+        setError(errorMessage)
+      }
 
       // Add error activity
       botStore.addActivity({
@@ -190,9 +213,11 @@ export const useTradingBot = () => {
         details: errorMessage
       })
 
-      throw error
+      // Don't throw - let the button reset
+      // throw error
 
     } finally {
+      console.log('🔧 Finally block: resetting isStarting to false')
       setIsStarting(false)
     }
   }, [isStarting, botStore, sendInternalMessage, checkBotStatus])

@@ -28,6 +28,11 @@ import PortfolioOverview from "./PortfolioOverview"
 import TradingChartDashboard from '../TradingChartDashboard'
 import { LiveTrades } from './LiveTrades'
 import LiveAIActivity from './LiveAIActivity'
+import { PriceChart } from '../charts/PriceChart'
+import { PortfolioAllocationChart } from '../charts/PortfolioAllocationChart'
+import { PerformanceChart } from '../charts/PerformanceChart'
+import { RiskMetricsChart } from '../charts/RiskMetricsChart'
+import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
 
 // Default bot configuration with auto-execution enabled
 const defaultBotConfig = {
@@ -400,10 +405,10 @@ export default function AITradingDashboard() {
 
 
       {/* AI Progress and Learning Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
         {/* AI Learning Progress - Real-time Data */}
-        <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
-          <div className="flex items-center justify-between mb-4">
+        {/* <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
+         {/*    <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <Brain className="w-5 h-5 text-purple-400" />
               <h3 className="text-lg font-semibold text-white">AI Learning Progress</h3>
@@ -493,7 +498,7 @@ export default function AITradingDashboard() {
               </div>
             </div>
           </div>
-        </div>
+        </div>  */}
 
         {/* AI Performance Metrics - Real-time Alpaca Data */}
         <div className="bg-gradient-to-br from-green-900/50 to-emerald-900/50 rounded-xl p-6 border border-green-700/50">
@@ -567,7 +572,7 @@ export default function AITradingDashboard() {
               <span className="text-sm text-gray-300">Risk Score</span>
               <div className="flex items-center space-x-2">
                 <span className={`text-lg font-bold ${realTimeMetrics.metrics.riskScore > 70 ? 'text-red-400' :
-                    realTimeMetrics.metrics.riskScore > 40 ? 'text-yellow-400' : 'text-green-400'
+                  realTimeMetrics.metrics.riskScore > 40 ? 'text-yellow-400' : 'text-green-400'
                   }`}>
                   {realTimeMetrics.isLoading ? (
                     <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
@@ -691,6 +696,49 @@ export default function AITradingDashboard() {
           </div>
           <LiveTradesDisplay />
         </div>
+      </div>
+
+      {/* 24/7 Crypto Trading Section */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-white">24/7 Crypto Trading</h2>
+          <div className="text-xs text-gray-400">Never stop learning & trading</div>
+        </div>
+
+        <CryptoTradingPanel />
+      </div>
+
+      {/* Advanced Charts Section */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-white">Advanced Analytics</h2>
+          <div className="text-xs text-gray-400">Real-time charts powered by Alpaca API</div>
+        </div>
+
+        {/* Portfolio Performance & Allocation */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <PerformanceChart period="1M" height={350} />
+          <PortfolioAllocationChart height={350} />
+        </div>
+
+        {/* Risk Metrics */}
+        <RiskMetricsChart height={400} showPositionRisks={true} />
+
+        {/* Price Charts for Top Positions */}
+        {positions.data && positions.data.length > 0 && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {positions.data.slice(0, 4).map((position: any) => (
+              <PriceChart
+                key={position.symbol}
+                symbol={position.symbol}
+                timeframe="1Day"
+                limit={30}
+                showVolume={true}
+                height={300}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Enhanced Data Sources Footer */}

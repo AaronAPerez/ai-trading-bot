@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabaseClient'
 import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,12 +15,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
     // Fetch real-time data from Alpaca API
     let alpacaAccount = null
     let alpacaPositions: any[] = []
     let alpacaOrders: any[] = []
+    let alpacaConnected = false
 
     try {
       [alpacaAccount, alpacaPositions, alpacaOrders] = await Promise.all([
@@ -31,8 +27,11 @@ export async function GET(request: NextRequest) {
         alpacaClient.getPositions(),
         alpacaClient.getOrders({ status: 'all', limit: 100 })
       ])
+      alpacaConnected = true
+      console.log('✅ Alpaca API connected successfully')
     } catch (alpacaError) {
-      console.warn('⚠️ Alpaca API error, using Supabase data only:', alpacaError)
+      console.warn('⚠️ Alpaca API error, using default values:', alpacaError)
+      alpacaConnected = false
     }
 
     // Fetch bot status
@@ -43,31 +42,47 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (botError && botError.code !== 'PGRST116') {
-      throw botError
+      console.warn('⚠️ Bot status error (will use defaults):', botError.message)
     }
 
-    // Fetch AI learning data from Supabase
-    const { data: learningData, error: learningError } = await supabase
-      .from('ai_learning_data')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1000)
+    // Fetch AI learning data from Supabase (optional - may not exist yet)
+    let learningData: any[] = []
+    try {
+      const { data, error: learningError } = await supabase
+        .from('ai_learning_data')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1000)
 
-    if (learningError) {
-      console.warn('⚠️ Error fetching learning data:', learningError)
+      if (learningError) {
+        console.warn('⚠️ Learning data table may not exist yet:', learningError.message)
+      } else {
+        learningData = data || []
+        console.log(`📚 Fetched ${learningData.length} learning records`)
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not fetch learning data:', error)
     }
 
-    // Fetch trade history from Supabase
-    const { data: trades, error: tradesError } = await supabase
-      .from('trade_history')
-      .select('*')
-      .eq('user_id', userId)
-      .order('timestamp', { ascending: false })
-      .limit(100)
+    // Fetch trade history from Supabase (optional - may not exist yet)
+    let trades: any[] = []
+    try {
+      const { data, error: tradesError } = await supabase
+        .from('trade_history')
+        .select('*')
+        .eq('user_id', userId)
+        .order('timestamp', { ascending: false })
+        .limit(100)
 
-    if (tradesError) {
-      console.warn('⚠️ Error fetching trades:', tradesError)
+      if (tradesError) {
+        console.warn('⚠️ Trade history table may not exist yet:', tradesError.message)
+      } else {
+        trades = data || []
+        console.log(`📊 Fetched ${trades.length} trades`)
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not fetch trade history:', error)
     }
 
     // Calculate real-time metrics from Alpaca
@@ -103,17 +118,17 @@ export async function GET(request: NextRequest) {
 
     // AI LEARNING METRICS from Supabase
     const allLearningData = Array.isArray(learningData) ? learningData : []
-    const profitableCount = allLearningData.filter(d => d.outcome === 'profit').length
+    const profitableCount = allLearningData.filter(d => d?.outcome === 'profit').length
     const accuracy = allLearningData.length > 0 ? (profitableCount / allLearningData.length) : 0
 
     // Calculate patterns identified
-    const uniqueStrategies = new Set(allLearningData.map(d => d.strategy_used || 'unknown'))
+    const uniqueStrategies = new Set(allLearningData.map(d => d?.strategy_used || 'unknown'))
     const patternsIdentified = uniqueStrategies.size * 3 + Math.floor(allLearningData.length / 10)
 
     // All trades data
-    const allTrades = trades || []
-    const todayTrades = allTrades.filter(t => new Date(t.timestamp) >= todayStart)
-    const successfulTrades = allTrades.filter(t => t.status === 'FILLED')
+    const allTrades = Array.isArray(trades) ? trades : []
+    const todayTrades = allTrades.filter(t => t?.timestamp && new Date(t.timestamp) >= todayStart)
+    const successfulTrades = allTrades.filter(t => t?.status === 'FILLED')
 
     // Calculate P&L from trade history
     const historicalPnL = successfulTrades.reduce((sum, t) => {
@@ -189,18 +204,28 @@ export async function GET(request: NextRequest) {
 
       // Data Sources
       dataSources: {
-        alpaca: !!alpacaAccount,
+        alpaca: alpacaConnected,
         supabase: true,
         positions: alpacaPositions.length,
         orders: alpacaOrders.length
       }
     }
 
+    console.log(`📊 Metrics Summary: Positions: ${alpacaPositions.length}, Orders: ${alpacaOrders.length}, PnL: $${metrics.totalPnL.toFixed(2)}`)
+    console.log(`🔗 Data Sources: Alpaca=${alpacaConnected}, Supabase=true`)
+
+    console.log('✅ Bot metrics calculated successfully')
     return NextResponse.json(metrics, { status: 200 })
   } catch (error) {
-    console.error('Error fetching bot metrics:', error)
+    console.error('❌ Error fetching bot metrics:', error)
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+
     return NextResponse.json(
-      { error: 'Failed to fetch bot metrics', details: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        error: 'Failed to fetch bot metrics',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
+      },
       { status: 500 }
     )
   }

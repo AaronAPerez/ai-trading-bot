@@ -56,6 +56,9 @@ export interface Trade {
 // ===============================================
 
 export interface Portfolio {
+  maxDrawdown(maxDrawdown: number, maxDrawdown1: any): number
+  allocation: any
+  positions: any
   totalValue: number
   dayPnL: number
   totalPnL: number
@@ -72,6 +75,7 @@ export interface Portfolio {
 }
 
 export interface Position {
+  quantity(quantity: any): unknown
   symbol: string
   qty: number
   side: 'long' | 'short'
