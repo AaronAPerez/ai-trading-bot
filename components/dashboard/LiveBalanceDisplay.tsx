@@ -37,24 +37,36 @@ export default function LiveBalanceDisplay({
 
   // Calculate all balance metrics with useCallback to prevent infinite loops
   const calculateMetrics = useCallback((): BalanceMetrics => {
-    const totalBalance = account.data ? parseFloat(account.data.equity || account.data.portfolio_value || '0') : 0
-    const buyingPower = account.data ? parseFloat(account.data.buying_power || '0') : 0
-    const cash = account.data ? parseFloat(account.data.cash || account.data.cash_withdrawable || '0') : 0
-    const portfolioValue = account.data ? parseFloat(account.data.portfolio_value || account.data.equity || '0') : 0
+    // Extract account data with fallback handling
+    const accountData = account.data || {}
 
+    // Alpaca returns equity as the total account value
+    const totalBalance = parseFloat(accountData.equity || '0')
+    const buyingPower = parseFloat(accountData.buying_power || accountData.buyingPower || '0')
+    const cash = parseFloat(accountData.cash || '0')
+    const portfolioValue = parseFloat(accountData.portfolio_value || accountData.portfolioValue || accountData.equity || '0')
+
+    // Handle positions data (ensure it's an array)
     const positionsArray = Array.isArray(positions.data) ? positions.data : []
 
+    // Calculate invested amount from positions (absolute value of market_value)
     const investedAmount = positionsArray.reduce((total, pos) => {
-      return total + (parseFloat(pos.market_value || pos.marketValue || '0'))
+      const marketValue = Math.abs(parseFloat(pos.market_value || pos.marketValue || '0'))
+      return total + marketValue
     }, 0)
 
+    // Calculate total unrealized P&L from positions
     const totalPnL = positionsArray.reduce((total, pos) => {
-      return total + (parseFloat(pos.unrealized_pl || pos.unrealizedPnL || '0'))
+      const unrealizedPL = parseFloat(pos.unrealized_pl || pos.unrealized_plpc || pos.unrealizedPL || '0')
+      return total + unrealizedPL
     }, 0)
 
-    const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
+    // Extract daily P&L - check both snake_case and camelCase
+    const dayPnL = parseFloat(accountData.equity || '0') - parseFloat(accountData.last_equity || accountData.lastEquity || accountData.equity || '0')
 
-    const dayChangePercent = totalBalance > 0 ? (dayPnL / (totalBalance - dayPnL)) * 100 : 0
+    // Calculate day change percentage
+    const previousEquity = parseFloat(accountData.last_equity || accountData.lastEquity || accountData.equity || '0')
+    const dayChangePercent = previousEquity > 0 ? ((totalBalance - previousEquity) / previousEquity) * 100 : 0
 
     return {
       totalBalance,
@@ -64,7 +76,11 @@ export default function LiveBalanceDisplay({
       dayPnL,
       cash,
       portfolioValue,
-      dayChangePercent
+      dayChangePercent,
+      realizedPnL: 0, // Placeholder
+      totalTrades: 0, // Placeholder
+      aiTradesCount: 0, // Placeholder
+      manualTradesCount: 0 // Placeholder
     }
   }, [account.data, positions.data])
 
@@ -172,7 +188,7 @@ export default function LiveBalanceDisplay({
             )}
           </div>
         </div> 
-
+{/* 
         <div className={`bg-gray-900/40 rounded-lg p-3 border border-gray-700/50 transition-all duration-300 ${getChangeStyle('investedAmount')}`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-gray-400">Invested</span>
@@ -187,9 +203,9 @@ export default function LiveBalanceDisplay({
               formatCurrency(currentMetrics.investedAmount, false)
             )}
           </div>
-        </div>
+        </div> */}
 
-        <div className={`bg-gray-900/40 rounded-lg p-3 border border-gray-700/50 transition-all duration-300 ${getChangeStyle('totalPnL')}`}>
+        {/* <div className={`bg-gray-900/40 rounded-lg p-3 border border-gray-700/50 transition-all duration-300 ${getChangeStyle('totalPnL')}`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-gray-400">P&L</span>
             {isLoading && <div className="w-3 h-3 border border-purple-400 border-t-transparent rounded-full animate-spin"></div>}
@@ -203,7 +219,7 @@ export default function LiveBalanceDisplay({
               `${currentMetrics.totalPnL >= 0 ? '+' : ''}${formatCurrency(currentMetrics.totalPnL, false)}`
             )}
           </div>
-        </div>
+        </div> */}
       </div>
     )
   }

@@ -5,7 +5,6 @@ import { Providers } from "./providers";
 import { StoreProvider } from "@/store/slices/StoreProvider";
 import { WebSocketProvider } from "@/components/WebSocketProvider";
 import AuthProvider from "@/components/auth/AuthProvider";
-import UserHeader from "@/components/layout/UserHeader";
 import './globals.css';
 
 const geistSans = Geist({
@@ -38,7 +37,6 @@ export default function RootLayout({
             <AuthProvider>
               <WebSocketProvider>
                 <div className="min-h-screen flex flex-col px-4">
-                  <UserHeader />
                   <main className="flex-1 w-full max-w-10xl mx-auto">
                     {children}
                   </main>

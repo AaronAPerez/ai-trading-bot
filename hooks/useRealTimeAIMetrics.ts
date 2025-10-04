@@ -123,10 +123,10 @@ export function useRealTimeAIMetrics() {
         dailyPnL: data.portfolio?.dailyPnL || 0,
 
         // Real-time Alpaca Portfolio Data
-        portfolioValue: data.portfolio?.investedAmount || 0,
-        equity: data.portfolio?.investedAmount || 0,
-        buyingPower: 0, // Will be added in future enhancement
-        cash: 0, // Will be added in future enhancement
+        portfolioValue: data.portfolio?.portfolioValue || 0,
+        equity: data.portfolio?.equity || 0,
+        buyingPower: data.portfolio?.buyingPower || 0,
+        cash: data.portfolio?.cash || 0,
         investedAmount: data.portfolio?.investedAmount || 0,
         unrealizedPnL: data.portfolio?.totalPnL || 0,
 

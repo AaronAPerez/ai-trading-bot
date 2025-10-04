@@ -48,17 +48,23 @@ export const GET = withErrorHandling(async () => {
         .filter(Boolean)
     ).size
 
-    // Calculate AI performance metrics from Alpaca
-    const filledOrders = alpacaOrders.filter((order: any) => order.filled_at)
+    // Calculate AI performance metrics from Supabase learning data (real profitability)
+    // This is more accurate than using order fills
+    const closedTrades = learningData.filter((record: any) =>
+      record.outcome || record.profit_loss != null
+    )
+    const profitableTrades2 = closedTrades.filter((record: any) =>
+      record.outcome === 'profit' || (record.profit_loss && parseFloat(record.profit_loss) > 0)
+    )
+    const aiSuccessRate = closedTrades.length > 0
+      ? (profitableTrades2.length / closedTrades.length) * 100
+      : 0
+
+    // Get filled orders count for trades executed
+    const filledOrders = alpacaOrders.filter((order: any) =>
+      order.filled_at || order.status === 'filled'
+    )
     const totalTrades = filledOrders.length
-    const profitableOrders = filledOrders.filter((order: any) => {
-      const filled_avg_price = parseFloat(order.filled_avg_price || '0')
-      const limit_price = parseFloat(order.limit_price || filled_avg_price.toString())
-      return order.side === 'buy'
-        ? filled_avg_price <= limit_price
-        : filled_avg_price >= limit_price
-    }).length
-    const successRate = totalTrades > 0 ? (profitableOrders / totalTrades) * 100 : 0
 
     // Portfolio metrics
     const totalPnL = alpacaPositions.reduce((sum: number, pos: any) =>
@@ -96,10 +102,10 @@ export const GET = withErrorHandling(async () => {
 
       // AI Performance Metrics (from Alpaca + Supabase)
       performance: {
-        successRate: successRate / 100, // Convert to 0-1 scale
-        tradesExecuted: totalTrades,
-        recommendationsGenerated: totalLearningRecords,
-        riskScore: Math.round(riskScore)
+        successRate: aiSuccessRate / 100, // Convert to 0-1 scale (from Supabase learning data)
+        tradesExecuted: totalTrades, // From Alpaca filled orders
+        recommendationsGenerated: totalLearningRecords, // From Supabase
+        riskScore: Math.round(riskScore) // Calculated from positions
       },
 
       // Portfolio Metrics (from Alpaca)
@@ -107,14 +113,20 @@ export const GET = withErrorHandling(async () => {
         investedAmount: investedAmount,
         positionCount: positionCount,
         totalPnL: totalPnL,
-        dailyPnL: dailyPnL
+        dailyPnL: dailyPnL,
+        equity: alpacaAccount ? parseFloat(alpacaAccount.equity) : 0,
+        buyingPower: alpacaAccount ? parseFloat(alpacaAccount.buying_power || alpacaAccount.buyingPower) : 0,
+        cash: alpacaAccount ? parseFloat(alpacaAccount.cash) : 0,
+        portfolioValue: portfolioValue
       },
 
       // Data sources verification
       dataSources: {
         alpaca: !!alpacaAccount,
         supabase: learningData.length > 0 || !!botMetrics,
-        reactQuery: true
+        reactQuery: true,
+        positions: alpacaPositions.length,
+        orders: alpacaOrders.length
       },
 
       // Timestamp

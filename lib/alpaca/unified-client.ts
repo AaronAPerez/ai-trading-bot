@@ -432,6 +432,8 @@ export class UnifiedAlpacaClient {
 
   /**
    * Place a crypto order
+   * Note: Alpaca expects just the base currency (e.g., 'BTC', 'ETH', 'LTC')
+   * This method automatically converts BTCUSD → BTC format
    */
   async createCryptoOrder(order: {
     symbol: string
@@ -444,12 +446,24 @@ export class UnifiedAlpacaClient {
     stop_price?: number
     client_order_id?: string
   }) {
+    // Convert symbol format: BTCUSD → BTC (Alpaca expects just base currency for crypto)
+    const cleanSymbol = order.symbol
+      .replace(/USD[T]?$/, '')  // Remove USD or USDT suffix
+      .replace(/BUSD$/, '')      // Remove BUSD suffix
+      .replace(/-USD$/, '')      // Remove -USD suffix
+      .replace(/\/USD$/, '')     // Remove /USD suffix
+
+    const cleanOrder = {
+      ...order,
+      symbol: cleanSymbol
+    }
+
     // Crypto trading doesn't require extended_hours since it's 24/7
     return this.request(
       '/v2/orders',
       {
         method: 'POST',
-        body: JSON.stringify(order),
+        body: JSON.stringify(cleanOrder),
       },
       'high'
     )

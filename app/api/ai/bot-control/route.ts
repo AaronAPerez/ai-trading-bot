@@ -5,6 +5,7 @@ import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
 import { supabaseService } from '@/lib/database/supabase-utils'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
 import { RealTimeAITradingEngine } from '@/lib/ai/RealTimeAITradingEngine'
+import { CryptoWatchlistManager } from '@/lib/crypto/CryptoWatchlist'
 
 // Global AI Trading Engine instance
 let aiTradingEngine: RealTimeAITradingEngine | null = null
@@ -437,15 +438,19 @@ async function startBotLogic(sessionId: string, config: any) {
     }
 
     try {
-      // 1. AI Market Analysis (stocks only - crypto has different pricing APIs)
-      const symbols = [
-        'AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA',
-        'SPY', 'QQQ', 'META', 'AMZN', 'NFLX',
-        'AMD', 'INTC', 'DIS', 'BA', 'GE'
-      ]
-      const selectedSymbol = symbols[Math.floor(Math.random() * symbols.length)]
+      // 1. AI Market Analysis - Use watchlist from config (includes stocks + crypto)
+      const configuredWatchlist = config?.watchlist || config?.watchlistSymbols
+      const symbols = configuredWatchlist && configuredWatchlist.length > 0
+        ? configuredWatchlist
+        : CryptoWatchlistManager.getHybridWatchlist(
+            ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'SPY', 'QQQ', 'META', 'AMZN', 'NFLX'],
+            5 // Include top 5 crypto for 24/7 trading
+          )
 
-      console.log(`🎯 AI analyzing ${selectedSymbol} for trading opportunities...`)
+      const selectedSymbol = symbols[Math.floor(Math.random() * symbols.length)]
+      const isCrypto = CryptoWatchlistManager.isCryptoSymbol(selectedSymbol)
+
+      console.log(`🎯 AI analyzing ${selectedSymbol} for trading opportunities... ${isCrypto ? '(CRYPTO 24/7)' : '(STOCK)'}`)
 
       // 2. Generate AI trading signal
       const confidence = 0.6 + Math.random() * 0.35 // 60-95%
@@ -557,7 +562,47 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
   try {
     console.log(`🔄 Executing ${signal} order for ${symbol} via Alpaca API...`)
 
-    // 1. Get account information for risk checks
+    // 1. Determine if this is crypto or stock
+    const isCrypto = CryptoWatchlistManager.isCryptoSymbol(symbol)
+
+    // 2. Check market hours for stocks (crypto trades 24/7)
+    if (!isCrypto) {
+      try {
+        const clock = await alpacaClient.getClock()
+        console.log(`🕒 Market clock check for ${symbol}: is_open=${clock.is_open}`)
+
+        if (!clock.is_open) {
+          console.warn(`⏰ Markets are closed, skipping stock trade for ${symbol} (Crypto trades 24/7)`)
+
+          // Log to Supabase
+          await supabaseService.logBotActivity(userId, {
+            type: 'info',
+            symbol: symbol,
+            message: `Skipped ${signal} trade for ${symbol} - Markets closed`,
+            status: 'skipped',
+            details: JSON.stringify({
+              reason: 'market_closed',
+              symbol,
+              signal,
+              confidence,
+              sessionId
+            })
+          })
+
+          return // Skip stock trades when market is closed
+        }
+
+        console.log(`✅ Markets are open, proceeding with ${symbol} trade`)
+      } catch (clockError) {
+        console.error(`❌ Failed to check market hours for ${symbol}:`, clockError)
+        console.error(`Full error:`, JSON.stringify(clockError, null, 2))
+        return // Skip trade if we can't verify market hours
+      }
+    } else {
+      console.log(`🌐 ${symbol} is crypto - trading 24/7, skipping market hours check`)
+    }
+
+    // 3. Get account information for risk checks
     const account = await alpacaClient.getAccount()
     const buyingPower = parseFloat(account.buying_power)
     const portfolioValue = parseFloat(account.portfolio_value)
@@ -565,20 +610,36 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
     console.log(`💰 Account Status: Equity: $${equity.toFixed(2)}, Buying Power: $${buyingPower.toFixed(2)}`)
 
-    // 2. Check if account is blocked or restricted
+    // 4. Check if account is blocked or restricted
     if (account.trading_blocked || account.account_blocked) {
       throw new Error('Trading is blocked on this account')
     }
 
-    // 3. Get current market price (handle stocks vs crypto)
+    // 5. Get current market price (handle stocks vs crypto)
     let currentPrice = 0
-    const isCrypto = symbol.includes('/')
 
     try {
       if (isCrypto) {
-        // For crypto, use latest trade (quotes may not be available)
-        const trade = await alpacaClient.getLatestTrade(symbol)
-        currentPrice = trade?.trade?.p || trade?.p || 0
+        // For crypto, use crypto-specific endpoints
+        try {
+          const quoteData = await alpacaClient.getCryptoQuote(symbol)
+          const quotes = quoteData?.quotes || quoteData
+          const quote = quotes?.[symbol]
+          currentPrice = quote?.ap || quote?.bp || 0
+
+          console.log(`📊 Crypto quote for ${symbol}:`, quote)
+        } catch (cryptoQuoteError) {
+          console.warn(`⚠️ Crypto quote failed for ${symbol}, trying trade data...`)
+
+          try {
+            const tradeData = await alpacaClient.getCryptoTrade(symbol)
+            const trades = tradeData?.trades || tradeData
+            const trade = trades?.[symbol]
+            currentPrice = trade?.p || 0
+          } catch (cryptoTradeError) {
+            console.error(`❌ Both crypto quote and trade failed for ${symbol}`)
+          }
+        }
 
         if (currentPrice === 0) {
           console.warn(`⚠️ Could not fetch crypto price for ${symbol}, skipping trade`)
@@ -689,17 +750,21 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
       }
     }
 
-    // 7. Execute the trade via Alpaca API
-    console.log(`🚀 Placing ${signal} order: ${quantity} shares of ${symbol}`)
+    // 7. Execute the trade via Alpaca API (use crypto-specific method for crypto symbols)
+    console.log(`🚀 Placing ${signal} order: ${quantity} ${isCrypto ? 'units' : 'shares'} of ${symbol}`)
 
-    const orderResult = await alpacaClient.createOrder({
+    const orderParams = {
       symbol,
       qty: quantity,
       side: signal.toLowerCase() as 'buy' | 'sell',
-      type: 'market',
-      time_in_force: 'day',
+      type: 'market' as const,
+      time_in_force: isCrypto ? ('gtc' as const) : ('day' as const), // Crypto uses GTC, stocks use DAY
       client_order_id: `bot_${sessionId}_${Date.now()}`
-    })
+    }
+
+    const orderResult = isCrypto
+      ? await alpacaClient.createCryptoOrder(orderParams)
+      : await alpacaClient.createOrder(orderParams)
 
     if (orderResult) {
       console.log(`✅ ${signal} order placed successfully!`)
@@ -708,10 +773,12 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
       console.log(`💵 Order Value: $${estimatedValue.toFixed(2)}`)
 
       // 8. Log successful trade to Supabase
+      const assetType = isCrypto ? 'crypto' : 'stock'
+      const units = isCrypto ? 'units' : 'shares'
       await supabaseService.logBotActivity(userId, {
         type: 'trade',
         symbol: symbol,
-        message: `✅ ${signal} ${quantity} shares of ${symbol} @ $${currentPrice.toFixed(2)} - Order placed via Alpaca (ID: ${orderResult.id})`,
+        message: `✅ ${signal} ${quantity} ${units} of ${symbol} @ $${currentPrice.toFixed(2)} - ${assetType.toUpperCase()} order placed via Alpaca (ID: ${orderResult.id})`,
         status: 'completed',
         details: JSON.stringify({
           orderId: orderResult.id,
