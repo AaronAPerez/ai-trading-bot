@@ -138,6 +138,9 @@ interface ExecutionMetrics {
 }
 
 export class EnhancedAutoTradeExecutor {
+  getStats() {
+    throw new Error('Method not implemented.')
+  }
   private config: EnhancedExecutionConfig
   private riskEngine: RiskManagementEngine
   private learningSystem: AILearningSystem
@@ -151,6 +154,7 @@ export class EnhancedAutoTradeExecutor {
   private dailyPnL = 0
   private sessionStartTime = new Date()
   private isExecutionEnabled = true
+  private lastExecutorResetDate: string = ''
   
   // Risk and learning integration
   private lastRiskAssessment: any = null
@@ -1006,12 +1010,10 @@ export class EnhancedAutoTradeExecutor {
   private checkDailyReset(): void {
     const now = new Date()
     const today = now.toDateString()
-    const lastResetKey = 'executor_last_reset'
-    
-    const lastReset = localStorage.getItem(lastResetKey)
-    if (lastReset !== today) {
+
+    if (this.lastExecutorResetDate !== today) {
       this.resetDailyCounters()
-      localStorage.setItem(lastResetKey, today)
+      this.lastExecutorResetDate = today
       console.log('🔄 Daily execution counters reset')
     }
   }

@@ -1,16 +1,32 @@
 // CORE BUSINESS LOGIC LAYER (Trading Engine)
 
 import { AIRecommendationEngine } from './AIRecommendationEngine'
-import { AutoTradeExecutor } from '../executors/AutoTradeExecutor'
+import { EnhancedAutoTradeExecutor } from '../executors/AutoTradeExecutor'
 import { RiskManagementEngine } from './RiskManagementEngine'
 import { AILearningSystem } from '../ml/AILearningSystem'
 
 import { ExecutionResult, AIRecommendation, TradeSignal } from '@/types/trading'
 import { AlpacaClient } from '@/lib/alpaca/client'
 
+interface TradingEngineConfig {
+  execution: any
+  ai: any
+  risk: any
+}
+
+interface TradingCycleResult {
+  cycleId: string
+  duration: number
+  recommendationsGenerated: number
+  tradesExecuted: number
+  riskScore: number
+  success: boolean
+  errors?: string[]
+}
+
 export class RealTimeAITradingEngine {
   private recommendationEngine: AIRecommendationEngine
-  private executionEngine: AutoTradeExecutor
+  private executionEngine: EnhancedAutoTradeExecutor
   private riskEngine: RiskManagementEngine
   private learningSystem: AILearningSystem
   private isRunning = false
@@ -23,10 +39,15 @@ export class RealTimeAITradingEngine {
   ) {
     this.sessionId = `trading_${Date.now()}`
     this.recommendationEngine = new AIRecommendationEngine(config.ai, alpacaClient)
-    this.executionEngine = new AutoTradeExecutor(config.execution, alpacaClient)
     this.riskEngine = new RiskManagementEngine(config.risk)
     this.learningSystem = new AILearningSystem()
-    
+    this.executionEngine = new EnhancedAutoTradeExecutor(
+      config.execution,
+      this.riskEngine,
+      this.learningSystem,
+      alpacaClient
+    )
+
     console.log(`🚀 RealTimeAITradingEngine initialized with session: ${this.sessionId}`)
   }
 

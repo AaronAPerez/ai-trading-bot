@@ -1,11 +1,8 @@
 // src/lib/supabase/init-database.ts
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from './client'
 
 export const initializeUserDatabase = async (user) => {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  )
+  const supabase = createClient()
 
   // Create initial profile
   const { error } = await supabase

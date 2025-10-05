@@ -1,5 +1,5 @@
-import { supabase, createServerSupabaseClient } from '../supabaseClient'
-import { Database } from '../../types/supabase'
+import { supabase, createServerSupabaseClient } from '@/lib/supabase/client'
+import { Database } from '@/types/supabase'
 import { SupabaseClient } from '@supabase/supabase-js'
 
 type Tables = Database['public']['Tables']

@@ -827,13 +827,14 @@ export class RiskManagementEngine {
     console.log('📊 Loading historical portfolio data...')
   }
 
+  private lastResetDate: string = ''
+
   private resetDailyCounters(): void {
     const today = new Date().toDateString()
-    const lastReset = localStorage.getItem('risk_last_reset')
-    
-    if (lastReset !== today) {
+
+    if (this.lastResetDate !== today) {
       this.dailyStartingBalance = 0
-      localStorage.setItem('risk_last_reset', today)
+      this.lastResetDate = today
       console.log('🔄 Daily risk counters reset')
     }
   }
