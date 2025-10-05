@@ -2,6 +2,14 @@
 import { withRateLimit } from '../api/rate-limiter-middleware'
 import { APIErrors } from '../api/error-handler'
 
+// Type definitions for Alpaca API responses
+export interface AlpacaClock {
+  timestamp: string
+  is_open: boolean
+  next_open: string
+  next_close: string
+}
+
 /**
  * Unified Alpaca API client with rate limiting and error handling
  * Replaces inconsistent API calls across the codebase
@@ -305,8 +313,8 @@ export class UnifiedAlpacaClient {
   /**
    * Get market clock
    */
-  async getClock() {
-    return this.request('/v2/clock', {}, 'normal')
+  async getClock(): Promise<AlpacaClock> {
+    return this.request<AlpacaClock>('/v2/clock', {}, 'normal')
   }
 
   /**

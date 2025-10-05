@@ -1,4 +1,4 @@
-import { RealTimeAITradingEngine } from '../engines/RealTimeAITradingEngine'
+import { RealTimeAITradingEngine, TradingEngineConfig } from '../engines/RealTimeAITradingEngine'
 import { AIRecommendationEngine } from '../engines/AIRecommendationEngine'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
 import { EnhancedAutoTradeExecutor } from '../executors/AutoTradeExecutor'
@@ -56,9 +56,6 @@ interface EngineBuilder {
 }
 
 export class TradingEngineFactory {
-  static create(config: any) {
-    throw new Error('Method not implemented.')
-  }
   private static instance: TradingEngineFactory
   private activeEngines = new Map<string, EngineInstance>()
   private engineCounter = 0

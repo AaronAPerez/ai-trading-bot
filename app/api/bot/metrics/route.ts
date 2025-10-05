@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabaseClient'
+
 import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
+import { supabase } from '@/lib/supabase/client'
 
 export async function GET(request: NextRequest) {
   try {

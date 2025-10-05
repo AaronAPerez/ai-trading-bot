@@ -57,7 +57,7 @@ interface OrderExecutionResult {
 // ===============================================
 
 let botActivityLogs: BotActivityLog[] = []
-let botMetrics: BotMetrics = {
+const botMetrics: BotMetrics = {
   symbolsScanned: 0,
   analysisCompleted: 0,
   recommendationsGenerated: 0,
@@ -72,7 +72,7 @@ let botMetrics: BotMetrics = {
   errorCount: 0
 }
 
-let botStartTime = new Date()
+const botStartTime = new Date()
 let isSimulatingActivity = false
 let simulationInterval: NodeJS.Timeout | null = null
 

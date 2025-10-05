@@ -8,10 +8,11 @@ import { AILearningSystem } from '../ml/AILearningSystem'
 import { ExecutionResult, AIRecommendation, TradeSignal } from '@/types/trading'
 import { AlpacaClient } from '@/lib/alpaca/client'
 
-interface TradingEngineConfig {
+export interface TradingEngineConfig {
   execution: any
   ai: any
   risk: any
+  market?: any
 }
 
 interface TradingCycleResult {
