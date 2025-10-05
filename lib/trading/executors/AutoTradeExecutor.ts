@@ -3,6 +3,7 @@ import { AlpacaClient } from '@/lib/alpaca/client'
 import { TradeSignal, Portfolio, MarketData, ExecutionResult, Position } from '../../../types/trading'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
 import { AILearningSystem, TradeOutcome } from '../ml/AILearningSystem'
+import { tradePersistence } from '@/lib/services/TradePersistenceService'
 
 
 interface EnhancedExecutionConfig {
@@ -493,6 +494,30 @@ export class EnhancedAutoTradeExecutor {
         )
       }
 
+      // Save to Supabase database
+      await tradePersistence.saveTradeExecution({
+        symbol,
+        side: signal.action.toLowerCase() as 'buy' | 'sell',
+        quantity: actualQuantity,
+        price: actualPrice,
+        notionalValue,
+        orderId: execution.orderId,
+        status: execution.fillStatus,
+        confidence: signal.confidence,
+        aiScore: signal.metadata?.aiScore || 0,
+        strategy: signal.strategy,
+        riskScore: decision.riskScore,
+        executionTime,
+        slippage: actualSlippage,
+        fees: execution.fees,
+        metadata: {
+          sessionId: orderResponse.order?.client_order_id,
+          signalType: signal.metadata?.signalType,
+          targetPrice: signal.metadata?.targetPrice,
+          stopLoss: signal.metadata?.stopLoss
+        }
+      })
+
       console.log(`✅ TRADE EXECUTED: ${symbol} ${signal.action} - $${notionalValue.toLocaleString()} @ $${actualPrice.toFixed(4)}`)
       console.log(`   📊 Execution Time: ${executionTime}ms | Slippage: ${(actualSlippage * 100).toFixed(3)}% | Fill: ${execution.fillStatus}`)
 
@@ -885,8 +910,19 @@ export class EnhancedAutoTradeExecutor {
     if (executionResult.shouldExecute) {
       // Successful execution - metrics updated during execution
     } else {
-      // Rejected execution
+      // Rejected execution - log to Supabase for analytics
       console.log(`📊 Trade rejected: ${signal.symbol} - ${executionResult.reason}`)
+
+      await tradePersistence.saveRejectedTrade(
+        signal.symbol,
+        executionResult.reason,
+        signal.confidence,
+        {
+          riskScore: executionResult.riskScore,
+          strategy: signal.strategy,
+          action: signal.action
+        }
+      )
     }
   }
 
