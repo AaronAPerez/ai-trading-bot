@@ -4,8 +4,20 @@ import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { useEffect } from 'react'
 
+interface AlpacaOrder {
+  id: string
+  symbol: string
+  side: 'buy' | 'sell'
+  qty: string
+  filled_qty?: string
+  filled_avg_price?: string
+  status: 'filled' | 'canceled' | 'pending' | 'partially_filled' | 'accepted' | 'new'
+  created_at: string
+  updated_at?: string
+}
+
 export default function LiveTradesDisplay() {
-  const { data: orders, isLoading, error, refetch } = useQuery({
+  const { data: orders, isLoading, error, refetch } = useQuery<AlpacaOrder[]>({
     queryKey: ['alpacaOrders'],
     queryFn: async () => {
       const res = await fetch('/api/alpaca/orders?limit=20')
@@ -28,10 +40,10 @@ export default function LiveTradesDisplay() {
     <div className="space-y-4">
       {isLoading ? (
         <div className="animate-pulse bg-gray-700 h-24 rounded-lg"></div>
-      ) : orders.length === 0 ? (
+      ) : !orders || orders.length === 0 ? (
         <div className="text-gray-400 text-sm">No recent trades found.</div>
       ) : (
-        orders.map((order: any) => (
+        orders.map((order) => (
           <div
             key={order.id}
             className={`border border-gray-700 rounded-lg p-4 bg-gray-800/40 hover:bg-gray-800/60 transition-all duration-200`}
