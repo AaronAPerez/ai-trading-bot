@@ -642,24 +642,29 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
     try {
       if (isCrypto) {
+        // For crypto, convert symbol format: BTCUSD -> BTC/USD
+        const cryptoSymbolWithSlash = symbol.replace(/^([A-Z]+)(USD|USDT|USDC)$/, '$1/$2')
+        console.log(`🔄 Converting crypto symbol: ${symbol} -> ${cryptoSymbolWithSlash}`)
+
         // For crypto, use crypto-specific endpoints
         try {
-          const quoteData = await alpacaClient.getCryptoQuote(symbol)
+          const quoteData = await alpacaClient.getCryptoQuote(cryptoSymbolWithSlash)
           const quotes = quoteData?.quotes || quoteData
-          const quote = quotes?.[symbol]
+          const quote = quotes?.[cryptoSymbolWithSlash]
           currentPrice = quote?.ap || quote?.bp || 0
 
-          console.log(`📊 Crypto quote for ${symbol}:`, quote)
+          console.log(`📊 Crypto quote for ${cryptoSymbolWithSlash}:`, quote)
         } catch (cryptoQuoteError) {
-          console.warn(`⚠️ Crypto quote failed for ${symbol}, trying trade data...`)
+          console.warn(`⚠️ Crypto quote failed for ${cryptoSymbolWithSlash}, trying trade data...`)
 
           try {
-            const tradeData = await alpacaClient.getCryptoTrade(symbol)
+            const tradeData = await alpacaClient.getCryptoTrade(cryptoSymbolWithSlash)
             const trades = tradeData?.trades || tradeData
-            const trade = trades?.[symbol]
+            const trade = trades?.[cryptoSymbolWithSlash]
             currentPrice = trade?.p || 0
+            console.log(`📊 Crypto trade for ${cryptoSymbolWithSlash}:`, trade)
           } catch (cryptoTradeError) {
-            console.error(`❌ Both crypto quote and trade failed for ${symbol}`)
+            console.error(`❌ Both crypto quote and trade failed for ${cryptoSymbolWithSlash}`, cryptoTradeError)
           }
         }
 

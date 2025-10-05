@@ -1,7 +1,9 @@
+
+import { AlpacaClient } from '@/lib/alpaca/client'
 import { TradeSignal, Portfolio, MarketData, ExecutionResult, Position } from '../../../types/trading'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
 import { AILearningSystem, TradeOutcome } from '../ml/AILearningSystem'
-import { AlpacaClient } from '../../alpaca/AlpacaClient'
+
 
 interface EnhancedExecutionConfig {
   autoExecuteEnabled: boolean

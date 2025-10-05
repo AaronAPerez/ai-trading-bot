@@ -26,6 +26,7 @@ import { PerformanceChart } from '../charts/PerformanceChart'
 import { RiskMetricsChart } from '../charts/RiskMetricsChart'
 import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
 import LiveAIActivity from './LiveAIActivity'
+import { useQuery } from '@tanstack/react-query'
 
 // Default bot configuration with auto-execution enabled
 const defaultBotConfig = {
@@ -73,6 +74,7 @@ export default function AITradingDashboard() {
     startTime: null as Date | null,
     config: defaultBotConfig
   })
+  
 
   // Only poll Alpaca data when AI bot is active to reduce unnecessary API calls
   const account = useAlpacaAccount(persistentBotState.isRunning ? 5000 : undefined)
@@ -135,6 +137,20 @@ export default function AITradingDashboard() {
     }
   }, [tradingInterval])
 
+
+  const { data: orders, isLoading } = useQuery({
+  queryKey: ['alpacaOrders'],
+  queryFn: async () => {
+    const res = await fetch('/api/alpaca/orders?limit=20')
+    const json = await res.json()
+    return json.orders
+  },
+  refetchInterval: persistentBotState.isRunning ? 30000 : false
+})
+
+
+// const totalPnL = positions_data.reduce(...)
+// const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
 
   // Load persistent state from localStorage on mount
   useEffect(() => {
@@ -300,6 +316,10 @@ export default function AITradingDashboard() {
           </div>
         </div>
 
+      
+
+
+
         <div className="flex items-center space-x-4">
           {/* Generate Real Data Button */}
           {/* <button
@@ -387,6 +407,44 @@ export default function AITradingDashboard() {
           </button>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+  <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
+    <h4 className="text-sm text-gray-400 mb-1">Total Equity</h4>
+    <div className="text-xl font-bold text-white">
+      {account.isLoading ? (
+        <div className="animate-pulse bg-gray-600 h-6 w-24 rounded"></div>
+      ) : (
+        `$${parseFloat(account.data?.equity || '0').toFixed(2)}`
+      )}
+    </div>
+  </div>
+
+  <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
+    <h4 className="text-sm text-gray-400 mb-1">Buying Power</h4>
+    <div className="text-xl font-bold text-white">
+      {account.isLoading ? (
+        <div className="animate-pulse bg-gray-600 h-6 w-24 rounded"></div>
+      ) : (
+        `$${parseFloat(account.data?.buying_power || '0').toFixed(2)}`
+      )}
+    </div>
+  </div>
+
+  <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
+    <h4 className="text-sm text-gray-400 mb-1">Open Positions</h4>
+    <div className="text-xl font-bold text-white">
+      {positions.isLoading ? (
+        <div className="animate-pulse bg-gray-600 h-6 w-12 rounded"></div>
+      ) : (
+        positions.data?.length || 0
+      )}
+    </div>
+  </div>
+</div>
+
+
+
 
       {/* Live Portfolio Balance */}
       <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
@@ -663,6 +721,7 @@ export default function AITradingDashboard() {
         {/* Live Activity Feed - Real-time Console Capture */}
         <LiveAIActivity />
       </div>
+      
 
     
       {/* Advanced AI Insights Dashboard */}

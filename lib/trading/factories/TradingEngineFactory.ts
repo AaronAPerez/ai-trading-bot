@@ -56,6 +56,9 @@ interface EngineBuilder {
 }
 
 export class TradingEngineFactory {
+  static create(config: any) {
+    throw new Error('Method not implemented.')
+  }
   private static instance: TradingEngineFactory
   private activeEngines = new Map<string, EngineInstance>()
   private engineCounter = 0
@@ -681,6 +684,9 @@ class TradingEngineBuilder implements EngineBuilder {
 // ===============================================
 
 export class TradingEngineManager {
+  static getActiveEngine() {
+    throw new Error('Method not implemented.')
+  }
   private static factory = TradingEngineFactory.getInstance()
 
   /**
