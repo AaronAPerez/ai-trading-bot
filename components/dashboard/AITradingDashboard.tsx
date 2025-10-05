@@ -28,6 +28,54 @@ import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
 import LiveAIActivity from './LiveAIActivity'
 import { useQuery } from '@tanstack/react-query'
 
+// Type definitions
+interface AlpacaPosition {
+  symbol: string
+  qty: number
+  market_value: number
+  current_price: number
+  avg_entry_price: number
+  unrealized_pl: number
+  unrealized_plpc: number
+  side: 'long' | 'short'
+}
+
+interface BotConfig {
+  alpaca: {
+    baseUrl: string
+    apiKey: string
+    secretKey: string
+  }
+  trading: {
+    maxPositionSize: number
+    riskLevel: number
+  }
+  mode: 'CONSERVATIVE' | 'BALANCED' | 'AGGRESSIVE'
+  strategies: Array<{
+    id: string
+    name: string
+    enabled: boolean
+    weight: number
+  }>
+  riskManagement: {
+    maxPositionSize: number
+    maxDailyLoss: number
+    maxDrawdown: number
+    minConfidence: number
+    stopLossPercent: number
+    takeProfitPercent: number
+  }
+  executionSettings: {
+    autoExecute: boolean
+    minConfidenceForOrder: number
+  }
+  maxPositionSize: number
+  stopLossPercent: number
+  takeProfitPercent: number
+  minimumConfidence: number
+  watchlistSymbols: string[]
+}
+
 // Default bot configuration with auto-execution enabled
 const defaultBotConfig = {
   alpaca: {
@@ -201,7 +249,7 @@ export default function AITradingDashboard() {
   }, [stopTradingMonitoring])
 
   // Enhanced start function that starts both bot and activity monitoring
-  const handleStart = async (config: any) => {
+  const handleStart = async (config: BotConfig) => {
     await tradingBot.startBot(config)
     // REMOVED: aiActivity.startSimulation() - Using real RealTimeAITradingEngine only
 
@@ -795,7 +843,7 @@ export default function AITradingDashboard() {
         {/* Price Charts for Top Positions */}
         {positions.data && positions.data.length > 0 && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {positions.data.slice(0, 4).map((position: any) => (
+            {(positions.data as AlpacaPosition[]).slice(0, 4).map((position) => (
               <PriceChart
                 key={position.symbol}
                 symbol={position.symbol}

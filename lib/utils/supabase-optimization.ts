@@ -37,32 +37,45 @@ export class SupabaseOptimizer {
   optimizeLearningData(data: any): any {
     if (!data) return data
 
-    // Remove unnecessary fields and compress data
+    // Map to actual database schema
     const optimized = {
-      // Keep only essential fields
+      // Required fields
       user_id: data.user_id,
-      trade_id: this.truncateString(data.trade_id, 50),
       symbol: data.symbol,
       strategy_used: this.truncateString(data.strategy_used, 30),
-      confidence_level: Math.round(data.confidence_level * 100) / 100, // 2 decimal places
 
-      // Compress market conditions
+      // Map confidence_level to confidence_score (database column name)
+      confidence_score: Math.round((data.confidence_level || 0) * 100) / 100,
+
+      // Determine outcome from trade data
+      outcome: this.determineOutcome(data.trade_outcome),
+
+      // Calculate profit_loss from trade data
+      profit_loss: Math.round((data.trade_outcome?.pnl || data.trade_outcome?.p || 0) * 100) / 100,
+
+      // Optional fields
+      trade_id: this.truncateString(data.trade_id, 50),
+      sentiment_score: data.sentiment_data?.score || data.sentiment_data?.s || null,
+
+      // Compress JSONB fields
       market_conditions: this.compressMarketConditions(data.market_conditions),
-
-      // Compress trade outcome
-      trade_outcome: this.compressTradeOutcome(data.trade_outcome),
-
-      // Limit learning data size
-      learning_data: this.compressLearningData(data.learning_data),
-
-      // Compress technical indicators
       technical_indicators: this.compressTechnicalIndicators(data.technical_indicators),
 
-      // Compress sentiment data
-      sentiment_data: this.compressSentimentData(data.sentiment_data)
+      // Map learning_data to learned_patterns (database column name)
+      learned_patterns: this.compressLearningData(data.learning_data)
     }
 
     return optimized
+  }
+
+  private determineOutcome(tradeOutcome: any): 'profit' | 'loss' | 'breakeven' {
+    if (!tradeOutcome) return 'breakeven'
+
+    const pnl = tradeOutcome.pnl || tradeOutcome.p || 0
+
+    if (pnl > 0) return 'profit'
+    if (pnl < 0) return 'loss'
+    return 'breakeven'
   }
 
   private compressMarketConditions(conditions: any): any {
