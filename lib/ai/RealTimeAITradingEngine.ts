@@ -3,10 +3,54 @@ import { AlpacaSymbolManager } from '@/lib/symbols/AlpacaSymbolManager'
 import { MLPredictionEngine } from './MLPredictionEngine'
 import { AdvancedRiskManager } from './AdvancedRiskManager'
 import { PortfolioOptimizer } from './PortfolioOptimizer'
-import { AutoTradeExecutor, ExecutionConfig } from './AutoTradeExecutor'
+import { EnhancedAutoTradeExecutor } from '@/lib/trading/executors/AutoTradeExecutor'
+import { RiskManagementEngine } from '@/lib/trading/engines/RiskManagementEngine'
+import { AILearningSystem } from '@/lib/trading/ml/AILearningSystem'
 import { MarketData, TradeSignal, Portfolio, Position, TradeOrder } from '@/types/trading'
 import { ConfigValidator } from '@/lib/config/ConfigValidator'
 import { PositionSizingManager } from './PositionSizingManager'
+
+// Enhanced Execution Config interface
+interface ExecutionConfig {
+  autoExecuteEnabled: boolean
+  confidenceThresholds: {
+    minimum: number
+    conservative: number
+    aggressive: number
+    maximum: number
+  }
+  positionSizing: {
+    baseSize: number
+    maxSize: number
+    confidenceMultiplier: number
+    riskAdjustmentEnabled: boolean
+    kellyEnabled: boolean
+  }
+  riskControls: {
+    maxDailyTrades: number
+    maxOpenPositions: number
+    maxDailyLoss: number
+    cooldownPeriod: number
+    maxConcurrentExecutions: number
+  }
+  executionRules: {
+    marketHoursOnly: boolean
+    avoidEarnings: boolean
+    volumeThreshold: number
+    spreadThreshold: number
+    cryptoTradingEnabled: boolean
+    afterHoursTrading: boolean
+    weekendTrading: boolean
+    slippageProtection: boolean
+    partialFillHandling: boolean
+  }
+  learningIntegration: {
+    enabled: boolean
+    adaptiveThresholds: boolean
+    patternAwareness: boolean
+    performanceFeedback: boolean
+  }
+}
 
 interface AITradingConfig {
   maxPositionsCount: number
@@ -65,7 +109,9 @@ export class RealTimeAITradingEngine {
   private mlEngine: MLPredictionEngine
   private riskManager: AdvancedRiskManager
   private portfolioOptimizer: PortfolioOptimizer
-  private autoTradeExecutor: AutoTradeExecutor
+  private autoTradeExecutor: EnhancedAutoTradeExecutor
+  private riskEngine: RiskManagementEngine
+  private learningSystem: AILearningSystem
 
   private config: AITradingConfig
   private activeWatchlist: string[] = []
@@ -100,11 +146,32 @@ export class RealTimeAITradingEngine {
       console.warn('⚠️ Auto-execution is disabled')
     }
 
-    this.autoTradeExecutor = new AutoTradeExecutor(executionConfig)
+    // Initialize RiskManagementEngine and AILearningSystem
+    this.riskEngine = new RiskManagementEngine({
+      maxDailyLoss: 0.03,
+      maxDrawdown: 0.15,
+      maxPositionSize: 0.08,
+      maxSectorExposure: 0.25,
+      maxCorrelation: 0.70,
+      stopLossRequired: true
+    })
+
+    this.learningSystem = new AILearningSystem({
+      learningRate: 0.1,
+      maxHistorySize: 10000
+    })
+
+    // Create EnhancedAutoTradeExecutor with proper dependencies
+    this.autoTradeExecutor = new EnhancedAutoTradeExecutor(
+      executionConfig,
+      this.riskEngine,
+      this.learningSystem,
+      alpacaClient
+    )
 
     this.config = config
 
-    console.log('✅ AI Trading Engine initialized with enhanced configuration validation')
+    console.log('✅ AI Trading Engine initialized with EnhancedAutoTradeExecutor')
   }
 
   private getDefaultExecutionConfig(): ExecutionConfig {
@@ -119,13 +186,16 @@ export class RealTimeAITradingEngine {
       positionSizing: {
         baseSize: 0.03,            // 3% base position size (increased)
         maxSize: 0.12,             // 12% maximum position size (increased)
-        confidenceMultiplier: 2.5   // Higher confidence multiplier effect
+        confidenceMultiplier: 2.5, // Higher confidence multiplier effect
+        riskAdjustmentEnabled: true, // ✅ Enable risk-based position sizing
+        kellyEnabled: true          // ✅ Enable Kelly Criterion for optimal sizing
       },
       riskControls: {
         maxDailyTrades: 200,       // Max 200 trades per day (increased for maximum automation)
         maxOpenPositions: 30,      // Max 30 open positions (increased)
         maxDailyLoss: 0.05,        // 5% max daily loss
-        cooldownPeriod: 3          // 3 minutes between trades for same symbol (reduced)
+        cooldownPeriod: 3,         // 3 minutes between trades for same symbol (reduced)
+        maxConcurrentExecutions: 10 // Max 10 concurrent trade executions
       },
       executionRules: {
         marketHoursOnly: false,        // ✅ Allow 24/7 trading for crypto
@@ -135,7 +205,14 @@ export class RealTimeAITradingEngine {
         cryptoTradingEnabled: true,    // ✅ Enable crypto trading
         afterHoursTrading: true,       // ✅ Enable after hours trading
         weekendTrading: true,          // ✅ Enable weekend trading for crypto
-        cryptoSpreadThreshold: 0.06    // Higher spread tolerance for crypto (6%)
+        slippageProtection: true,      // ✅ Protect against excessive slippage
+        partialFillHandling: true      // ✅ Handle partial fills intelligently
+      },
+      learningIntegration: {
+        enabled: true,                 // ✅ Enable AI learning integration
+        adaptiveThresholds: true,      // ✅ Adapt confidence thresholds based on performance
+        patternAwareness: true,        // ✅ Use pattern recognition for better decisions
+        performanceFeedback: true      // ✅ Learn from trade outcomes
       }
     }
   }
@@ -163,6 +240,9 @@ export class RealTimeAITradingEngine {
     try {
       // Verify Alpaca connection
       await this.verifyConnection()
+
+      // Initialize EnhancedAutoTradeExecutor with risk engine and learning system
+      await this.autoTradeExecutor.initialize()
 
       // Initialize watchlist
       await this.initializeWatchlist()
@@ -504,7 +584,6 @@ export class RealTimeAITradingEngine {
 
         const executionResult = await this.autoTradeExecutor.evaluateAndExecute(
           signal,
-          decision.marketData,
           portfolio,
           decision.aiScore
         )
@@ -790,10 +869,16 @@ export class RealTimeAITradingEngine {
       const account = await this.alpacaClient.getAccount()
       const positions = await this.alpacaClient.getPositions()
 
+      // FIXED: Use correct Alpaca API property names
+      const equity = parseFloat(account.equity || account.portfolio_value || '0')
+      const cash = parseFloat(account.cash || account.buying_power || '0')
+      const buyingPower = parseFloat(account.buying_power || '0')
+
       const portfolio: Portfolio = {
-        totalValue: account.totalBalance,
-        cashBalance: account.cashBalance,
-        equity: account.totalBalance - account.cashBalance,
+        totalValue: equity,
+        cashBalance: cash,
+        equity: equity,
+        buyingPower: buyingPower,
         totalPnL: positions.reduce((sum, pos) => sum + pos.unrealizedPnL, 0),
         dayPnL: 0, // Would need to calculate from daily change
         unrealizedPnL: positions.reduce((sum, pos) => sum + pos.unrealizedPnL, 0),

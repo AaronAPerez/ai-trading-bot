@@ -1,5 +1,5 @@
-import { supabase, createServerSupabaseClient } from '../supabaseClient'
-import { Database } from '../../types/supabase'
+import { supabase, createServerSupabaseClient } from '@/lib/supabase/client'
+import { Database } from '@/types/supabase'
 import { SupabaseClient } from '@supabase/supabase-js'
 
 type Tables = Database['public']['Tables']
@@ -20,7 +20,11 @@ export class SupabaseService {
   }
 
   // Public getter for the client with proper access
+  // Use service role client on server-side to bypass RLS
   get client(): SupabaseClient<Database> {
+    if (typeof window === 'undefined') {
+      return this.getServerClient()
+    }
     return this._client
   }
 
@@ -37,7 +41,7 @@ export class SupabaseService {
   }
 
   async saveTradeHistory(trade: Tables['trade_history']['Insert']) {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('trade_history')
       .insert(trade)
       .select()
@@ -49,7 +53,7 @@ export class SupabaseService {
 
 
   async updateBotMetrics(userId: string, metrics: Tables['bot_metrics']['Update']) {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('bot_metrics')
       .upsert({
         user_id: userId,
@@ -64,7 +68,7 @@ export class SupabaseService {
   }
 
   async getBotMetrics(userId: string): Promise<BotMetrics | null> {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('bot_metrics')
       .select('*')
       .eq('user_id', userId)
@@ -75,7 +79,7 @@ export class SupabaseService {
   }
 
   async logBotActivity(log: Tables['bot_activity_logs']['Insert']) {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('bot_activity_logs')
       .insert(log)
       .select()
@@ -86,7 +90,7 @@ export class SupabaseService {
   }
 
   async getBotActivityLogs(userId: string, limit = 100): Promise<BotActivityLog[]> {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('bot_activity_logs')
       .select('*')
       .eq('user_id', userId)
@@ -98,7 +102,7 @@ export class SupabaseService {
   }
 
   async saveAILearningData(learning: Tables['ai_learning_data']['Insert']) {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('ai_learning_data')
       .insert(learning)
       .select()
@@ -109,7 +113,7 @@ export class SupabaseService {
   }
 
   async getAILearningData(userId: string, symbol?: string): Promise<AILearningData[]> {
-    let query = this._client
+    let query = this.client
       .from('ai_learning_data')
       .select('*')
       .eq('user_id', userId)
@@ -126,7 +130,7 @@ export class SupabaseService {
   }
 
   async saveMarketSentiment(sentiment: Tables['market_sentiment']['Insert']) {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('market_sentiment')
       .insert(sentiment)
       .select()
@@ -137,7 +141,7 @@ export class SupabaseService {
   }
 
   async getLatestMarketSentiment(symbol: string): Promise<MarketSentiment | null> {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('market_sentiment')
       .select('*')
       .eq('symbol', symbol)
@@ -150,7 +154,7 @@ export class SupabaseService {
   }
 
   async createOrUpdateProfile(profile: Tables['profiles']['Insert']) {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('profiles')
       .upsert(profile)
       .select()
@@ -161,7 +165,7 @@ export class SupabaseService {
   }
 
   async getProfile(userId: string): Promise<Profile | null> {
-    const { data, error } = await this._client
+    const { data, error } = await this.client
       .from('profiles')
       .select('*')
       .eq('user_id', userId)
@@ -172,7 +176,7 @@ export class SupabaseService {
   }
 
   async getPortfolioSummary(userId: string) {
-    const { data: trades, error } = await this._client
+    const { data: trades, error } = await this.client
       .from('trade_history')
       .select('*')
       .eq('user_id', userId)
@@ -208,7 +212,7 @@ export class SupabaseService {
 
   async getPositions(userId: string) {
     try {
-      const { data, error } = await this._client
+      const { data, error } = await this.client
         .from('trade_history')
         .select('*')
         .eq('user_id', userId)
@@ -225,7 +229,7 @@ export class SupabaseService {
 
   async getTradeHistory(userId: string, limit: number = 100, since?: Date) {
     try {
-      let query = this._client
+      let query = this.client
         .from('trade_history')
         .select('*')
         .eq('user_id', userId)
@@ -248,7 +252,7 @@ export class SupabaseService {
 
   async getAILearningData(userId: string) {
     try {
-      const { data, error } = await this._client
+      const { data, error } = await this.client
         .from('ai_learning_data')
         .select('*')
         .eq('user_id', userId)
@@ -264,7 +268,7 @@ export class SupabaseService {
 
   async getRecentLearningData(userId: string, limit: number = 1000) {
     try {
-      const { data, error} = await this._client
+      const { data, error} = await this.client
         .from('ai_learning_data')
         .select('*')
         .eq('user_id', userId)
@@ -281,7 +285,7 @@ export class SupabaseService {
 
   async getRecentActivity(userId: string, limit: number = 50) {
     try {
-      const { data, error } = await this._client
+      const { data, error } = await this.client
         .from('bot_activity_logs')
         .select('*')
         .eq('user_id', userId)
@@ -298,7 +302,7 @@ export class SupabaseService {
 
   async getBotMetrics(userId: string) {
     try {
-      const { data, error } = await this._client
+      const { data, error } = await this.client
         .from('bot_metrics')
         .select('*')
         .eq('user_id', userId)
@@ -431,7 +435,7 @@ export class SupabaseService {
 
   async testConnection(): Promise<boolean> {
     try {
-      const { data, error } = await this._client
+      const { data, error } = await this.client
         .from('profiles')
         .select('count(*)')
         .limit(1)

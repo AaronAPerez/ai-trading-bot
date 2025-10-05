@@ -2,7 +2,7 @@
 
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../supabaseClient'
+import { supabase } from '@/lib/supabase/client'
 import { alpacaClient } from '../alpaca/unified-client'
 
 

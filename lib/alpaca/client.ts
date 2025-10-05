@@ -9,6 +9,9 @@ export interface AlpacaConfig {
 }
 
 export class AlpacaClient {
+  getMarketData(symbol: string) {
+    throw new Error('Method not implemented.')
+  }
   private client: Alpaca
   private config: AlpacaConfig
 

@@ -43,7 +43,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           symbol: order.symbol,
           side: order.side.toLowerCase(),
           qty: order.quantity,
-          type: order.orderType?.toLowerCase() || 'market'
+          type: order.orderType?.toLowerCase() || 'market',
+          time_in_force: 'day'
         })
       } catch (alpacaError) {
         console.warn('Alpaca paper trading failed, using simulation:', alpacaError)

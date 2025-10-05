@@ -1,4 +1,4 @@
-import { RealTimeAITradingEngine } from '../engines/RealTimeAITradingEngine'
+import { RealTimeAITradingEngine, TradingEngineConfig } from '../engines/RealTimeAITradingEngine'
 import { AIRecommendationEngine } from '../engines/AIRecommendationEngine'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
 import { EnhancedAutoTradeExecutor } from '../executors/AutoTradeExecutor'
@@ -681,6 +681,9 @@ class TradingEngineBuilder implements EngineBuilder {
 // ===============================================
 
 export class TradingEngineManager {
+  static getActiveEngine() {
+    throw new Error('Method not implemented.')
+  }
   private static factory = TradingEngineFactory.getInstance()
 
   /**

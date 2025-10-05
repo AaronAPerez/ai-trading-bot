@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/Button'
+
 import useAIBotActivity from '@/hooks/useAIBotActivity'
 
 // Import the BotActivityLog type
@@ -33,6 +33,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react'
+import { Button } from '../ui/button'
 
 interface AIBotActivityProps {
   refreshInterval?: number

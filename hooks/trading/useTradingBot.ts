@@ -100,7 +100,7 @@ export const useTradingBot = () => {
               takeProfitPercent: 0.10
             },
             executionSettings: {
-              autoExecute: config.executionSettings?.autoExecute || false,
+              autoExecute: config.executionSettings?.autoExecute !== false, // Default to TRUE for auto-execution
               minConfidenceForOrder: 0.80,
               maxOrdersPerDay: 20,
               orderSizePercent: 0.02, // 2% of portfolio per trade

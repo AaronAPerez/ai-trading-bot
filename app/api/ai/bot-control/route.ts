@@ -371,11 +371,16 @@ async function startBotLogic(sessionId: string, config: any) {
     aiTradingEngine = new RealTimeAITradingEngine(alpacaClient, aiConfig)
     botState.aiEngine = aiTradingEngine
 
+    console.log('🚀 CRITICAL: About to start RealTimeAITradingEngine...')
+    console.log('🚀 CRITICAL: Auto-execution config:', aiConfig.autoExecution)
+
     // Start the AI engine
     await aiTradingEngine.startAITrading()
 
-    console.log('✅ RealTimeAITradingEngine started successfully')
-    console.log(`🎯 Watching ${aiConfig.watchlist.length} symbols with AI learning enabled`)
+    console.log('✅ CRITICAL: RealTimeAITradingEngine started successfully!')
+    console.log(`🎯 CRITICAL: Watching ${aiConfig.watchlist.length} symbols with AI learning enabled`)
+    console.log(`⚡ CRITICAL: Auto-execution ENABLED - ${aiConfig.autoExecution.autoExecuteEnabled}`)
+    console.log(`⚡ CRITICAL: Trading will begin in 1 minute...`)
 
     // Log bot start with AI engine info
     await supabaseService.logBotActivity(userId, {
@@ -440,12 +445,28 @@ async function startBotLogic(sessionId: string, config: any) {
     try {
       // 1. AI Market Analysis - Use watchlist from config (includes stocks + crypto)
       const configuredWatchlist = config?.watchlist || config?.watchlistSymbols
-      const symbols = configuredWatchlist && configuredWatchlist.length > 0
+      let symbols = configuredWatchlist && configuredWatchlist.length > 0
         ? configuredWatchlist
         : CryptoWatchlistManager.getHybridWatchlist(
             ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'SPY', 'QQQ', 'META', 'AMZN', 'NFLX'],
             5 // Include top 5 crypto for 24/7 trading
           )
+
+      // 🔥 CRITICAL FIX: If markets are closed, ONLY trade crypto (24/7)
+      const marketClock = await alpacaClient.getClock()
+      const isMarketOpen = marketClock?.is_open || false
+
+      if (!isMarketOpen) {
+        // Filter to ONLY crypto symbols when markets are closed
+        const cryptoSymbols = symbols.filter(s => CryptoWatchlistManager.isCryptoSymbol(s))
+        if (cryptoSymbols.length > 0) {
+          symbols = cryptoSymbols
+          console.log(`🌙 Markets CLOSED - Trading ONLY crypto (${cryptoSymbols.length} symbols available)`)
+        } else {
+          console.log(`⏰ Markets CLOSED and no crypto in watchlist - skipping this cycle`)
+          return // Skip this cycle if no crypto available
+        }
+      }
 
       const selectedSymbol = symbols[Math.floor(Math.random() * symbols.length)]
       const isCrypto = CryptoWatchlistManager.isCryptoSymbol(selectedSymbol)
@@ -574,18 +595,19 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
         if (!clock.is_open) {
           console.warn(`⏰ Markets are closed, skipping stock trade for ${symbol} (Crypto trades 24/7)`)
 
-          // Log to Supabase
+          // Log to Supabase - FIXED: Use 'completed' instead of 'skipped'
           await supabaseService.logBotActivity(userId, {
             type: 'info',
             symbol: symbol,
-            message: `Skipped ${signal} trade for ${symbol} - Markets closed`,
-            status: 'skipped',
+            message: `Skipped ${signal} trade for ${symbol} - Markets closed, will trade crypto instead`,
+            status: 'completed',
             details: JSON.stringify({
-              reason: 'market_closed',
+              reason: 'market_closed_stock_skipped',
               symbol,
               signal,
               confidence,
-              sessionId
+              sessionId,
+              note: 'Stock trade skipped - markets closed, crypto trading 24/7'
             })
           })
 
@@ -620,24 +642,29 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
     try {
       if (isCrypto) {
+        // For crypto, convert symbol format: BTCUSD -> BTC/USD
+        const cryptoSymbolWithSlash = symbol.replace(/^([A-Z]+)(USD|USDT|USDC)$/, '$1/$2')
+        console.log(`🔄 Converting crypto symbol: ${symbol} -> ${cryptoSymbolWithSlash}`)
+
         // For crypto, use crypto-specific endpoints
         try {
-          const quoteData = await alpacaClient.getCryptoQuote(symbol)
+          const quoteData = await alpacaClient.getCryptoQuote(cryptoSymbolWithSlash)
           const quotes = quoteData?.quotes || quoteData
-          const quote = quotes?.[symbol]
+          const quote = quotes?.[cryptoSymbolWithSlash]
           currentPrice = quote?.ap || quote?.bp || 0
 
-          console.log(`📊 Crypto quote for ${symbol}:`, quote)
+          console.log(`📊 Crypto quote for ${cryptoSymbolWithSlash}:`, quote)
         } catch (cryptoQuoteError) {
-          console.warn(`⚠️ Crypto quote failed for ${symbol}, trying trade data...`)
+          console.warn(`⚠️ Crypto quote failed for ${cryptoSymbolWithSlash}, trying trade data...`)
 
           try {
-            const tradeData = await alpacaClient.getCryptoTrade(symbol)
+            const tradeData = await alpacaClient.getCryptoTrade(cryptoSymbolWithSlash)
             const trades = tradeData?.trades || tradeData
-            const trade = trades?.[symbol]
+            const trade = trades?.[cryptoSymbolWithSlash]
             currentPrice = trade?.p || 0
+            console.log(`📊 Crypto trade for ${cryptoSymbolWithSlash}:`, trade)
           } catch (cryptoTradeError) {
-            console.error(`❌ Both crypto quote and trade failed for ${symbol}`)
+            console.error(`❌ Both crypto quote and trade failed for ${cryptoSymbolWithSlash}`, cryptoTradeError)
           }
         }
 

@@ -17,11 +17,18 @@ export async function POST(request: Request) {
     
     switch (action) {
       case 'start':
-        const engine = TradingEngineFactory.create(config)
-        await engine.start()
-        return NextResponse.json({ 
-          success: true, 
-          sessionId: engine.getSessionId() 
+        // Create engine with TradingEngineManager
+        const sessionId = await TradingEngineManager.create({
+          type: config.type || 'REALTIME_AI',
+          mode: config.mode || 'LIVE',
+          config: config,
+          autoStart: true,
+          enableLearning: config.enableLearning !== false
+        })
+
+        return NextResponse.json({
+          success: true,
+          sessionId
         })
         
       case 'stop':

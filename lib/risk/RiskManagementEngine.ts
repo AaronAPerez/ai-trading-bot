@@ -13,7 +13,8 @@
  * @version 2.0.0
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/client';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 // ===============================================
 // TYPES & INTERFACES
@@ -86,10 +87,7 @@ export class RiskManagementEngine {
   private riskProfiles: Map<string, RiskProfile> = new Map();
 
   constructor() {
-    this.supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    this.supabase = createClient();
   }
 
   // ===============================================

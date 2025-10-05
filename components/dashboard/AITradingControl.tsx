@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 import { Badge } from '@/components/ui/badge'
 import { AlertCircle, Play, Square, TrendingUp, Activity, Clock, Zap, BarChart3, Loader2 } from 'lucide-react'
-import { Button } from '../ui/Button';
+import { Button } from '../ui/button'
+
 
 interface AITradingSession {
   sessionId: string
