@@ -19,6 +19,7 @@ import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
 import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
 import LiveTradesDisplay from "../trading/LiveTradesDisplay"
 import MarketStatusDisplay from "../market/MarketStatusDisplay"
+import { useTradeWebSocketListener } from "@/hooks/useTradeWebSocketListener"
 
 import { PriceChart } from '../charts/PriceChart'
 import { PortfolioAllocationChart } from '../charts/PortfolioAllocationChart'
@@ -115,6 +116,9 @@ const defaultBotConfig = {
 export default function AITradingDashboard() {
   const tradingBot = useTradingBot()
   const autoExecution = useAutoExecution(tradingBot.engine)
+
+  // Listen for WebSocket trade events and auto-invalidate React Query cache
+  const { isConnected: wsConnected } = useTradeWebSocketListener()
 
   // Persistent AI bot state
   const [persistentBotState, setPersistentBotState] = useState({

@@ -25,7 +25,7 @@ export const createClient = (): SupabaseClient<Database> => {
  * Server-side only - bypasses RLS for admin operations
  */
 export const createServerSupabaseClient = (): SupabaseClient<Database> => {
-  if (!serverClient && typeof window === 'undefined') {
+  if (!serverClient) {
     serverClient = createSupabaseClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -37,7 +37,7 @@ export const createServerSupabaseClient = (): SupabaseClient<Database> => {
       }
     )
   }
-  return serverClient || browserClient!
+  return serverClient!
 }
 
 /**
