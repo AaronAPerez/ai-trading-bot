@@ -9,7 +9,7 @@ import { PatternRecognitionEngine } from '@/lib/ai/PatternRecognitionEngine'
 import { SentimentAnalyzer } from '@/lib/sentiment/SentimentAnalyzer'
 import { AILearningSystem } from '@/lib/trading/ml/AILearningSystem'
 import { MarketData } from '@/types/trading'
-import { supabaseService } from '@/lib/database/supabase-utils'
+
 
 export interface MLPrediction {
   action: 'BUY' | 'SELL' | 'HOLD'
@@ -57,7 +57,7 @@ export interface MLMetrics {
     }
   }
   ensembleMetrics: {
-    consensus Rate: number
+    consensusRate: number
     predictionAccuracy: number
     totalPredictions: number
     profitablePredictions: number
@@ -122,7 +122,8 @@ export class EnsembleMLSystem {
       const technicalPrediction = await this.getTechnicalPrediction(marketData)
 
       // 5. Combine all predictions using ensemble method
-      const ensemblePrediction = this.combineP redictions(
+      const ensemblePrediction = 
+      this.combinePredictions(
         rlPrediction,
         patternPrediction,
         sentimentPrediction,
