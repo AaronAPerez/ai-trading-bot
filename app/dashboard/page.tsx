@@ -165,7 +165,6 @@ const formatPercentage = (value?: number): string => {
             </div>
           </div>
         </div>
-<EnvironmentDashboard/>
         
 
         {/* Portfolio Cards */}

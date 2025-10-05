@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
+
 import { BrainCircuit, TrendingUp, Newspaper, Activity, Target } from 'lucide-react'
+import { Progress } from '../ui/progress'
 
 interface MLMetrics {
   overallAccuracy: number

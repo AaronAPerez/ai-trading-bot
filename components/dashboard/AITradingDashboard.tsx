@@ -6,11 +6,7 @@ import '../../styles/dashboard.css'
 import { useAutoExecution } from "@/hooks/trading/useAutoExecution"
 import { useTradingBot } from "@/hooks/trading/useTradingBot"
 import { useAlpacaAccount, useAlpacaPositions } from "@/hooks/api/useAlpacaData"
-import AIRecommendationsList from "./AIRecommendationsList"
-import AIBotActivity from "./AIBotActivity"
 import useAIBotActivity from "@/hooks/useAIBotActivity"
-import TradesOrdersTable from "./TradesOrdersTable"
-import AILiveTradesTable from "./AILiveTradesTable"
 import AITradingNotifications from "../notifications/AITradingNotifications"
 import useAITradingNotifications from "@/hooks/useAITradingNotifications"
 import useRealAITrading from "@/hooks/useRealAITrading"
@@ -24,12 +20,12 @@ import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
 import LiveTradesDisplay from "../trading/LiveTradesDisplay"
 import MarketStatusDisplay from "../market/MarketStatusDisplay"
 
-import LiveAIActivity from './LiveAIActivity'
 import { PriceChart } from '../charts/PriceChart'
 import { PortfolioAllocationChart } from '../charts/PortfolioAllocationChart'
 import { PerformanceChart } from '../charts/PerformanceChart'
 import { RiskMetricsChart } from '../charts/RiskMetricsChart'
 import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
+import LiveAIActivity from './LiveAIActivity'
 
 // Default bot configuration with auto-execution enabled
 const defaultBotConfig = {
@@ -155,7 +151,7 @@ export default function AITradingDashboard() {
         if (parsed.isRunning) {
           console.log('Restoring AI trading bot state from previous session')
           tradingBot.startBot(parsed.config || defaultBotConfig)
-          aiActivity.startSimulation()
+          // REMOVED: aiActivity.startSimulation() - Using real RealTimeAITradingEngine only
           startTradingMonitoring()
         }
       }
@@ -191,7 +187,7 @@ export default function AITradingDashboard() {
   // Enhanced start function that starts both bot and activity monitoring
   const handleStart = async (config: any) => {
     await tradingBot.startBot(config)
-    await aiActivity.startSimulation()
+    // REMOVED: aiActivity.startSimulation() - Using real RealTimeAITradingEngine only
 
     // Start 24/7 AI Learning Service with Alpaca API data
     console.log('🧠 Starting 24/7 AI Learning Service with Alpaca API data...')
@@ -235,11 +231,11 @@ export default function AITradingDashboard() {
       // Stop trading monitoring first
       stopTradingMonitoring()
 
-      // Stop bot, AI activity, and learning service in parallel
+      // Stop bot and learning service in parallel
       console.log('🛑 Stopping AI Learning Service...')
       await Promise.all([
         tradingBot.stopBot(),
-        aiActivity.stopSimulation(),
+        // REMOVED: aiActivity.stopSimulation() - Using real RealTimeAITradingEngine only
         aiLearningManager.stopLearning()
       ])
 
@@ -306,7 +302,7 @@ export default function AITradingDashboard() {
 
         <div className="flex items-center space-x-4">
           {/* Generate Real Data Button */}
-          <button
+          {/* <button
             onClick={async () => {
               try {
                 console.log('🔄 Generating real AI learning data from Alpaca trades...')
@@ -331,7 +327,7 @@ export default function AITradingDashboard() {
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
           >
             Generate Real Data
-          </button>
+          </button> */}
 
           {/* Bot Status */}
           <div className="flex items-center space-x-2">
@@ -430,7 +426,7 @@ export default function AITradingDashboard() {
       {/* AI Progress and Learning Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-2 gap-6">
         {/* AI Learning Progress - Real-time Data */}
-        {/* <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
+        <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <Brain className="w-5 h-5 text-purple-400" />
@@ -521,7 +517,7 @@ export default function AITradingDashboard() {
               </div>
             </div>
           </div>
-        </div> */}
+        </div>
 
 
         
@@ -578,7 +574,7 @@ export default function AITradingDashboard() {
               </div>
             </div>
 
-            {/* <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center">
               <span className="text-sm text-gray-300">Recommendations</span>
               <div className="flex items-center space-x-2">
                 <span className="text-lg font-bold text-purple-400">
@@ -592,9 +588,9 @@ export default function AITradingDashboard() {
                   <span className="text-xs text-purple-300">💡</span>
                 )}
               </div>
-            </div> */}
+            </div>
 
-            {/* <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center">
               <span className="text-sm text-gray-300">Risk Score</span>
               <div className="flex items-center space-x-2">
                 <span className={`text-lg font-bold ${realTimeMetrics.metrics.riskScore > 70 ? 'text-red-400' :
@@ -610,7 +606,7 @@ export default function AITradingDashboard() {
                   <span className="text-xs text-green-300">🛡️</span>
                 )}
               </div>
-            </div> */}
+            </div>
 
             <div className="mt-4 pt-4 border-t border-green-700/30">
               <div className="text-xs text-gray-400 mb-2">Real-time Alpaca Portfolio</div>
@@ -665,7 +661,7 @@ export default function AITradingDashboard() {
         </div>
 
         {/* Live Activity Feed - Real-time Console Capture */}
-        {/* <LiveAIActivity /> */}
+        <LiveAIActivity />
       </div>
 
     

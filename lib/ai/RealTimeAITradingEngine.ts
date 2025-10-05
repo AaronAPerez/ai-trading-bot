@@ -790,10 +790,16 @@ export class RealTimeAITradingEngine {
       const account = await this.alpacaClient.getAccount()
       const positions = await this.alpacaClient.getPositions()
 
+      // FIXED: Use correct Alpaca API property names
+      const equity = parseFloat(account.equity || account.portfolio_value || '0')
+      const cash = parseFloat(account.cash || account.buying_power || '0')
+      const buyingPower = parseFloat(account.buying_power || '0')
+
       const portfolio: Portfolio = {
-        totalValue: account.totalBalance,
-        cashBalance: account.cashBalance,
-        equity: account.totalBalance - account.cashBalance,
+        totalValue: equity,
+        cashBalance: cash,
+        equity: equity,
+        buyingPower: buyingPower,
         totalPnL: positions.reduce((sum, pos) => sum + pos.unrealizedPnL, 0),
         dayPnL: 0, // Would need to calculate from daily change
         unrealizedPnL: positions.reduce((sum, pos) => sum + pos.unrealizedPnL, 0),

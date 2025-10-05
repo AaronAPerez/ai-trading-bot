@@ -371,11 +371,16 @@ async function startBotLogic(sessionId: string, config: any) {
     aiTradingEngine = new RealTimeAITradingEngine(alpacaClient, aiConfig)
     botState.aiEngine = aiTradingEngine
 
+    console.log('🚀 CRITICAL: About to start RealTimeAITradingEngine...')
+    console.log('🚀 CRITICAL: Auto-execution config:', aiConfig.autoExecution)
+
     // Start the AI engine
     await aiTradingEngine.startAITrading()
 
-    console.log('✅ RealTimeAITradingEngine started successfully')
-    console.log(`🎯 Watching ${aiConfig.watchlist.length} symbols with AI learning enabled`)
+    console.log('✅ CRITICAL: RealTimeAITradingEngine started successfully!')
+    console.log(`🎯 CRITICAL: Watching ${aiConfig.watchlist.length} symbols with AI learning enabled`)
+    console.log(`⚡ CRITICAL: Auto-execution ENABLED - ${aiConfig.autoExecution.autoExecuteEnabled}`)
+    console.log(`⚡ CRITICAL: Trading will begin in 1 minute...`)
 
     // Log bot start with AI engine info
     await supabaseService.logBotActivity(userId, {

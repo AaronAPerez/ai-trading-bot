@@ -49,11 +49,8 @@ export default function LiveTradesDisplay() {
   const {
     liveOrders,
     isLoadingLive,
-    orderHistory,
     statistics,
     isSyncing,
-    storeOrders,
-    refetchLive
   } = useCompleteLiveOrders()
 
   // Fetch recent bot activities from Supabase
@@ -258,11 +255,11 @@ export default function LiveTradesDisplay() {
         </div>
       </div>
 
-      <LiveAIActivity/>
+
 
       {/* Live AI Activity Feed */}
-      {/* <div className="bg-gradient-to-br from-gray-900/80 to-purple-900/30 rounded-lg border border-gray-700/50 shadow-2xl"> */}
-        {/* <div className="p-4 border-b border-gray-700/50">
+      <div className="bg-gradient-to-br from-gray-900/80 to-purple-900/30 rounded-lg border border-gray-700/50 shadow-2xl"> 
+       <div className="p-4 border-b border-gray-700/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Activity className="w-5 h-5 text-purple-400" />
@@ -336,10 +333,10 @@ export default function LiveTradesDisplay() {
                   )}
                 </div>
               ))}
-            </div> */}
-          {/* )} */}
-        {/* </div> */}
-      {/* </div> */}
+            </div>
+         )}
+        </div> 
+      </div>
     </div>
   )
 }

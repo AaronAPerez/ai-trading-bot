@@ -27,22 +27,25 @@ export default function LiveAIActivity() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // Intercept console.log to capture AI activity
+    // Intercept console.log to capture REAL AI Trading Engine activity ONLY
     const originalLog = console.log
 
     console.log = (...args: any[]) => {
       originalLog(...args)
 
-      // Parse AI activity from console logs
+      // Parse REAL AI Trading Engine activity from console logs
       const message = args.join(' ')
 
-      // Only capture AI-related logs
+      // ONLY capture REAL RealTimeAITradingEngine logs (NO SIMULATION)
       if (
-        message.includes('🎯 AI Analyzing') ||
-        message.includes('📈 Market Sentiment') ||
-        message.includes('🧠 Learning from') ||
-        message.includes('🔍 Pattern detected') ||
-        message.includes('📊 Signal generated')
+        message.includes('⚡ AI Trading Loop') ||
+        message.includes('🧠 Executing AI trading cycle') ||
+        message.includes('🔍 Evaluating') ||
+        message.includes('✅ AUTO-EXECUTED:') ||
+        message.includes('⏸️ EXECUTION BLOCKED:') ||
+        message.includes('🎯 Generated') ||
+        message.includes('📊 Enhanced cycle') ||
+        (message.includes('🤖') && message.includes('decisions qualify'))
       ) {
         const activity = parseConsoleMessage(message)
         if (activity) {
@@ -67,48 +70,106 @@ export default function LiveAIActivity() {
     const timestamp = new Date()
     const id = `activity_${timestamp.getTime()}_${Math.random().toString(36).substr(2, 9)}`
 
-    // Parse AI Analysis
-    if (message.includes('🎯 AI Analyzing')) {
-      const match = message.match(/🎯 AI Analyzing (.+?) \| Pattern: (.+?) \| Confidence: ([\d.]+)%/)
+    // Parse REAL AI Trading Loop execution
+    if (message.includes('⚡ AI Trading Loop')) {
+      return {
+        id,
+        timestamp,
+        type: 'signal',
+        message: '⚡ AI Trading Loop executing - analyzing all symbols with Alpaca data'
+      }
+    }
+
+    // Parse REAL trading cycle start
+    if (message.includes('🧠 Executing AI trading cycle')) {
+      return {
+        id,
+        timestamp,
+        type: 'analysis',
+        message: '🧠 Executing AI trading cycle with real Alpaca market data'
+      }
+    }
+
+    // Parse REAL trade evaluation
+    if (message.includes('🔍 Evaluating')) {
+      const match = message.match(/🔍 Evaluating (.+?) (BUY|SELL): ([\d.]+)% confidence/)
       if (match) {
         return {
           id,
           timestamp,
           type: 'analysis',
           symbol: match[1],
-          pattern: match[2],
           confidence: parseFloat(match[3]),
-          message: `Analyzing ${match[1]} - ${match[2]} pattern detected`
+          message: `🔍 Evaluating ${match[2]} ${match[1]} - ${match[3]}% confidence`
         }
       }
     }
 
-    // Parse Market Sentiment
-    if (message.includes('📈 Market Sentiment')) {
-      const match = message.match(/📈 Market Sentiment (.+?): (.+?) \(Score: ([\d]+)\/100\)/)
+    // Parse REAL trade execution SUCCESS
+    if (message.includes('✅ AUTO-EXECUTED:')) {
+      const match = message.match(/✅ AUTO-EXECUTED: (.+?) (BUY|SELL)/)
       if (match) {
         return {
           id,
           timestamp,
-          type: 'sentiment',
+          type: 'signal',
           symbol: match[1],
-          sentiment: match[2],
-          score: parseInt(match[3]),
-          message: `${match[1]} sentiment: ${match[2]} (${match[3]}/100)`
+          message: `✅ REAL TRADE EXECUTED: ${match[2]} ${match[1]} via Alpaca API`,
+          pattern: 'EXECUTED'
         }
       }
     }
 
-    // Parse Learning Activity
-    if (message.includes('🧠 Learning from')) {
-      const match = message.match(/🧠 Learning from (.+?):/)
+    // Parse REAL execution blocks
+    if (message.includes('⏸️ EXECUTION BLOCKED:')) {
+      const match = message.match(/⏸️ EXECUTION BLOCKED: (.+?) -/)
+      if (match) {
+        return {
+          id,
+          timestamp,
+          type: 'pattern',
+          symbol: match[1],
+          message: `⏸️ Execution blocked for ${match[1]}`,
+          pattern: 'BLOCKED'
+        }
+      }
+    }
+
+    // Parse decision generation
+    if (message.includes('🎯 Generated') && message.includes('trading decisions')) {
+      const match = message.match(/🎯 Generated ([\d]+) trading decisions/)
       if (match) {
         return {
           id,
           timestamp,
           type: 'learning',
-          symbol: match[1],
-          message: `Learning from ${match[1]} market data`
+          message: `🎯 Generated ${match[1]} trading decisions from market analysis`
+        }
+      }
+    }
+
+    // Parse qualifying decisions
+    if (message.includes('🤖') && message.includes('decisions qualify')) {
+      const match = message.match(/🤖 ([\d]+) decisions qualify/)
+      if (match) {
+        return {
+          id,
+          timestamp,
+          type: 'learning',
+          message: `🤖 ${match[1]} decisions qualify for auto-execution`
+        }
+      }
+    }
+
+    // Parse cycle completion
+    if (message.includes('📊 Enhanced cycle') && message.includes('complete')) {
+      const match = message.match(/📊 Enhanced cycle .+ complete: ([\d]+)\/([\d]+) executions/)
+      if (match) {
+        return {
+          id,
+          timestamp,
+          type: 'signal',
+          message: `📊 Trading cycle complete: ${match[1]}/${match[2]} executions successful`
         }
       }
     }
@@ -188,8 +249,8 @@ export default function LiveAIActivity() {
             <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-white">Live AI Activity</h3>
-            <p className="text-sm text-gray-400">Real-time analysis feed</p>
+            <h3 className="text-xl font-bold text-white">Real AI Trading Engine Activity</h3>
+            <p className="text-sm text-gray-400">Live Alpaca API executions & analysis</p>
           </div>
         </div>
 
@@ -220,10 +281,10 @@ export default function LiveAIActivity() {
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <AlertCircle className="w-12 h-12 text-gray-600 mb-3" />
             <p className="text-gray-400 text-sm">
-              Waiting for AI activity...
+              Waiting for Real AI Trading Engine to start...
             </p>
             <p className="text-gray-500 text-xs mt-1">
-              Start the trading bot to see live analysis
+              Start the bot to see real Alpaca API trading activity
             </p>
           </div>
         ) : (
@@ -276,23 +337,23 @@ export default function LiveAIActivity() {
         )}
       </div>
 
-      {/* Footer Stats */}
+      {/* Footer Stats - Real Engine Activity */}
       <div className="mt-4 pt-4 border-t border-white/10">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
-            <div className="text-xs text-gray-400 mb-1">Analyses</div>
+            <div className="text-xs text-gray-400 mb-1">Evaluations</div>
             <div className="text-lg font-bold text-blue-400">
               {activities.filter(a => a.type === 'analysis').length}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-400 mb-1">Sentiment</div>
-            <div className="text-lg font-bold text-purple-400">
-              {activities.filter(a => a.type === 'sentiment').length}
+            <div className="text-xs text-gray-400 mb-1">Executions</div>
+            <div className="text-lg font-bold text-green-400">
+              {activities.filter(a => a.type === 'signal' && a.pattern === 'EXECUTED').length}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-400 mb-1">Learning</div>
+            <div className="text-xs text-gray-400 mb-1">Decisions</div>
             <div className="text-lg font-bold text-yellow-400">
               {activities.filter(a => a.type === 'learning').length}
             </div>
