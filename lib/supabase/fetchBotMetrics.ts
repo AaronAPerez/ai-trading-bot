@@ -7,6 +7,10 @@
 
 import { createClient } from './client'
 
+// Debounce map to prevent duplicate submissions within short timeframes
+const pendingSubmissions = new Map<string, Promise<any>>()
+const DEBOUNCE_MS = 1000  // Prevent duplicate submissions within 1 second
+
 export interface BotMetricPayload {
   user_id: string
   is_running?: boolean
@@ -50,6 +54,15 @@ export async function submitBotMetric(
   metricPayload: BotMetricPayload,
   opts: SubmitOptions = { upsert: true, conflictColumn: 'user_id', returnRecord: true }
 ): Promise<any> {
+  // FIX: Use Supabase client's upsert() instead of raw POST
+  // The Prefer header "resolution=merge-duplicates" doesn't work with raw POST requests
+
+  if (opts.upsert) {
+    // Use the client library's upsert which properly handles conflicts
+    return upsertBotMetricsViaClient(metricPayload)
+  }
+
+  // Fallback to POST for non-upsert operations (not recommended)
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
@@ -75,13 +88,9 @@ export async function submitBotMetric(
     'apikey': anonKey,
     'Authorization': `Bearer ${authToken}`,
     'Content-Type': 'application/json',
-    'Prefer': opts.upsert
-      ? 'resolution=merge-duplicates,return=representation'
-      : 'return=representation',
+    'Prefer': 'return=representation',
   }
 
-  // For upsert, we need to specify which column to check for conflicts
-  // The bot_metrics table has a UNIQUE constraint on user_id
   const queryParams = opts.returnRecord ? '?select=*' : ''
 
   // Ensure updated_at is set
@@ -93,7 +102,6 @@ export async function submitBotMetric(
   try {
     console.log('[submitBotMetric] Submitting to:', endpoint)
     console.log('[submitBotMetric] Payload:', payload)
-    console.log('[submitBotMetric] Upsert mode:', opts.upsert)
 
     const res = await fetch(`${endpoint}${queryParams}`, {
       method: 'POST',
@@ -105,10 +113,10 @@ export async function submitBotMetric(
       const errorText = await res.text()
       console.error(`[submitBotMetric] Failed: ${res.status} ${res.statusText}`, errorText)
 
-      // If conflict occurs and we're not in upsert mode, retry with upsert
-      if (res.status === 409 && !opts.upsert) {
-        console.warn('[submitBotMetric] Conflict detected (409), retrying with upsert=true')
-        return submitBotMetric(metricPayload, { ...opts, upsert: true })
+      // If conflict occurs, switch to upsert mode
+      if (res.status === 409) {
+        console.warn('[submitBotMetric] Conflict detected (409), switching to upsert via client')
+        return upsertBotMetricsViaClient(metricPayload)
       }
 
       throw new Error(`Supabase error ${res.status}: ${errorText}`)
@@ -256,23 +264,65 @@ export async function updateBotMetrics(
 export async function upsertBotMetricsViaClient(
   metricPayload: BotMetricPayload
 ): Promise<any> {
-  const supabase = createClient()
+  const userId = metricPayload.user_id
+  const debounceKey = `bot_metrics_${userId}`
 
-  const payload = {
-    ...metricPayload,
-    updated_at: new Date().toISOString()
+  // Check if there's already a pending submission for this user
+  if (pendingSubmissions.has(debounceKey)) {
+    console.log('[upsertBotMetricsViaClient] Debouncing - returning existing promise')
+    return pendingSubmissions.get(debounceKey)
   }
 
-  const { data, error } = await supabase
-    .from('bot_metrics')
-    .upsert(payload)
-    .select()
-    .single()
+  // Create the submission promise
+  const submissionPromise = (async () => {
+    try {
+      const supabase = createClient()
 
-  if (error) {
-    console.error('[upsertBotMetricsViaClient] Error:', error)
-    throw error
-  }
+      const payload = {
+        ...metricPayload,
+        updated_at: new Date().toISOString()
+      }
 
-  return data
+      console.log('[upsertBotMetricsViaClient] Attempting upsert with payload:', payload)
+
+      // Use upsert with onConflict option to specify the unique column
+      const { data, error } = await supabase
+        .from('bot_metrics')
+        .upsert(payload, {
+          onConflict: 'user_id',  // Specify the unique constraint column
+          ignoreDuplicates: false  // Update on conflict instead of ignoring
+        })
+        .select()
+        .maybeSingle()  // Use maybeSingle instead of single to avoid errors
+
+      if (error) {
+        console.error('[upsertBotMetricsViaClient] Error:', error)
+
+        // If still getting conflict, try UPDATE instead
+        if (error.code === '23505' || error.message?.includes('duplicate')) {
+          console.warn('[upsertBotMetricsViaClient] Conflict detected, trying UPDATE instead')
+
+          // Clear the pending submission before retrying
+          pendingSubmissions.delete(debounceKey)
+
+          return await updateBotMetrics(payload.user_id, payload)
+        }
+
+        throw error
+      }
+
+      console.log('[upsertBotMetricsViaClient] Success:', data)
+      return data
+    } finally {
+      // Clear the pending submission after a delay
+      setTimeout(() => {
+        pendingSubmissions.delete(debounceKey)
+      }, DEBOUNCE_MS)
+    }
+  })()
+
+  // Store the promise
+  pendingSubmissions.set(debounceKey, submissionPromise)
+
+  return submissionPromise
 }
