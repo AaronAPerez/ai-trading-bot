@@ -521,7 +521,7 @@ export class UnifiedAlpacaClient {
     })
 
     if (!response.ok) {
-      throw APIErrors.external(`Alpaca market data error: ${response.status} ${response.statusText}`)
+      throw APIErrors.ValidationError(`Alpaca market data error: ${response.status} ${response.statusText}`)
     }
 
     const data = await response.json()

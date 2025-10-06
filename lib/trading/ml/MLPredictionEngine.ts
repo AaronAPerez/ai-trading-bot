@@ -2,7 +2,7 @@ import { MarketData } from "@/lib/market-data/YahooFinanceClient";
 
 
 export class MLPredictionEngine {
-  constructor(private config: AIConfig) {}
+  constructor(private config?: any) {}
 
   async loadModels(): Promise<void> {
     console.log("🤖 ML models loaded");

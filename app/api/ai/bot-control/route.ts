@@ -6,6 +6,7 @@ import { supabaseService } from '@/lib/database/supabase-utils'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
 import { RealTimeAITradingEngine } from '@/lib/ai/RealTimeAITradingEngine'
 import { CryptoWatchlistManager } from '@/lib/crypto/CryptoWatchlist'
+import { submitBotMetric } from '@/lib/supabase/fetchBotMetrics'
 
 // Global AI Trading Engine instance
 let aiTradingEngine: RealTimeAITradingEngine | null = null
@@ -91,12 +92,17 @@ async function handleStartBot(config: any) {
       aiEngine: null
     }
 
-    // Update bot metrics in Supabase
+    // Update bot metrics in Supabase using conflict-safe wrapper
     try {
-      await supabaseService.upsertBotMetrics(userId, {
+      await submitBotMetric({
+        user_id: userId,
         is_running: true,
         uptime: 0,
         last_activity: new Date().toISOString()
+      }, {
+        upsert: true,
+        conflictColumn: 'user_id',
+        returnRecord: false
       })
 
       // Log bot start activity
@@ -215,12 +221,17 @@ async function handleStopBot() {
     // Stop the bot logic (including AI engine)
     await stopBotLogic(sessionId!)
 
-    // Update bot metrics in Supabase
+    // Update bot metrics in Supabase using conflict-safe wrapper
     try {
-      await supabaseService.upsertBotMetrics(userId, {
+      await submitBotMetric({
+        user_id: userId,
         is_running: false,
         uptime: Math.floor(uptime / 1000),
         last_activity: new Date().toISOString()
+      }, {
+        upsert: true,
+        conflictColumn: 'user_id',
+        returnRecord: false
       })
 
       // Log bot stop activity
@@ -522,12 +533,17 @@ async function startBotLogic(sessionId: string, config: any) {
         console.log(`⚠️ AI confidence too low (${(confidence * 100).toFixed(1)}%) for ${selectedSymbol} - No trade executed`)
       }
 
-      // 5. Update bot metrics in Supabase
+      // 5. Update bot metrics in Supabase using conflict-safe wrapper
       const uptime = Date.now() - new Date(botState.startTime!).getTime()
-      await supabaseService.upsertBotMetrics(userId, {
+      await submitBotMetric({
+        user_id: userId,
         is_running: true,
         uptime: Math.floor(uptime / 1000),
         last_activity: new Date().toISOString()
+      }, {
+        upsert: true,
+        conflictColumn: 'user_id',
+        returnRecord: false
       })
 
       // 6. Broadcast activity via WebSocket

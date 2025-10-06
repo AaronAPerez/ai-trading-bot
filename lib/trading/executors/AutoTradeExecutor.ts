@@ -1,12 +1,12 @@
 
-import { AlpacaClient } from '@/lib/alpaca/client'
-import { TradeSignal, Portfolio, MarketData, ExecutionResult, Position } from '../../../types/trading'
+import { UnifiedAlpacaClient } from '@/lib/alpaca/unified-client'
+import { TradeSignal, Portfolio, MarketData, Position } from '../../../types/trading'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
-import { AILearningSystem, TradeOutcome } from '../ml/AILearningSystem'
+import { AILearningSystem } from '../ml/AILearningSystem'
 import { tradePersistence } from '@/lib/services/TradePersistenceService'
 
 
-interface EnhancedExecutionConfig {
+interface ExecutionConfig {
   autoExecuteEnabled: boolean
   confidenceThresholds: {
     minimum: number
@@ -74,7 +74,7 @@ interface TradeExecution {
   tradeId: string
   symbol: string
   action: 'BUY' | 'SELL'
-  quantity: number
+  notional: number
   notionalValue: number
   executionPrice: number
   orderId: string
@@ -138,14 +138,14 @@ interface ExecutionMetrics {
   }
 }
 
-export class EnhancedAutoTradeExecutor {
+export class AutoTradeExecutor {
   getStats() {
     throw new Error('Method not implemented.')
   }
-  private config: EnhancedExecutionConfig
+  private config: ExecutionConfig
   private riskEngine: RiskManagementEngine
   private learningSystem: AILearningSystem
-  private alpacaClient: AlpacaClient
+  private alpacaClient: UnifiedAlpacaClient
   
   // Execution tracking
   private executionHistory: TradeExecution[] = []
@@ -164,10 +164,10 @@ export class EnhancedAutoTradeExecutor {
   private concurrentExecutions = 0
 
   constructor(
-    config: EnhancedExecutionConfig,
+    config: ExecutionConfig,
     riskEngine: RiskManagementEngine,
     learningSystem: AILearningSystem,
-    alpacaClient: AlpacaClient
+    alpacaClient: UnifiedAlpacaClient
   ) {
     this.config = config
     this.riskEngine = riskEngine
@@ -242,10 +242,25 @@ export class EnhancedAutoTradeExecutor {
       console.log(`🔍 Evaluating trade: ${signal.symbol} ${signal.action} - ${(signal.confidence * 100).toFixed(1)}% confidence`)
       
       // Step 1: Get market data and positions
-      const [marketData, positions] = await Promise.all([
-        this.alpacaClient.getMarketData(signal.symbol),
+      const [barsResponse, positions] = await Promise.all([
+        this.alpacaClient.getBarsV2(signal.symbol, { timeframe: '1Hour', limit: 50 }),
         this.alpacaClient.getPositions()
       ])
+
+      // Convert bars to MarketData format
+      const marketData: MarketData[] = Array.isArray(barsResponse)
+        ? barsResponse.map((bar: any) => ({
+            symbol: signal.symbol,
+            timestamp: new Date(bar.t || bar.timestamp),
+            timeframe: '1Hour',
+            open: bar.o || bar.open || 0,
+            high: bar.h || bar.high || 0,
+            low: bar.l || bar.low || 0,
+            close: bar.c || bar.close || 0,
+            volume: bar.v || bar.volume || 0,
+            source: 'alpaca'
+          }))
+        : []
 
       // Step 2: Comprehensive risk assessment
       const riskAssessment = await this.performComprehensiveRiskAssessment(
@@ -302,7 +317,10 @@ export class EnhancedAutoTradeExecutor {
       estimatedSlippage: 0,
       estimatedFees: 0,
       expectedReturn: 0,
-      riskRewardRatio: 0
+      riskRewardRatio: 0,
+      success: undefined,
+      orderId: '',
+      executionPrice: 0
     }
 
     // 1. Portfolio-level risk check
@@ -428,35 +446,41 @@ export class EnhancedAutoTradeExecutor {
       }
 
       // Execute through Alpaca client
-      const orderResponse = await this.alpacaClient.placeOrder(orderRequest)
-      
-      if (!orderResponse.success) {
+      const order = await this.alpacaClient.createOrder({
+        symbol: orderRequest.symbol,
+        qty: orderRequest.notional,
+        side: orderRequest.side,
+        type: orderRequest.type || 'market',
+        time_in_force: orderRequest.time_in_force || 'day'
+      })
+
+      if (!order) {
         decision.shouldExecute = false
-        decision.reason = `Order execution failed: ${orderResponse.error || 'Unknown error'}`
+        decision.reason = `Order execution failed: Order creation returned null`
         return decision
       }
 
       const executionTime = Date.now() - startTime
-      const actualPrice = orderResponse.order?.filled_avg_price || currentPrice
-      const actualQuantity = orderResponse.order?.filled_qty || (notionalValue / actualPrice)
+      const actualPrice = order.filled_avg_price || currentPrice
+      const actualnotional = order.filled_qty || (notionalValue / actualPrice)
       const actualSlippage = Math.abs(actualPrice - currentPrice) / currentPrice
-      
+
       // Create execution record
       const execution: TradeExecution = {
-        tradeId: orderResponse.order?.client_order_id || `trade_${Date.now()}`,
+        tradeId: order.client_order_id || `trade_${Date.now()}`,
         symbol,
         action: signal.action,
-        quantity: actualQuantity,
+        notional: actualnotional,
         notionalValue,
         executionPrice: actualPrice,
-        orderId: orderResponse.order?.id || `order_${Date.now()}`,
+        orderId: order.id || `order_${Date.now()}`,
         timestamp: new Date(),
         confidence: signal.confidence,
         aiScore: signal.metadata?.aiScore || 0,
         executionTime,
         slippage: actualSlippage,
         fees: this.estimateTradingFees(notionalValue),
-        fillStatus: orderResponse.order?.status === 'filled' ? 'FILLED' : 'PARTIAL',
+        fillStatus: order.status === 'filled' ? 'FILLED' : 'PARTIAL',
         riskMetrics: {
           portfolioImpact: notionalValue / portfolio.totalValue,
           positionSizePercent: decision.positionSize / portfolio.totalValue,
@@ -498,7 +522,7 @@ export class EnhancedAutoTradeExecutor {
       await tradePersistence.saveTradeExecution({
         symbol,
         side: signal.action.toLowerCase() as 'buy' | 'sell',
-        quantity: actualQuantity,
+        notional: actualnotional,
         price: actualPrice,
         notionalValue,
         orderId: execution.orderId,
@@ -511,7 +535,7 @@ export class EnhancedAutoTradeExecutor {
         slippage: actualSlippage,
         fees: execution.fees,
         metadata: {
-          sessionId: orderResponse.order?.client_order_id,
+          sessionId: order.client_order_id,
           signalType: signal.metadata?.signalType,
           targetPrice: signal.metadata?.targetPrice,
           stopLoss: signal.metadata?.stopLoss
@@ -723,8 +747,8 @@ export class EnhancedAutoTradeExecutor {
     const currentVolume = marketData[marketData.length - 1].volume
     
     // Estimate position as percentage of volume
-    const shareQuantity = positionSize / currentPrice
-    const volumeImpact = shareQuantity / Math.max(currentVolume, 1000) // Avoid division by zero
+    const sharenotional = positionSize / currentPrice
+    const volumeImpact = sharenotional / Math.max(currentVolume, 1000) // Avoid division by zero
     
     // Estimate slippage based on volume impact
     let estimatedSlippage = 0.001 // Base slippage
@@ -1016,9 +1040,9 @@ export class EnhancedAutoTradeExecutor {
     for (const [tradeId, execution] of this.activeExecutions) {
       try {
         // Check order status with Alpaca
-        const orderStatus = await this.alpacaClient.getOrderStatus(execution.orderId)
-        
-        if (orderStatus?.status === 'filled') {
+        const order = await this.alpacaClient.getOrder(execution.orderId)
+
+        if (order?.status === 'filled') {
           // Update execution record
           execution.fillStatus = 'FILLED'
           
@@ -1026,7 +1050,7 @@ export class EnhancedAutoTradeExecutor {
           if (this.config.learningIntegration.enabled) {
             await this.learningSystem.trackTradeExit(
               tradeId,
-              orderStatus.filled_avg_price || execution.executionPrice,
+              order.filled_avg_price || execution.executionPrice,
               new Date()
             )
           }
@@ -1187,7 +1211,7 @@ export class EnhancedAutoTradeExecutor {
     return this.isExecutionEnabled && this.riskEngine.isReady() && this.learningSystem.isReady()
   }
 
-  public updateConfig(newConfig: Partial<EnhancedExecutionConfig>): void {
+  public updateConfig(newConfig: Partial<ExecutionConfig>): void {
     this.config = { ...this.config, ...newConfig }
     console.log('⚙️ Enhanced AutoTradeExecutor config updated')
   }
@@ -1237,6 +1261,3 @@ ${this.getExecutionHistory(5).map(exec =>
     `.trim()
   }
 }
-
-// Export alias for backward compatibility
-export { EnhancedAutoTradeExecutor as AutoTradeExecutor }

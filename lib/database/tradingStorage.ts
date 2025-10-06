@@ -98,45 +98,21 @@ export class TradingStorageService {
   // Bot Metrics Methods
   async saveBotMetrics(metrics: Omit<BotMetricsRow, 'id' | 'created_at' | 'updated_at'>): Promise<string | null> {
     try {
-      const { data: existing, error: fetchError } = await this.supabase
+      const { data, error } = await this.supabase
         .from('bot_metrics')
+        .upsert({
+          ...metrics,
+          updated_at: new Date().toISOString()
+        })
         .select('id')
-        .eq('user_id', metrics.user_id)
         .single()
 
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('Error checking existing metrics:', fetchError)
+      if (error) {
+        console.error('Error upserting bot metrics:', error)
         return null
       }
 
-      if (existing) {
-        const { data, error } = await this.supabase
-          .from('bot_metrics')
-          .update({ ...metrics, updated_at: new Date().toISOString() })
-          .eq('user_id', metrics.user_id)
-          .select('id')
-          .single()
-
-        if (error) {
-          console.error('Error updating bot metrics:', error)
-          return null
-        }
-
-        return data.id
-      } else {
-        const { data, error } = await this.supabase
-          .from('bot_metrics')
-          .insert(metrics)
-          .select('id')
-          .single()
-
-        if (error) {
-          console.error('Error inserting bot metrics:', error)
-          return null
-        }
-
-        return data.id
-      }
+      return data.id
     } catch (error) {
       console.error('Failed to save bot metrics:', error)
       return null
