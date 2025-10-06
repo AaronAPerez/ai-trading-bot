@@ -7,7 +7,7 @@ import { FreeMarketDataProvider } from '@/lib/marketData/FreeMarketDataProvider'
 interface BotActivityLog {
   id: string
   timestamp: Date
-  type: 'trade' | 'recommendation' | 'risk' | 'system' | 'info' | 'error'
+  type: 'trade' | 'recommendation' | 'risk' | 'system' | 'info' | 'error' | 'scan' | 'analysis'
   symbol?: string
   message: string
   details?: string
@@ -449,7 +449,7 @@ async function performRealBotActivity() {
           if (symbol) {
             try {
               const quoteResponse = await alpacaClient.getLatestQuote({ symbols: symbol })
-              const quote = quoteResponse.quotes?.[symbol]
+              const quote = (quoteResponse.quotes as Record<string, any>)?.[symbol]
               if (quote) {
                 const midPrice = (quote.ask + quote.bid) / 2
                 message = `Market scan completed for ${symbol} - Price: $${midPrice.toFixed(2)}`
@@ -473,7 +473,7 @@ async function performRealBotActivity() {
           if (symbol) {
             try {
               const quoteResponse = await alpacaClient.getLatestQuote({ symbols: symbol })
-              const quote = quoteResponse.quotes?.[symbol]
+              const quote = (quoteResponse.quotes as Record<string, any>)?.[symbol]
               if (quote) {
                 const midPrice = (quote.ask + quote.bid) / 2
                 const volatility = Math.random() * 30 + 10 // Simulated volatility analysis
@@ -499,7 +499,7 @@ async function performRealBotActivity() {
           if (symbol) {
             try {
               const quoteResponse = await alpacaClient.getLatestQuote({ symbols: symbol })
-              const quote = quoteResponse.quotes?.[symbol]
+              const quote = (quoteResponse.quotes as Record<string, any>)?.[symbol]
               if (quote) {
                 const midPrice = (quote.ask + quote.bid) / 2
                 confidence = 60 + Math.random() * 35 // 60-95% confidence
@@ -538,7 +538,7 @@ async function performRealBotActivity() {
             }
           } catch (error) {
             message = `System health check failed`
-            details = `Error: ${error.message}`
+            details = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
             status = 'failed'
           }
           break
@@ -546,8 +546,9 @@ async function performRealBotActivity() {
 
       // Execute real orders for high-confidence recommendations when live trading is enabled
       if (type === 'recommendation' && confidence && confidence >= autoExecutionConfig.minConfidenceForOrder && symbol) {
+        const validConfidence = confidence // Type narrowing
         setTimeout(async () => {
-          const orderResult = await executeOrder(symbol, confidence, message)
+          const orderResult = await executeOrder(symbol, validConfidence, message)
 
           if (orderResult) {
             // Create a successful trade activity log
@@ -560,10 +561,10 @@ async function performRealBotActivity() {
               timestamp: new Date(),
               type: 'trade',
               symbol: orderResult.symbol,
-              message: `${orderResult.side.toUpperCase()} order executed: ${quantityStr} ${orderResult.symbol} @ $${orderResult.price.toFixed(priceDecimals)}`,
+              message: `${orderResult.side?.toUpperCase() || 'ORDER'} order executed: ${quantityStr} ${orderResult.symbol} @ $${orderResult.price.toFixed(priceDecimals)}`,
               status: 'completed',
               executionTime: 500 + Math.random() * 1000,
-              details: `Order ID: ${orderResult.orderId}, Value: $${orderResult.value.toFixed(2)}, Confidence: ${orderResult.confidence}%, Type: ${orderResult.assetType}`
+              details: `Order ID: ${orderResult.orderId}, Value: $${orderResult.value?.toFixed(2) || 'N/A'}, Confidence: ${orderResult.confidence}%, Type: ${orderResult.assetType}`
             }
 
             botActivityLogs.unshift(tradeActivity)
@@ -595,7 +596,7 @@ async function performRealBotActivity() {
     } catch (error) {
       console.error('Error generating activity:', error)
       message = `System error occurred`
-      details = `Error: ${error.message}`
+      details = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
       status = 'failed'
     }
 
@@ -618,8 +619,8 @@ async function performRealBotActivity() {
       }
 
       // Update metrics
-      botMetrics.symbolsScanned += type === 'system' ? 1 : 0
-      botMetrics.analysisCompleted += type === 'info' ? 1 : 0
+      botMetrics.symbolsScanned += type === 'scan' ? 1 : 0
+      botMetrics.analysisCompleted += type === 'analysis' ? 1 : 0
       botMetrics.recommendationsGenerated += type === 'recommendation' ? 1 : 0
       botMetrics.errorCount += status === 'failed' ? 1 : 0
       botMetrics.lastActivityTime = new Date()

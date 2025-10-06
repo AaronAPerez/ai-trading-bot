@@ -9,8 +9,8 @@ import { getCurrentUserId } from '@/lib/auth/demo-user'
  * Get a specific order by ID
  */
 export const GET = withErrorHandling(
-  async (request: NextRequest, { params }: { params: { orderId: string } }) => {
-    const { orderId } = params
+  async (request: NextRequest, { params }: { params: Promise<{ orderId: string }> }) => {
+    const { orderId } = await params
 
     console.log(`📋 Fetching order: ${orderId}`)
 
@@ -73,8 +73,8 @@ export const GET = withErrorHandling(
  * Cancel a specific order
  */
 export const DELETE = withErrorHandling(
-  async (request: NextRequest, { params }: { params: { orderId: string } }) => {
-    const { orderId } = params
+  async (request: NextRequest, { params }: { params: Promise<{ orderId: string }> }) => {
+    const { orderId } = await params
     const userId = getCurrentUserId()
 
     console.log(`🛑 Canceling order: ${orderId}`)

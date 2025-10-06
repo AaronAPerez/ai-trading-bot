@@ -26,6 +26,27 @@ interface TradingCycleResult {
 }
 
 export class RealTimeAITradingEngine {
+  initialize() {
+    throw new Error('Method not implemented.')
+  }
+  shutdown() {
+    throw new Error('Method not implemented.')
+  }
+  getCurrentRiskLevel(): string {
+    throw new Error('Method not implemented.')
+  }
+  getTotalVolume(): number {
+    throw new Error('Method not implemented.')
+  }
+  getSuccessRate(): number {
+    throw new Error('Method not implemented.')
+  }
+  getTradeCount(): number {
+    throw new Error('Method not implemented.')
+  }
+  getCycleCount(): number {
+    throw new Error('Method not implemented.')
+  }
   private recommendationEngine: AIRecommendationEngine
   private executionEngine: EnhancedAutoTradeExecutor
   private riskEngine: RiskManagementEngine

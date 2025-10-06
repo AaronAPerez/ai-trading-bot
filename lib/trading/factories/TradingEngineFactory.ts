@@ -1,12 +1,12 @@
 import { RealTimeAITradingEngine, TradingEngineConfig } from '../engines/RealTimeAITradingEngine'
 import { AIRecommendationEngine } from '../engines/AIRecommendationEngine'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
-import { EnhancedAutoTradeExecutor } from '../executors/AutoTradeExecutor'
 import { AILearningSystem } from '../ml/AILearningSystem'
 import { SentimentAnalyzer } from '../analyzers/SentimentAnalyzer'
 import { TechnicalAnalyzer } from '../analyzers/TechnicalAnalyzer'
 import { AlpacaServerClient } from '@/lib/alpaca/server-client'
 import { EngineType, TradingMode } from '@/types/trading'
+import { AutoTradeExecutor } from '../executors/AutoTradeExecutor'
 
 
 export interface EngineCreationOptions {
@@ -410,7 +410,7 @@ export class TradingEngineFactory {
     await recommendationEngine.initialize()
 
     // Create enhanced auto trade executor
-    const autoTradeExecutor = new EnhancedAutoTradeExecutor(
+    const autoTradeExecutor = new AutoTradeExecutor(
       options.config.execution,
       riskEngine,
       learningSystem,

@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
       success: false,
       error: 'Failed to fetch AI recommendations',
       code: 'INTERNAL_ERROR',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined
     }, { status: 500 })
   }
 }
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       success: false,
       error: 'Internal server error',
       code: 'INTERNAL_ERROR',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined
     }, { status: 500 })
   }
 }
@@ -244,7 +244,7 @@ async function handleGenerateRecommendations(forceRefresh: boolean = false) {
     })
 
   } catch (error) {
-    throw new Error(`Failed to generate recommendations: ${error.message}`)
+    throw new Error(`Failed to generate recommendations: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
@@ -284,7 +284,7 @@ async function handleAnalyzeSymbol(symbol: string) {
     })
 
   } catch (error) {
-    throw new Error(`Failed to analyze ${symbol}: ${error.message}`)
+    throw new Error(`Failed to analyze ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
@@ -388,7 +388,7 @@ async function generateRecommendations() {
   recommendations.forEach((result, index) => {
     if (result.status === 'fulfilled' && result.value) {
       recommendationsCache.set(result.value.id, result.value)
-    } else {
+    } else if (result.status === 'rejected') {
       console.warn(`Failed to generate recommendation for ${symbols[index]}:`, result.reason)
     }
   })

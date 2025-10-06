@@ -311,10 +311,10 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
   } catch (error) {
     console.error('❌ Order execution error:', error)
     orderExecutionMetrics.failedOrders++
-    
+
     return {
       success: false,
-      reason: `Execution error: ${error.message}`
+      reason: `Execution error: ${error instanceof Error ? error.message : 'Unknown error'}`
     }
   }
 }
@@ -413,10 +413,10 @@ function startBotActivitySimulation() {
     } catch (error) {
       console.error('❌ Bot simulation error:', error)
       botMetrics.errorCount++
-      
+
       addActivityLog({
         type: 'error',
-        message: `Simulation error: ${error.message}`,
+        message: `Simulation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         status: 'failed'
       })
     }

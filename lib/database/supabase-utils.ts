@@ -335,8 +335,6 @@ export class SupabaseService {
           user_id: userId,
           ...metrics,
           updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
         })
         .select()
 

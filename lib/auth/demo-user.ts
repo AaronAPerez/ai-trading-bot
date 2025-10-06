@@ -1,7 +1,7 @@
 // Demo user management for development and testing
 // This generates consistent UUIDs for demo purposes
 
-function generateUUIDFromString(str: string): string {
+export function generateUUIDFromString(str: string): string {
   // Simple deterministic UUID generator from string
   // This ensures the same string always generates the same UUID
   let hash = 0;
@@ -27,12 +27,10 @@ function generateUUIDFromString(str: string): string {
   ].join('-');
 }
 
-export const DEMO_USER_ID = generateUUIDFromString('demo-user-123');
+export const DEMO_USER_ID = 'bcc6fb8b-b62c-4d28-a976-fe49614e146d'
 
 export function getCurrentUserId(): string {
-  // In a real app, this would get the user ID from authentication context
-  // For now, return the demo user ID
-  return DEMO_USER_ID;
+  return DEMO_USER_ID
 }
 
 export function isDemoMode(): boolean {
