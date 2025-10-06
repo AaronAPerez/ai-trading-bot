@@ -342,31 +342,26 @@ export class AILearningService {
 
   private async saveLearningInsights(insights: LearningInsights): Promise<void> {
     try {
-      // Optimize data before saving to reduce database size
-      const optimizedData = supabaseOptimizer.optimizeLearningData({
+      // Map data to match ai_learning_data table schema
+      const learningData = {
         user_id: this.config.userId,
         trade_id: `learning_insight_${Date.now()}`,
         symbol: 'PORTFOLIO',
         strategy_used: 'LEARNING_ANALYSIS',
-        confidence_level: insights.optimalConfidenceThreshold,
+        confidence_score: insights.optimalConfidenceThreshold,
+        outcome: insights.overallAccuracy > 0.5 ? 'success' : 'learning',
+        profit_loss: 0,
         market_conditions: {
           regime: 'MIXED',
           volatility: 0.05,
           volume: 0,
           sentiment: 50
         },
-        trade_outcome: {
-          was_correct: insights.overallAccuracy > 0.5,
-          pnl: 0,
-          hold_time_minutes: 0
-        },
-        learning_data: {
-          insights: {
-            accuracy: insights.overallAccuracy,
-            confidence: insights.confidenceCalibration,
-            patterns: insights.strongestPatterns.slice(0, 5).map(p => p.pattern), // Limit patterns
-            timestamp: new Date().toISOString()
-          }
+        learned_patterns: {
+          accuracy: insights.overallAccuracy,
+          confidence: insights.confidenceCalibration,
+          patterns: insights.strongestPatterns.slice(0, 5).map(p => p.pattern),
+          timestamp: new Date().toISOString()
         },
         technical_indicators: {
           overall_accuracy: insights.overallAccuracy,
@@ -374,17 +369,13 @@ export class AILearningService {
           strongest_patterns_count: insights.strongestPatterns.length,
           optimal_threshold: insights.optimalConfidenceThreshold
         },
-        sentiment_data: {
-          score: 50,
-          sources: ['learning_analysis'],
-          confidence: insights.confidenceCalibration
-        }
-      })
+        sentiment_score: 50
+      }
 
       // Check size limits before saving
-      if (supabaseOptimizer.isWithinSizeLimits(optimizedData)) {
+      if (supabaseOptimizer.isWithinSizeLimits(learningData)) {
         await ConnectionOptimizer.withConnection(async () => {
-          await supabaseService.saveAILearningData(optimizedData)
+          await supabaseService.saveAILearningData(learningData)
         })
 
         console.log('💾 Optimized learning insights saved to Supabase')
@@ -521,31 +512,24 @@ export class AILearningService {
 
       const exportData = this.learningSystem.exportLearningData()
 
-      // Save the learning state
+      // Save the learning state - map to correct schema
       await supabaseService.saveAILearningData({
         user_id: this.config.userId,
         trade_id: `learning_state_${Date.now()}`,
         symbol: 'SYSTEM',
         strategy_used: 'LEARNING_EXPORT',
-        confidence_level: 1.0,
+        confidence_score: 1.0,
+        outcome: 'success',
+        profit_loss: 0,
         market_conditions: {
           regime: 'EXPORT',
           volatility: 0,
           volume: 0,
           sentiment: 50
         },
-        trade_outcome: {
-          was_correct: true,
-          pnl: 0,
-          hold_time_minutes: 0
-        },
-        learning_data: exportData,
+        learned_patterns: exportData,
         technical_indicators: {},
-        sentiment_data: {
-          score: 50,
-          sources: ['system_export'],
-          confidence: 1.0
-        }
+        sentiment_score: 50
       })
 
       console.log('✅ Learning data saved to Supabase')

@@ -37,29 +37,28 @@ export class SupabaseOptimizer {
   optimizeLearningData(data: any): any {
     if (!data) return data
 
-    // Remove unnecessary fields and compress data
+    // Remove unnecessary fields and compress data - match ai_learning_data schema
     const optimized = {
       // Keep only essential fields
       user_id: data.user_id,
       trade_id: this.truncateString(data.trade_id, 50),
       symbol: data.symbol,
       strategy_used: this.truncateString(data.strategy_used, 30),
-      confidence_level: Math.round(data.confidence_level * 100) / 100, // 2 decimal places
+      confidence_score: Math.round(data.confidence_score * 100) / 100, // 2 decimal places
+      outcome: data.outcome,
+      profit_loss: Math.round(data.profit_loss * 100) / 100,
 
       // Compress market conditions
       market_conditions: this.compressMarketConditions(data.market_conditions),
 
-      // Compress trade outcome
-      trade_outcome: this.compressTradeOutcome(data.trade_outcome),
-
-      // Limit learning data size
-      learning_data: this.compressLearningData(data.learning_data),
+      // Compress learned patterns (was learning_data)
+      learned_patterns: this.compressLearningData(data.learned_patterns),
 
       // Compress technical indicators
       technical_indicators: this.compressTechnicalIndicators(data.technical_indicators),
 
-      // Compress sentiment data
-      sentiment_data: this.compressSentimentData(data.sentiment_data)
+      // Sentiment score
+      sentiment_score: Math.round(data.sentiment_score || 50)
     }
 
     return optimized
@@ -76,15 +75,6 @@ export class SupabaseOptimizer {
     }
   }
 
-  private compressTradeOutcome(outcome: any): any {
-    if (!outcome) return {}
-
-    return {
-      c: outcome.was_correct ? 1 : 0, // correct: boolean as 0/1
-      p: Math.round((outcome.pnl || 0) * 100) / 100, // pnl: 2 decimals
-      h: Math.round(outcome.hold_time_minutes || 0) // hold_time: integer minutes
-    }
-  }
 
   private compressLearningData(data: any): any {
     if (!data) return {}
@@ -115,15 +105,6 @@ export class SupabaseOptimizer {
     return compressed
   }
 
-  private compressSentimentData(sentiment: any): any {
-    if (!sentiment) return {}
-
-    return {
-      s: Math.round(sentiment.score || 50), // score: integer
-      c: Math.round((sentiment.confidence || 0) * 100) / 100, // confidence: 2 decimals
-      src: sentiment.sources ? sentiment.sources.slice(0, 2) : [] // max 2 sources
-    }
-  }
 
   private truncateString(str: string, maxLength: number): string {
     if (!str) return ''

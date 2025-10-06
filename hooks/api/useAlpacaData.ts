@@ -9,6 +9,7 @@ export const alpacaQueryKeys = {
   orders: ['alpaca', 'orders'] as const,
   trades: ['alpaca', 'trades'] as const,
   marketData: (symbol: string) => ['alpaca', 'marketData', symbol] as const,
+  portfolioHistory: (period: string) => ['alpaca', 'portfolioHistory', period] as const,
 }
 
 export function useAlpacaAccount(refreshInterval?: number) {
@@ -45,7 +46,7 @@ export function useAlpacaOrders(refreshInterval?: number) {
       const response = await fetch('/api/alpaca/orders')
       if (!response.ok) throw new Error('Failed to fetch orders')
       const result = await response.json()
-      return result.success ? result.orders : []
+      return result.success ? (result.data || []) : []
     },
     refetchInterval: refreshInterval || false, // Only poll when specified
     staleTime: 1000,
@@ -81,9 +82,24 @@ export function useMarketData(symbol: string) {
   })
 }
 
+export function usePortfolioHistory(period: string = '1D', refreshInterval?: number) {
+  return useQuery({
+    queryKey: alpacaQueryKeys.portfolioHistory(period),
+    queryFn: async () => {
+      const timeframe = period === '1D' ? '5Min' : period === '1W' ? '1H' : '1D'
+      const response = await fetch(`/api/alpaca/portfolio-history?period=${period}&timeframe=${timeframe}`)
+      if (!response.ok) throw new Error('Failed to fetch portfolio history')
+      const result = await response.json()
+      return result.success ? result.data : {}
+    },
+    refetchInterval: refreshInterval || false,
+    staleTime: 60000, // 1 minute
+  })
+}
+
 export function useExecuteOrder() {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: async (orderRequest: any) => {
       const response = await fetch('/api/alpaca/orders', {

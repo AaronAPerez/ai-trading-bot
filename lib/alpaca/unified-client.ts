@@ -156,6 +156,7 @@ export class UnifiedAlpacaClient {
     stop_price?: number
     extended_hours?: boolean
     client_order_id?: string
+    asset_class?: 'us_equity' | 'crypto'
   }) {
     return this.request(
       '/v2/orders',

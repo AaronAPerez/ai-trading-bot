@@ -15,6 +15,171 @@ let botState = {
   interval: null
 }
 
+// Cache for available assets (refresh every 24 hours)
+let cachedCryptoAssets: string[] = []
+let cachedStockAssets: string[] = []
+let lastCryptoFetch: number = 0
+let lastStockFetch: number = 0
+const ASSET_CACHE_DURATION = 24 * 60 * 60 * 1000 // 24 hours
+
+/**
+ * Fetch all available stock trading assets from Alpaca
+ */
+async function fetchAvailableStockAssets(): Promise<string[]> {
+  const now = Date.now()
+
+  // Return cached data if still valid
+  if (cachedStockAssets.length > 0 && (now - lastStockFetch) < ASSET_CACHE_DURATION) {
+    return cachedStockAssets
+  }
+
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_APCA_API_KEY_ID
+    const apiSecret = process.env.NEXT_PUBLIC_APCA_API_SECRET_KEY
+    const baseUrl = process.env.NEXT_PUBLIC_APCA_API_BASE_URL || 'https://paper-api.alpaca.markets'
+
+    const response = await fetch(`${baseUrl}/v2/assets?asset_class=us_equity&status=active`, {
+      headers: {
+        'APCA-API-KEY-ID': apiKey!,
+        'APCA-API-SECRET-KEY': apiSecret!,
+      },
+    })
+
+    if (!response.ok) {
+      console.warn('Failed to fetch stock assets, using fallback list')
+      return getFallbackStockList()
+    }
+
+    const assets = await response.json()
+
+    // Extract tradable, fractionable stocks with good liquidity
+    const tradableSymbols = assets
+      .filter((asset: any) =>
+        asset.tradable &&
+        asset.status === 'active' &&
+        asset.fractionable && // Can buy fractional shares
+        asset.easy_to_borrow && // Has good liquidity
+        asset.marginable && // Can be traded on margin
+        !asset.symbol.includes('/') && // Exclude crypto
+        !asset.symbol.includes('-') && // Exclude multi-class stocks
+        asset.symbol.length <= 5 // Normal ticker symbols
+      )
+      .map((asset: any) => asset.symbol)
+      .slice(0, 500) // Limit to top 500 most liquid stocks
+
+    // Cache the results
+    cachedStockAssets = tradableSymbols
+    lastStockFetch = now
+
+    console.log(`✅ Loaded ${tradableSymbols.length} tradable stock assets from Alpaca`)
+
+    return tradableSymbols
+  } catch (error) {
+    console.error('Error fetching stock assets:', error)
+    return getFallbackStockList()
+  }
+}
+
+/**
+ * Fetch all available crypto trading pairs from Alpaca
+ */
+async function fetchAvailableCryptoAssets(): Promise<string[]> {
+  const now = Date.now()
+
+  // Return cached data if still valid
+  if (cachedCryptoAssets.length > 0 && (now - lastCryptoFetch) < ASSET_CACHE_DURATION) {
+    return cachedCryptoAssets
+  }
+
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_APCA_API_KEY_ID
+    const apiSecret = process.env.NEXT_PUBLIC_APCA_API_SECRET_KEY
+    const baseUrl = process.env.NEXT_PUBLIC_APCA_API_BASE_URL || 'https://paper-api.alpaca.markets'
+
+    const response = await fetch(`${baseUrl}/v2/assets?asset_class=crypto&status=active`, {
+      headers: {
+        'APCA-API-KEY-ID': apiKey!,
+        'APCA-API-SECRET-KEY': apiSecret!,
+      },
+    })
+
+    if (!response.ok) {
+      console.warn('Failed to fetch crypto assets, using fallback list')
+      return getFallbackCryptoList()
+    }
+
+    const assets = await response.json()
+
+    // Extract tradable symbols (format: BTC/USD, ETH/USD, etc.)
+    const tradableSymbols = assets
+      .filter((asset: any) => asset.tradable && asset.status === 'active')
+      .map((asset: any) => asset.symbol)
+      .filter((symbol: string) => symbol.includes('/')) // Only crypto pairs with /
+
+    // Cache the results
+    cachedCryptoAssets = tradableSymbols
+    lastCryptoFetch = now
+
+    console.log(`✅ Loaded ${tradableSymbols.length} tradable crypto assets from Alpaca`)
+
+    return tradableSymbols
+  } catch (error) {
+    console.error('Error fetching crypto assets:', error)
+    return getFallbackCryptoList()
+  }
+}
+
+/**
+ * Fallback stock list if API fetch fails (top liquid stocks)
+ */
+function getFallbackStockList(): string[] {
+  return [
+    // Mega Cap Tech
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'NFLX',
+    // Large Cap Growth
+    'AMD', 'INTC', 'CRM', 'ADBE', 'ORCL', 'CSCO', 'AVGO', 'QCOM', 'TXN',
+    // Index ETFs
+    'SPY', 'QQQ', 'IWM', 'DIA', 'VOO', 'VTI',
+    // Sector Leaders
+    'JPM', 'BAC', 'WFC', 'GS', 'MS', 'V', 'MA', 'PYPL', 'SQ',
+    'JNJ', 'PFE', 'UNH', 'ABBV', 'TMO', 'DHR', 'BMY', 'AMGN',
+    'XOM', 'CVX', 'COP', 'SLB', 'EOG',
+    'WMT', 'HD', 'MCD', 'NKE', 'SBUX', 'TGT', 'COST',
+    'DIS', 'CMCSA', 'T', 'VZ', 'TMUS',
+    'BA', 'CAT', 'GE', 'HON', 'UPS', 'FDX',
+    // High Growth Tech
+    'SNOW', 'PLTR', 'RBLX', 'COIN', 'RIVN', 'LCID', 'SOFI', 'HOOD',
+    'UBER', 'LYFT', 'ABNB', 'DASH', 'DKNG',
+    // Semiconductor
+    'ASML', 'AMAT', 'LRCX', 'KLAC', 'MU', 'MRVL', 'NXPI',
+    // Cloud & SaaS
+    'NOW', 'WDAY', 'TEAM', 'ZS', 'CRWD', 'DDOG', 'MDB', 'NET', 'OKTA',
+    // EV & Clean Energy
+    'NIO', 'XPEV', 'LI', 'ENPH', 'SEDG', 'FSLR', 'PLUG',
+    // Biotech
+    'MRNA', 'BNTX', 'REGN', 'VRTX', 'GILD', 'BIIB',
+    // Retail & Consumer
+    'SHOP', 'ETSY', 'EBAY', 'CHWY', 'PINS', 'SNAP',
+    // Financial Tech
+    'AFRM', 'UPST', 'LC',
+    // Sector ETFs
+    'XLK', 'XLF', 'XLV', 'XLE', 'XLI', 'XLY', 'XLP', 'XLU', 'XLRE'
+  ]
+}
+
+/**
+ * Fallback crypto list if API fetch fails
+ */
+function getFallbackCryptoList(): string[] {
+  return [
+    'BTC/USD', 'ETH/USD', 'DOGE/USD', 'SHIB/USD', 'ADA/USD', 'SOL/USD',
+    'MATIC/USD', 'AVAX/USD', 'LINK/USD', 'UNI/USD', 'DOT/USD', 'LTC/USD',
+    'BCH/USD', 'XLM/USD', 'ATOM/USD', 'ALGO/USD', 'FTM/USD', 'SAND/USD',
+    'MANA/USD', 'AXS/USD', 'GALA/USD', 'APE/USD', 'CRV/USD', 'SUSHI/USD',
+    'AAVE/USD', 'COMP/USD', 'MKR/USD', 'SNX/USD', 'BAT/USD', 'ENJ/USD'
+  ]
+}
+
 /**
  * Check if current time is within market hours (Mon-Fri 9:30 AM - 4:00 PM EST)
  */
@@ -333,10 +498,12 @@ function startBotLogic(sessionId: string, config: any) {
     }
 
     try {
-      // 1. AI Market Analysis (includes crypto)
+      // 1. AI Market Analysis - Fetch ALL available assets from Alpaca
       const marketOpen = isMarketHours()
-      const stockSymbols = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'SPY', 'QQQ', 'META', 'AMZN']
-      const cryptoSymbols = ['BTC-USD', 'ETH-USD', 'DOGE-USD', 'ADA-USD', 'SOL-USD', 'MATIC-USD', 'AVAX-USD', 'LINK-USD', 'UNI-USD', 'DOT-USD']
+
+      // Fetch all available assets from Alpaca (cached for 24 hours)
+      const stockSymbols = await fetchAvailableStockAssets()
+      const cryptoSymbols = await fetchAvailableCryptoAssets()
 
       // CRITICAL: Only include stocks if market is open, crypto is always available (24/7 trading)
       const availableSymbols = marketOpen
@@ -347,7 +514,9 @@ function startBotLogic(sessionId: string, config: any) {
       const assetType = detectAssetType(selectedSymbol)
 
       console.log(`🎯 AI analyzing ${assetType === 'crypto' ? 'CRYPTO' : 'STOCK'} ${selectedSymbol} for trading opportunities...`)
-      console.log(`📊 Market Status: ${marketOpen ? 'OPEN' : 'CLOSED'} | Available Assets: ${availableSymbols.length} (${marketOpen ? 'Stocks + Crypto' : 'Crypto Only - 24/7 Trading'})`)
+      console.log(`📊 Market Status: ${marketOpen ? 'OPEN' : 'CLOSED'}`)
+      console.log(`📈 Asset Pool: ${stockSymbols.length} stocks + ${cryptoSymbols.length} crypto = ${availableSymbols.length} total tradable assets`)
+      console.log(`🔍 Trading Mode: ${marketOpen ? 'Stocks + Crypto' : 'Crypto Only - 24/7 Trading'}`)
 
       // 2. Generate AI trading signal
       const confidence = 0.6 + Math.random() * 0.35 // 60-95%

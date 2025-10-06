@@ -30,33 +30,51 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
         // They will be loaded only when the AI bot is started or when explicitly requested
         console.log('📦 Store initialization complete - AI recommendations will load when bot is active')
 
-        // Set up WebSocket connections for real-time data
-        if (typeof window !== 'undefined') {
-          // Initialize market data WebSocket
-          const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001')
+        // Set up WebSocket connections for real-time data (optional)
+        if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_WS_URL) {
+          try {
+            // Initialize market data WebSocket only if WS_URL is configured
+            const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL)
 
-          ws.onopen = () => {
-            marketStore.setConnectionStatus('connected')
-            // Subscribe to watchlist symbols
-            marketStore.watchlist.forEach(symbol => {
-              ws.send(JSON.stringify({ type: 'subscribe', symbol }))
-            })
-          }
-
-          ws.onmessage = (event) => {
-            const data = JSON.parse(event.data)
-            if (data.type === 'price_update') {
-              marketStore.updatePrice(data.symbol, data.price, data.change)
+            ws.onopen = () => {
+              console.log('🔌 WebSocket connected')
+              marketStore.setConnectionStatus('connected')
+              // Subscribe to watchlist symbols
+              marketStore.watchlist.forEach(symbol => {
+                ws.send(JSON.stringify({ type: 'subscribe', symbol }))
+              })
             }
-          }
 
-          ws.onclose = () => {
+            ws.onmessage = (event) => {
+              const data = JSON.parse(event.data)
+              if (data.type === 'price_update') {
+                marketStore.updatePrice(data.symbol, data.price, data.change)
+              }
+            }
+
+            ws.onclose = () => {
+              console.log('🔌 WebSocket disconnected')
+              marketStore.setConnectionStatus('disconnected')
+            }
+
+            ws.onerror = (error) => {
+              console.warn('⚠️ WebSocket error (non-critical):', error)
+              marketStore.setConnectionStatus('disconnected')
+            }
+
+            // Cleanup on unmount
+            return () => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.close()
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ WebSocket connection not available (using polling instead):', error)
             marketStore.setConnectionStatus('disconnected')
           }
-
-          ws.onerror = () => {
-            marketStore.setConnectionStatus('reconnecting')
-          }
+        } else {
+          console.log('📡 WebSocket disabled - using HTTP polling for market data')
+          marketStore.setConnectionStatus('disconnected')
         }
 
       } catch (error) {

@@ -37,7 +37,9 @@ export class SupabaseService {
   }
 
   async saveTradeHistory(trade: Tables['trade_history']['Insert']) {
-    const { data, error } = await this._client
+    // Use server client for server-side operations to bypass RLS
+    const client = this.getServerClient()
+    const { data, error } = await client
       .from('trade_history')
       .insert(trade)
       .select()
@@ -49,7 +51,9 @@ export class SupabaseService {
 
 
   async updateBotMetrics(userId: string, metrics: Tables['bot_metrics']['Update']) {
-    const { data, error } = await this._client
+    // Use server client for server-side operations to bypass RLS
+    const client = this.getServerClient()
+    const { data, error } = await client
       .from('bot_metrics')
       .upsert({
         user_id: userId,
@@ -75,7 +79,9 @@ export class SupabaseService {
   }
 
   async logBotActivity(log: Tables['bot_activity_logs']['Insert']) {
-    const { data, error } = await this._client
+    // Use server client for server-side operations to bypass RLS
+    const client = this.getServerClient()
+    const { data, error } = await client
       .from('bot_activity_logs')
       .insert(log)
       .select()
@@ -98,7 +104,9 @@ export class SupabaseService {
   }
 
   async saveAILearningData(learning: Tables['ai_learning_data']['Insert']) {
-    const { data, error } = await this._client
+    // Use server client for server-side operations to bypass RLS
+    const client = this.getServerClient()
+    const { data, error } = await client
       .from('ai_learning_data')
       .insert(learning)
       .select()

@@ -607,9 +607,10 @@ export function getSymbolsByCategory(category: string): string[] {
 
 /**
  * Detect asset type from symbol format
+ * Supports both hyphen (BTC-USD) and slash (BTC/USD) formats
  */
 export function detectAssetType(symbol: string): 'stock' | 'crypto' {
-  return symbol.includes('-USD') || symbol.includes('-') ? 'crypto' : 'stock'
+  return symbol.includes('-USD') || symbol.includes('/USD') || symbol.includes('/') || symbol.includes('-') ? 'crypto' : 'stock'
 }
 
 /**
