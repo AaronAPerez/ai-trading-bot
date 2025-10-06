@@ -1,7 +1,9 @@
 import { TradeSignal, Portfolio, MarketData, ExecutionResult, Position } from '../../../types/trading'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
 import { AILearningSystem, TradeOutcome } from '../ml/AILearningSystem'
-import { AlpacaClient } from '../../alpaca/AlpacaClient'
+
+import { detectAssetType } from '../../../config/symbols'
+import { AlpacaClient } from '@/lib/marketData/AlpacaClient'
 
 interface EnhancedExecutionConfig {
   autoExecuteEnabled: boolean
@@ -295,7 +297,10 @@ export class EnhancedAutoTradeExecutor {
       estimatedSlippage: 0,
       estimatedFees: 0,
       expectedReturn: 0,
-      riskRewardRatio: 0
+      riskRewardRatio: 0,
+      success: undefined,
+      orderId: '',
+      executionPrice: 0
     }
 
     // 1. Portfolio-level risk check
@@ -402,16 +407,24 @@ export class EnhancedAutoTradeExecutor {
 
       // Calculate notional value for order
       const notionalValue = Math.max(1, Math.round(decision.positionSize * portfolio.totalValue))
-      
+
+      // Detect asset type for proper API routing
+      const assetType = detectAssetType(symbol)
+      const isCrypto = assetType === 'crypto'
+
       // Create order with enhanced parameters
       const orderRequest = {
         symbol,
         notional: notionalValue,
         side: signal.action.toLowerCase() as 'buy' | 'sell',
         type: 'market' as const,
-        time_in_force: 'day' as const,
+        time_in_force: isCrypto ? 'gtc' as const : 'day' as const, // Crypto uses GTC, stocks use day
+        asset_class: isCrypto ? 'crypto' as const : 'us_equity' as const,
         client_order_id: `ai_auto_${symbol}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        extended_hours: this.config.executionRules.afterHoursTrading,
+        // Extended hours only applies to stocks, not crypto (crypto is always 24/7)
+        ...(!isCrypto && this.config.executionRules.afterHoursTrading && {
+          extended_hours: true
+        }),
         // Add stop loss if required and available
         ...(this.config.riskControls.maxDailyLoss && signal.metadata?.stopLoss && {
           stop_loss: {
@@ -736,42 +749,58 @@ export class EnhancedAutoTradeExecutor {
     marketData: MarketData[],
     symbol: string
   ): Promise<{ suitable: boolean; reason?: string }> {
-    
+
     if (marketData.length === 0) {
       return { suitable: false, reason: 'No market data available' }
     }
-    
+
     const currentData = marketData[marketData.length - 1]
-    const isCrypto = symbol.includes('USD') && symbol.length <= 7
-    
-    // Market hours check (skip for crypto)
-    if (this.config.executionRules.marketHoursOnly && !isCrypto) {
+
+    // Detect asset type using proper detection function
+    const assetType = detectAssetType(symbol)
+    const isCrypto = assetType === 'crypto'
+
+    // CRYPTO TRADES 24/7 - No market hours restrictions
+    if (isCrypto) {
+      console.log(`✅ Crypto symbol ${symbol} - 24/7 trading enabled`)
+
+      // Volume check for crypto
+      const avgVolume = marketData.slice(-20).reduce((sum, data) => sum + data.volume, 0) / Math.min(20, marketData.length)
+      if (currentData.volume < this.config.executionRules.volumeThreshold) {
+        return { suitable: false, reason: `Volume too low: ${currentData.volume.toLocaleString()} < ${this.config.executionRules.volumeThreshold.toLocaleString()}` }
+      }
+
+      return { suitable: true }
+    }
+
+    // STOCK MARKET HOURS CHECK (only for stocks)
+    if (this.config.executionRules.marketHoursOnly) {
       const now = new Date()
       const hour = now.getHours()
       const day = now.getDay()
-      
-      // Weekend check
+
+      // Weekend check for stocks
       if (day === 0 || day === 6) { // Sunday = 0, Saturday = 6
         if (!this.config.executionRules.weekendTrading) {
-          return { suitable: false, reason: 'Weekend trading disabled' }
+          return { suitable: false, reason: 'Stock market closed on weekends (weekend trading disabled)' }
         }
       }
-      
+
       // Market hours check (9:30 AM - 4:00 PM EST roughly 14:30 - 21:00 UTC)
       const utcHour = now.getUTCHours()
       if (utcHour < 14.5 || utcHour > 21) {
         if (!this.config.executionRules.afterHoursTrading) {
-          return { suitable: false, reason: 'Outside market hours and after-hours trading disabled' }
+          return { suitable: false, reason: 'Stock market closed - outside market hours (after-hours trading disabled)' }
         }
       }
     }
-    
-    // Volume check
+
+    // Volume check for stocks
     const avgVolume = marketData.slice(-20).reduce((sum, data) => sum + data.volume, 0) / Math.min(20, marketData.length)
     if (currentData.volume < this.config.executionRules.volumeThreshold) {
       return { suitable: false, reason: `Volume too low: ${currentData.volume.toLocaleString()} < ${this.config.executionRules.volumeThreshold.toLocaleString()}` }
     }
-    
+
     return { suitable: true }
   }
 

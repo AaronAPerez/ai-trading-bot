@@ -4,6 +4,7 @@ import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
 import { supabaseService } from '@/lib/database/supabase-utils'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
+import { detectAssetType } from '@/config/symbols'
 
 // In-memory bot state (in production, use Redis or database)
 let botState = {
@@ -12,6 +13,29 @@ let botState = {
   startTime: null,
   sessionId: null,
   interval: null
+}
+
+/**
+ * Check if current time is within market hours (Mon-Fri 9:30 AM - 4:00 PM EST)
+ */
+function isMarketHours(): boolean {
+  const now = new Date()
+  const day = now.getDay()
+
+  // Weekend check - market closed on Saturday (6) and Sunday (0)
+  if (day === 0 || day === 6) {
+    return false
+  }
+
+  // Market hours: 9:30 AM - 4:00 PM EST
+  const hour = now.getHours()
+  const minute = now.getMinutes()
+  const timeInMinutes = hour * 60 + minute
+
+  const marketOpen = 9 * 60 + 30  // 9:30 AM = 570 minutes
+  const marketClose = 16 * 60      // 4:00 PM = 960 minutes
+
+  return timeInMinutes >= marketOpen && timeInMinutes < marketClose
 }
 
 /**
@@ -310,10 +334,20 @@ function startBotLogic(sessionId: string, config: any) {
 
     try {
       // 1. AI Market Analysis (includes crypto)
-      const symbols = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'SPY', 'QQQ', 'META', 'AMZN', 'BTC/USD', 'ETH/USD', 'DOGE/USD', 'ADA/USD', 'SOL/USD']
-      const selectedSymbol = symbols[Math.floor(Math.random() * symbols.length)]
+      const marketOpen = isMarketHours()
+      const stockSymbols = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'SPY', 'QQQ', 'META', 'AMZN']
+      const cryptoSymbols = ['BTC-USD', 'ETH-USD', 'DOGE-USD', 'ADA-USD', 'SOL-USD', 'MATIC-USD', 'AVAX-USD', 'LINK-USD', 'UNI-USD', 'DOT-USD']
 
-      console.log(`🎯 AI analyzing ${selectedSymbol} for trading opportunities...`)
+      // CRITICAL: Only include stocks if market is open, crypto is always available (24/7 trading)
+      const availableSymbols = marketOpen
+        ? [...stockSymbols, ...cryptoSymbols] // Market open: Both stocks and crypto
+        : cryptoSymbols // Market closed: Only crypto (24/7 trading)
+
+      const selectedSymbol = availableSymbols[Math.floor(Math.random() * availableSymbols.length)]
+      const assetType = detectAssetType(selectedSymbol)
+
+      console.log(`🎯 AI analyzing ${assetType === 'crypto' ? 'CRYPTO' : 'STOCK'} ${selectedSymbol} for trading opportunities...`)
+      console.log(`📊 Market Status: ${marketOpen ? 'OPEN' : 'CLOSED'} | Available Assets: ${availableSymbols.length} (${marketOpen ? 'Stocks + Crypto' : 'Crypto Only - 24/7 Trading'})`)
 
       // 2. Generate AI trading signal
       const confidence = 0.6 + Math.random() * 0.35 // 60-95%
@@ -423,18 +457,48 @@ function startBotLogic(sessionId: string, config: any) {
 // Execute actual trades via Alpaca API
 async function executeTradeViaAlpaca(userId: string, symbol: string, signal: string, confidence: number, sessionId: string) {
   try {
-    console.log(`🔄 Executing ${signal} order for ${symbol} via Alpaca API...`)
+    // CRITICAL: Detect asset type and check market hours
+    const assetType = detectAssetType(symbol)
+    const isCrypto = assetType === 'crypto'
+    const marketOpen = isMarketHours()
+
+    // STOCKS: Only execute during market hours
+    if (!isCrypto && !marketOpen) {
+      console.log(`⏰ BLOCKED: ${signal} ${symbol} - Stock market is closed (stocks only trade Mon-Fri 9:30 AM - 4:00 PM EST)`)
+
+      // Log blocked trade to Supabase
+      await supabaseService.logBotActivity(userId, {
+        type: 'info',
+        symbol: symbol,
+        message: `Trade blocked: ${signal} ${symbol} - Stock market closed`,
+        status: 'completed',
+        details: JSON.stringify({
+          reason: 'market_closed',
+          assetType: 'stock',
+          signal,
+          confidence,
+          sessionId,
+          note: 'Stocks only trade during market hours (Mon-Fri 9:30 AM - 4:00 PM EST)'
+        })
+      })
+
+      return // Exit early - do not execute stock trades when market is closed
+    }
+
+    console.log(`🔄 Executing ${signal} order for ${isCrypto ? 'CRYPTO' : 'STOCK'} ${symbol} via Alpaca API...`)
+    console.log(`📊 Asset Type: ${assetType} | Market Hours: ${marketOpen ? 'OPEN' : 'CLOSED'} | Can Trade: ${isCrypto ? '24/7' : 'Market Hours Only'}`)
 
     // Calculate position size (1-5 shares for demo)
     const quantity = Math.floor(1 + Math.random() * 4)
 
-    // Call Alpaca API to place order using unified client
+    // Call Alpaca API to place order using unified client with proper asset_class
     const orderResult = await alpacaClient.createOrder({
       symbol,
       qty: quantity,
       side: signal.toLowerCase(),
       type: 'market',
-      time_in_force: 'day'
+      time_in_force: isCrypto ? 'gtc' : 'day', // Crypto uses GTC (Good-Til-Canceled), stocks use day
+      asset_class: isCrypto ? 'crypto' : 'us_equity' // CRITICAL: Alpaca requires this for proper routing
     })
 
     if (orderResult) {

@@ -7,6 +7,7 @@ import {
   AlpacaOrderStatus,
   ConnectionStatus
 } from './types'
+import { detectAssetType } from '../../config/symbols'
 
 export interface OrderRequest extends CreateOrderRequest {
   // Additional validation fields
@@ -115,26 +116,32 @@ export class AlpacaOrderService {
   private async executeOrder(orderRequest: OrderRequest): Promise<OrderResponse> {
     const endpoint = `${this.baseUrl}/v2/orders`
 
-    // Prepare order payload
+    // Detect asset type for proper API routing
+    const assetType = detectAssetType(orderRequest.symbol)
+    const isCrypto = assetType === 'crypto'
+
+    // Prepare order payload with proper asset_class
     const orderPayload = {
       symbol: orderRequest.symbol,
       side: orderRequest.side,
       type: orderRequest.type,
       time_in_force: orderRequest.time_in_force,
+      asset_class: isCrypto ? 'crypto' : 'us_equity', // CRITICAL: Alpaca requires this for routing
       ...(orderRequest.qty && { qty: orderRequest.qty.toString() }),
       ...(orderRequest.notional && { notional: orderRequest.notional.toString() }),
       ...(orderRequest.limit_price && { limit_price: orderRequest.limit_price.toString() }),
       ...(orderRequest.stop_price && { stop_price: orderRequest.stop_price.toString() }),
       ...(orderRequest.trail_price && { trail_price: orderRequest.trail_price.toString() }),
       ...(orderRequest.trail_percent && { trail_percent: orderRequest.trail_percent.toString() }),
-      ...(orderRequest.extended_hours !== undefined && { extended_hours: orderRequest.extended_hours }),
+      // Extended hours only for stocks, crypto is always 24/7
+      ...(!isCrypto && orderRequest.extended_hours !== undefined && { extended_hours: orderRequest.extended_hours }),
       ...(orderRequest.client_order_id && { client_order_id: orderRequest.client_order_id }),
       ...(orderRequest.order_class && { order_class: orderRequest.order_class }),
       ...(orderRequest.take_profit && { take_profit: orderRequest.take_profit }),
       ...(orderRequest.stop_loss && { stop_loss: orderRequest.stop_loss })
     }
 
-    console.log('📤 Sending order to Alpaca:', orderPayload)
+    console.log(`📤 Sending ${isCrypto ? 'CRYPTO' : 'STOCK'} order to Alpaca:`, orderPayload)
 
     const response = await fetch(endpoint, {
       method: 'POST',

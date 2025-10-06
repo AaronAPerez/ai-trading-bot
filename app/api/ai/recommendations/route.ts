@@ -4,15 +4,12 @@
 // ===============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { withErrorHandling } from '@/lib/api/error-handler'
 import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
 import type {
   AIRecommendation,
   SafetyChecks,
   MarketData,
-  TechnicalIndicators,
-  SentimentData
 } from '@/types/trading'
 
 // ===============================================
@@ -136,6 +133,19 @@ class AIRecommendationEngine {
    */
   private async analyzeSymbol(symbol: string, ownedSymbols: Set<string>): Promise<AIRecommendation | null> {
     try {
+      // CRITICAL: Check if symbol is crypto or stock
+      const isCrypto = symbol.endsWith('USD') || symbol.includes('-USD')
+      const isMarketHours = this.isMarketHours(new Date())
+
+      // STOCKS: Only analyze during market hours
+      if (!isCrypto && !isMarketHours) {
+        // Skip stock analysis when market is closed
+        return null
+      }
+
+      // CRYPTO: Can be analyzed 24/7
+      // Stocks: Only during market hours (already filtered above)
+
       // 1. Get market data
       const marketData = await this.getMarketData(symbol)
       if (!marketData || marketData.length < 20) {
@@ -674,10 +684,22 @@ class AIRecommendationEngine {
 
   private isMarketHours(date: Date): boolean {
     const day = date.getDay()
+
+    // Weekend check - market closed on Saturday (6) and Sunday (0)
+    if (day === 0 || day === 6) {
+      return false
+    }
+
+    // Convert to EST/EDT timezone for accurate market hours
     const hour = date.getHours()
-    
-    // Monday to Friday, 9:30 AM to 4:00 PM ET
-    return day >= 1 && day <= 5 && hour >= 9 && hour < 16
+    const minute = date.getMinutes()
+    const timeInMinutes = hour * 60 + minute
+
+    // Market hours: 9:30 AM - 4:00 PM EST (570 minutes to 960 minutes from midnight)
+    const marketOpen = 9 * 60 + 30  // 9:30 AM = 570 minutes
+    const marketClose = 16 * 60      // 4:00 PM = 960 minutes
+
+    return timeInMinutes >= marketOpen && timeInMinutes < marketClose
   }
 
   private chunkArray<T>(array: T[], size: number): T[][] {

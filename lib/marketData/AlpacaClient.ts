@@ -7,6 +7,12 @@
  */
 
 export class AlpacaClient {
+  placeOrder(orderRequest: { stop_loss?: { stop_price: string } | undefined; extended_hours?: boolean | undefined; symbol: string; notional: number; side: "buy" | "sell"; type: "market"; time_in_force: "gtc" | "day"; asset_class: "crypto" | "us_equity"; client_order_id: string }) {
+    throw new Error('Method not implemented.')
+  }
+  getMarketData(symbol: string): any {
+    throw new Error('Method not implemented.')
+  }
   private baseUrl: string
   private isDemoMode: boolean
 

@@ -199,24 +199,35 @@ export const useWebSocket = () => {
       // Skip Alpaca WebSocket connections in development to avoid authentication errors
       if (process.env.NODE_ENV === 'development') {
         console.log('🔧 Development mode: Skipping Alpaca WebSocket connections to avoid auth errors')
-        // Only initialize internal WebSocket for bot communication
-        const internalWs = new WebSocketManager()
-        internalWsRef.current = internalWs
 
-        try {
-          const internalWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001'
-          await internalWs.connect('internal', internalWsUrl)
-          setupInternalEventListeners(internalWs)
-          if (isMountedRef.current) {
-            setConnectionStatus(prev => ({ ...prev, internalWs: true }))
-            setIsInitialized(true)
+        // Check if internal WebSocket is enabled (optional)
+        const enableInternalWs = process.env.NEXT_PUBLIC_ENABLE_INTERNAL_WS === 'true'
+
+        if (enableInternalWs) {
+          // Only initialize internal WebSocket for bot communication
+          const internalWs = new WebSocketManager()
+          internalWsRef.current = internalWs
+
+          try {
+            const internalWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001'
+            await internalWs.connect('internal', internalWsUrl)
+            setupInternalEventListeners(internalWs)
+            if (isMountedRef.current) {
+              setConnectionStatus(prev => ({ ...prev, internalWs: true }))
+              setIsInitialized(true)
+            }
+            console.log('✅ Internal WebSocket connection initialized (dev mode)')
+          } catch (error) {
+            // Suppress timeout errors for optional internal WebSocket
+            if (!(error instanceof Error && error.message.includes('timeout'))) {
+              console.warn('⚠️ Internal WebSocket server not available:', error)
+            }
+            if (isMountedRef.current) {
+              setIsInitialized(true)
+            }
           }
-          console.log('✅ Internal WebSocket connection initialized (dev mode)')
-        } catch (error) {
-          // Suppress timeout errors for optional internal WebSocket
-          if (!(error instanceof Error && error.message.includes('timeout'))) {
-            console.warn('⚠️ Internal WebSocket server not available:', error)
-          }
+        } else {
+          console.log('ℹ️ Internal WebSocket disabled via NEXT_PUBLIC_ENABLE_INTERNAL_WS')
           if (isMountedRef.current) {
             setIsInitialized(true)
           }
@@ -241,18 +252,24 @@ export const useWebSocket = () => {
         alpacaClient.connectTradingUpdates()
       ])
 
-      // Connect to internal WebSocket server (if available)
-      try {
-        const internalWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001'
-        await internalWs.connect('internal', internalWsUrl)
-        if (isMountedRef.current) {
-          setConnectionStatus(prev => ({ ...prev, internalWs: true }))
+      // Connect to internal WebSocket server (if enabled and available)
+      const enableInternalWs = process.env.NEXT_PUBLIC_ENABLE_INTERNAL_WS === 'true'
+
+      if (enableInternalWs) {
+        try {
+          const internalWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001'
+          await internalWs.connect('internal', internalWsUrl)
+          if (isMountedRef.current) {
+            setConnectionStatus(prev => ({ ...prev, internalWs: true }))
+          }
+        } catch (error) {
+          // Suppress timeout errors for optional internal WebSocket
+          if (!(error instanceof Error && error.message.includes('timeout'))) {
+            console.warn('⚠️ Internal WebSocket server not available:', error)
+          }
         }
-      } catch (error) {
-        // Suppress timeout errors for optional internal WebSocket
-        if (!(error instanceof Error && error.message.includes('timeout'))) {
-          console.warn('⚠️ Internal WebSocket server not available:', error)
-        }
+      } else {
+        console.log('ℹ️ Internal WebSocket disabled via NEXT_PUBLIC_ENABLE_INTERNAL_WS')
       }
 
       // Setup event listeners

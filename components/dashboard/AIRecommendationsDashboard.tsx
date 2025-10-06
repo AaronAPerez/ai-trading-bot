@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useAIRecommendations } from '@/hooks/useAIRecommendations'
-import { AIRecommendationsList } from '@/components/dashboard/AIRecommendationsList'
 import { Button } from '@/components/ui/Button'
 import { RefreshCw, Bot, Zap, TrendingUp } from 'lucide-react'
 

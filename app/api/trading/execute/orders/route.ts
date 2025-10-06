@@ -1,13 +1,14 @@
 /**
  * Trading Orders Execution API Route
  * Handles order execution for trading operations
- * 
+ *
  * @fileoverview API route for executing trading orders via Alpaca
  * @author Aaron A Perez
  * @version 4.0.0 - Production Quality
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { detectAssetType } from '@/config/symbols'
 
 // Types for trading orders
 interface TradeOrder {
@@ -81,6 +82,24 @@ export async function POST(request: NextRequest) {
 
     // Production mode - integrate with Alpaca API
     try {
+      // Detect asset type for proper API routing
+      const assetType = detectAssetType(symbol)
+      const isCrypto = assetType === 'crypto'
+
+      // Build order payload with proper asset_class
+      const orderPayload = {
+        symbol: symbol, // Keep symbol as-is (Alpaca handles crypto format like BTC-USD)
+        side: side.toLowerCase(),
+        type: orderType.toLowerCase(),
+        time_in_force: isCrypto ? 'gtc' : timeInForce.toLowerCase(), // Crypto uses GTC
+        asset_class: isCrypto ? 'crypto' : 'us_equity', // CRITICAL for Alpaca routing
+        ...(quantity && { qty: quantity.toString() }),
+        ...(amount && { notional: amount.toString() }),
+        ...(limitPrice && { limit_price: limitPrice.toString() })
+      }
+
+      console.log(`📤 Alpaca API: ${isCrypto ? 'CRYPTO' : 'STOCK'} Order -`, orderPayload)
+
       const alpacaResponse = await fetch(`${process.env.ALPACA_BASE_URL}/v2/orders`, {
         method: 'POST',
         headers: {
@@ -88,15 +107,7 @@ export async function POST(request: NextRequest) {
           'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          symbol: symbol.replace('-USD', ''), // Remove crypto suffix for Alpaca
-          qty: quantity,
-          notional: amount,
-          side: side.toLowerCase(),
-          type: orderType.toLowerCase(),
-          time_in_force: timeInForce.toLowerCase(),
-          limit_price: limitPrice
-        })
+        body: JSON.stringify(orderPayload)
       })
 
       if (!alpacaResponse.ok) {

@@ -26,6 +26,9 @@ import LiveTradesDisplay from "../trading/LiveTradesDisplay"
 import MarketStatusDisplay from "../market/MarketStatusDisplay"
 
 import PortfolioOverview from "./PortfolioOverview"
+import PortfolioSummaryCards from "./PortfolioSummaryCards"
+import PortfolioPositionsTable from "./PortfolioPositionsTable"
+import PortfolioChart from "./PortfolioChart"
 
 // Default bot configuration with auto-execution enabled
 const defaultBotConfig = {
@@ -388,11 +391,24 @@ export default function AITradingDashboard() {
         </div>
       </div>
 
-      {/* Live Portfolio Balance */}
+      {/* Portfolio Summary Cards */}
       <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
-        <LiveBalanceDisplay
+        <PortfolioSummaryCards
           refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-          showChangeIndicators={true}
+        />
+      </div>
+
+      {/* Portfolio Performance Chart */}
+      <div className="bg-gradient-to-r from-gray-800/50 to-purple-900/30 rounded-xl p-6 border border-gray-700/50">
+        <PortfolioChart
+          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+        />
+      </div>
+
+      {/* Portfolio Positions Table */}
+      <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border border-gray-700/50">
+        <PortfolioPositionsTable
+          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
         />
       </div>
 
