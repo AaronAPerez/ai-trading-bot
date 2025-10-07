@@ -86,14 +86,15 @@ let orderExecutionEnabled = true
 const autoExecutionConfig = {
   minConfidenceForOrder: 60, // LOWERED from 70% to 60%
   maxPositionSize: 5000, // Maximum $5000 per position
-  orderCooldown: 60000, // REDUCED from 3 minutes to 1 minute
+  orderCooldown: 300000, // 5 minutes (prevent buying same asset too frequently)
   dailyOrderLimit: 100, // Maximum 100 orders per day
   riskPerTrade: 0.05, // 5% of portfolio per trade
   minOrderValue: 1, // LOWERED from $5 to $1 for testing with low buying power
   baseMinPositionValue: 2, // LOWERED from $10 to $2 for testing with low buying power
   marketHoursOnly: false, // Allow 24/7 trading
   cryptoTradingEnabled: true, // Enable crypto trading
-  enableDebugLogging: true // Enhanced debugging
+  enableDebugLogging: true, // Enhanced debugging
+  preventDuplicatePositions: true // Don't buy more of what we already own (unless selling)
 }
 
 const recentOrders: Set<string> = new Set()
@@ -233,14 +234,113 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       return { success: false, reason: 'Position size too small' }
     }
 
+    // Check 6: Validate crypto pairs (Alpaca only supports crypto paired with USD/USDT/USDC)
+    // Detect crypto: ONLY symbols with / or - followed by USD/USDT/USDC
+    // DO NOT use ticker-based detection as some stock ETFs have same tickers (e.g., ETH = Grayscale ETF)
+    const isCrypto = symbol.includes('/') || /[-](USD|USDT|USDC)$/i.test(symbol)
+
+    console.log(`🔍 Crypto check for ${symbol}: ${isCrypto ? 'CRYPTO' : 'STOCK'}`)
+
+    // Block invalid crypto pairs (e.g., BTC/ETH, LINK/BTC - Alpaca doesn't support these)
+    if (isCrypto) {
+      const validCryptoPairs = /[-/](USD|USDT|USDC)$/i
+      if (!validCryptoPairs.test(symbol)) {
+        console.log(`❌ Invalid crypto pair: ${symbol} - Alpaca only supports pairs with USD/USDT/USDC`)
+        return {
+          success: false,
+          reason: `Invalid crypto pair: ${symbol}. Only USD, USDT, or USDC pairs are supported.`
+        }
+      }
+    }
+
+    // Check 7: Market hours for stocks (crypto trades 24/7)
+    if (!isCrypto) {
+      // Check if US stock market is open (9:30 AM - 4:00 PM ET, Monday-Friday)
+      const now = new Date()
+      const etTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }))
+      const hour = etTime.getHours()
+      const minute = etTime.getMinutes()
+      const day = etTime.getDay()
+
+      const isWeekday = day >= 1 && day <= 5
+      const isAfterOpen = hour > 9 || (hour === 9 && minute >= 30)
+      const isBeforeClose = hour < 16
+
+      const isMarketOpen = isWeekday && isAfterOpen && isBeforeClose
+
+      if (!isMarketOpen) {
+        console.log(`❌ Cannot trade ${symbol} - US stock market is closed`)
+        console.log(`   Current ET time: ${etTime.toLocaleString()}`)
+        console.log(`   Market hours: Mon-Fri 9:30 AM - 4:00 PM ET`)
+        return {
+          success: false,
+          reason: 'Stock market is closed. Trading hours: Mon-Fri 9:30 AM - 4:00 PM ET'
+        }
+      }
+      console.log(`✅ Market is OPEN for stock ${symbol}`)
+    } else {
+      console.log(`✅ ${symbol} detected as CRYPTO - trades 24/7`)
+    }
+
+    // Check 8: Check existing positions for BUY/SELL validation
+    try {
+      const alpacaUrl = process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
+      const positionsResponse = await fetch(`${alpacaUrl}/v2/positions`, {
+        headers: {
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
+        }
+      })
+
+      if (positionsResponse.ok) {
+        const positions = await positionsResponse.json()
+        const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
+
+        if (recommendation.toUpperCase() === 'SELL') {
+          // For SELL: Must have existing position (no shorting)
+          if (!existingPosition) {
+            console.log(`❌ Cannot SELL ${symbol} - no existing position (would be shorting)`)
+            return { success: false, reason: 'Cannot sell without existing position (shorting not allowed)' }
+          }
+          console.log(`✅ Confirmed existing position in ${symbol}, proceeding with SELL`)
+        } else if (recommendation.toUpperCase() === 'BUY') {
+          // For BUY: Check if we already own this asset
+          if (existingPosition && autoExecutionConfig.preventDuplicatePositions) {
+            const currentValue = parseFloat(existingPosition.market_value || '0')
+            console.log(`❌ Already own ${symbol} (current value: $${currentValue.toFixed(2)})`)
+            console.log(`   Strategy: Diversify into other assets instead of averaging up`)
+            return {
+              success: false,
+              reason: `Already own ${symbol}. Diversifying into other assets to reduce risk.`
+            }
+          }
+          if (existingPosition) {
+            console.log(`⚠️ Already own ${symbol}, but averaging up...`)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking positions:', error)
+      // If we can't verify positions for a SELL, block it
+      if (recommendation.toUpperCase() === 'SELL') {
+        return { success: false, reason: 'Could not verify existing position' }
+      }
+      // For BUY, we can proceed even if position check fails
+    }
+
     // Prepare order data
-    const cleanSymbol = symbol.replace('-USD', '').replace('/USD', '') // Clean crypto symbols
+    // CRITICAL: For crypto, Alpaca expects format like BTC/USD (not BTC-USD or just BTC)
+    // For stocks, use symbol as-is (e.g., AAPL)
+    const cleanSymbol = isCrypto
+      ? symbol.replace('-USD', '/USD')  // Convert BTC-USD to BTC/USD if needed
+      : symbol                           // Keep stock symbols as-is
+
     const orderData = {
       symbol: cleanSymbol,
       side: recommendation.toLowerCase(),
       notional: Math.round(positionSize * 100) / 100, // Round to 2 decimal places
       type: 'market',
-      time_in_force: 'day',
+      time_in_force: isCrypto ? 'gtc' : 'day', // Crypto uses GTC (Good-Til-Canceled), stocks use day
       client_order_id: `AI_BOT_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
     }
 
@@ -358,15 +458,36 @@ function startBotActivitySimulation() {
     if (!isSimulatingActivity) return
 
     try {
-      // Generate realistic recommendation
-      const symbols = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'BTC-USD', 'ETH-USD']
-      const symbol = symbols[Math.floor(Math.random() * symbols.length)]
-      
+      // Check if market is open
+      const now = new Date()
+      const etTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }))
+      const hour = etTime.getHours()
+      const minute = etTime.getMinutes()
+      const day = etTime.getDay()
+
+      const isWeekday = day >= 1 && day <= 5
+      const isAfterOpen = hour > 9 || (hour === 9 && minute >= 30)
+      const isBeforeClose = hour < 16
+      const isMarketOpen = isWeekday && isAfterOpen && isBeforeClose
+
+      // CRITICAL: Only use stocks if market is open, otherwise only crypto (24/7 trading)
+      const stockSymbols = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD']
+      const cryptoSymbols = ['BTC/USD', 'ETH/USD', 'DOGE/USD', 'SOL/USD', 'MATIC/USD', 'AVAX/USD', 'LINK/USD', 'UNI/USD']
+
+      // Select symbol pool based on market hours
+      const availableSymbols = isMarketOpen
+        ? [...stockSymbols, ...cryptoSymbols]  // Market open: both stocks and crypto
+        : cryptoSymbols                         // Market closed: only crypto
+
+      const symbol = availableSymbols[Math.floor(Math.random() * availableSymbols.length)]
+      const assetType = symbol.includes('/') ? 'CRYPTO' : 'STOCK'
+
       // More realistic confidence range (50-95%)
       const confidence = 50 + Math.random() * 45
       const recommendation = Math.random() > 0.5 ? 'BUY' : 'SELL'
 
       console.log(`🎯 Generated recommendation: ${symbol} ${recommendation} (${confidence.toFixed(1)}%)`)
+      console.log(`📊 Market: ${isMarketOpen ? 'OPEN' : 'CLOSED'} | Asset: ${assetType} | Trading: ${isMarketOpen ? 'Stocks + Crypto' : 'Crypto Only'}`)
 
       // Update metrics
       botMetrics.symbolsScanned++

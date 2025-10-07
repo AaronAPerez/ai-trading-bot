@@ -89,8 +89,12 @@ export class AILearningService {
       this.sentimentInterval = undefined
     }
 
-    // Save final learning state
-    await this.saveLearningDataToSupabase()
+    // Save final learning state (only on server-side to avoid RLS errors)
+    if (typeof window === 'undefined') {
+      await this.saveLearningDataToSupabase()
+    } else {
+      console.log('⏭️ Skipping Supabase save on client-side (will be saved by server)')
+    }
 
     console.log('✅ AI Learning Service stopped')
   }
@@ -345,11 +349,11 @@ export class AILearningService {
       // Map data to match ai_learning_data table schema
       const learningData = {
         user_id: this.config.userId,
-        trade_id: `learning_insight_${Date.now()}`,
+        trade_id: null,
         symbol: 'PORTFOLIO',
         strategy_used: 'LEARNING_ANALYSIS',
         confidence_score: insights.optimalConfidenceThreshold,
-        outcome: insights.overallAccuracy > 0.5 ? 'success' : 'learning',
+        outcome: insights.overallAccuracy > 0.5 ? 'profit' : 'breakeven',
         profit_loss: 0,
         market_conditions: {
           regime: 'MIXED',
@@ -515,11 +519,11 @@ export class AILearningService {
       // Save the learning state - map to correct schema
       await supabaseService.saveAILearningData({
         user_id: this.config.userId,
-        trade_id: `learning_state_${Date.now()}`,
+        trade_id: null,
         symbol: 'SYSTEM',
         strategy_used: 'LEARNING_EXPORT',
         confidence_score: 1.0,
-        outcome: 'success',
+        outcome: 'breakeven',
         profit_loss: 0,
         market_conditions: {
           regime: 'EXPORT',

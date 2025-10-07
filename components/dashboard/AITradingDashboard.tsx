@@ -3,37 +3,29 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import '../../styles/dashboard.css'
-import { useAutoExecution } from "@/hooks/trading/useAutoExecution"
 import { useTradingBot } from "@/hooks/trading/useTradingBot"
 import { useAlpacaAccount, useAlpacaPositions } from "@/hooks/api/useAlpacaData"
-import AIRecommendationsList from "./AIRecommendationsList"
-import AIBotActivity from "./AIBotActivity"
 import useAIBotActivity from "@/hooks/useAIBotActivity"
-import TradesOrdersTable from "./TradesOrdersTable"
-import AILiveTradesTable from "./AILiveTradesTable"
 import AITradingNotifications from "../notifications/AITradingNotifications"
 import useAITradingNotifications from "@/hooks/useAITradingNotifications"
 import useRealAITrading from "@/hooks/useRealAITrading"
-import LiveBalanceDisplay from "./LiveBalanceDisplay"
 import { ClientSafeTime } from "@/components/ui/ClientSafeTime"
 import { Brain } from 'lucide-react'
-import OptimizedAILearning from "./OptimizedAILearning"
 import AIInsightsDashboard from "./AIInsightsDashboard"
 import { useAILearningManager } from "@/hooks/useAILearningManager"
 import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
-import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
+// import { useRealTimeActivity } from "@/hooks/useRealTimeActivity" // Not currently used
 import LiveTradesDisplay from "../trading/LiveTradesDisplay"
 import MarketStatusDisplay from "../market/MarketStatusDisplay"
 import { BotConfiguration } from "@/types/trading"
-
-import PortfolioOverview from "./PortfolioOverview"
 import PortfolioSummaryCards from "./PortfolioSummaryCards"
 import PortfolioPositionsTable from "./PortfolioPositionsTable"
 import PortfolioChart from "./PortfolioChart"
 import OrdersTable from "./OrdersTable"
 
 // Default bot configuration with auto-execution enabled
-const defaultBotConfig = {
+const defaultBotConfig: BotConfiguration = {
+  enabled: true,
   alpaca: {
     baseUrl: 'https://paper-api.alpaca.markets',
     apiKey: process.env.NEXT_PUBLIC_APCA_API_KEY_ID || '',
@@ -55,11 +47,20 @@ const defaultBotConfig = {
     maxDrawdown: 0.10,
     minConfidence: 0.75,
     stopLossPercent: 0.05,
-    takeProfitPercent: 0.10
+    takeProfitPercent: 0.10,
+    correlationLimit: 0.7
   },
   executionSettings: {
     autoExecute: true, // Enable auto-execution by default
     minConfidenceForOrder: 0.75
+  },
+  scheduleSettings: {
+    tradingHours: {
+      start: '09:30',
+      end: '16:00'
+    },
+    excludedDays: ['Saturday', 'Sunday'],
+    cooldownMinutes: 5
   },
   maxPositionSize: 10,
   stopLossPercent: 5,
@@ -70,18 +71,21 @@ const defaultBotConfig = {
 
 export default function AITradingDashboard() {
   const tradingBot = useTradingBot()
-  const autoExecution = useAutoExecution(tradingBot.engine)
 
-  // Persistent AI bot state
-  const [persistentBotState, setPersistentBotState] = useState({
+  // Persistent AI bot state - allow flexible config type
+  const [persistentBotState, setPersistentBotState] = useState<{
+    isRunning: boolean
+    startTime: Date | null
+    config: BotConfiguration
+  }>({
     isRunning: false,
-    startTime: null as Date | null,
+    startTime: null,
     config: defaultBotConfig
   })
 
-  // Only poll Alpaca data when AI bot is active to reduce unnecessary API calls
-  const account = useAlpacaAccount(persistentBotState.isRunning ? 5000 : undefined)
-  const positions = useAlpacaPositions(persistentBotState.isRunning ? 15000 : undefined)
+  // Note: account and positions data is now fetched by individual child components
+  // const account = useAlpacaAccount(persistentBotState.isRunning ? 5000 : undefined)
+  // const positions = useAlpacaPositions(persistentBotState.isRunning ? 15000 : undefined)
 
   const aiActivity = useAIBotActivity({
     refreshInterval: persistentBotState.isRunning ? 5000 : 30000, // Slower when inactive
@@ -106,7 +110,7 @@ export default function AITradingDashboard() {
 
   // Real-time data hooks using React Query
   const realTimeMetrics = useRealTimeAIMetrics()
-  const realTimeActivity = useRealTimeActivity()
+  // const realTimeActivity = useRealTimeActivity() // Commented out - not currently used in UI
 
   // Store interval reference for cleanup
   const [tradingInterval, setTradingInterval] = useState<NodeJS.Timeout | null>(null)
@@ -131,7 +135,7 @@ export default function AITradingDashboard() {
     }, 30000) // Check every 30 seconds for real trades
 
     setTradingInterval(interval)
-  }, [tradingBot.metrics.isRunning, persistentBotState.isRunning, tradingInterval])
+  }, [tradingBot.metrics.isRunning, persistentBotState.isRunning, tradingInterval, realAITrading])
 
   const stopTradingMonitoring = useCallback(() => {
     if (tradingInterval) {
@@ -271,24 +275,6 @@ export default function AITradingDashboard() {
   }
 
 
-  // Calculate financial metrics for bot metrics (simplified since LiveBalanceDisplay handles the main metrics)
-  const positions_data = Array.isArray(positions.data) ? positions.data : []
-  const totalPnL = positions_data.reduce((total, pos) => total + (parseFloat(pos.unrealized_pl || pos.unrealizedPnL || '0')), 0)
-  const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
-
-  // Create proper BotMetrics object
-  const botMetrics = {
-    isRunning: tradingBot.metrics.isRunning || false,
-    uptime: tradingBot.metrics.uptime || 0,
-    tradesExecuted: tradingBot.metrics.tradesExecuted || 0,
-    recommendationsGenerated: tradingBot.metrics.recommendationsGenerated || 0,
-    successRate: tradingBot.metrics.successRate || 0,
-    totalPnL: totalPnL,
-    dailyPnL: dayPnL,
-    riskScore: tradingBot.metrics.riskScore || 0,
-    lastActivity: tradingBot.metrics.lastActivity
-  }
-
   return (
     <div className="space-y-6">
       {/* AI Trading Control Header */}
@@ -411,7 +397,7 @@ export default function AITradingDashboard() {
       <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
         <OrdersTable
           refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-          limit={50}
+          initialLimit={50}
         />
       </div>
 

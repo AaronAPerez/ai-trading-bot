@@ -9,12 +9,8 @@ import {
   Zap,
   Target,
   BarChart3,
-  Users,
-  DollarSign,
-  Clock,
   ArrowRight,
   CheckCircle,
-  Star,
   Bot
 } from 'lucide-react'
 
@@ -71,7 +67,7 @@ export default function LandingPage() {
       </div>
 
       {/* Navigation */}
-      {/* <nav className="relative z-10 flex items-center justify-between p-6 max-w-7xl mx-auto">
+      <nav className="relative z-10 flex items-center justify-between p-6 max-w-7xl mx-auto">
         <div className="flex items-center space-x-2">
           <div className="w-10 h-10 bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-xl flex items-center justify-center">
             <Brain className="w-6 h-6 text-white" />
@@ -93,7 +89,7 @@ export default function LandingPage() {
             Get Started
           </Link>
         </div>
-      </nav> */}
+      </nav>
 
       {/* Hero Section */}
       <section className="relative z-10 max-w-7xl mx-auto px-6 pt-20 pb-32">

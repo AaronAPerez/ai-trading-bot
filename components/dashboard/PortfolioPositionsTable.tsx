@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAlpacaPositions } from '@/hooks/api/useAlpacaData'
+import { AssetLogo } from '@/components/ui/AssetLogo'
 
 interface PortfolioPositionsTableProps {
   refreshInterval?: number
@@ -51,7 +52,9 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
     return allPositions.filter((position: any) => {
       // Asset class filter
       if (assetClassFilter !== 'all') {
-        const isCrypto = position.symbol?.includes('/') || position.asset_class === 'crypto'
+        const isCrypto = position.symbol?.includes('/') ||
+                        /[-](USD|USDT|USDC)$/i.test(position.symbol) ||
+                        position.asset_class === 'crypto'
         const matchAssetClass = assetClassFilter === 'crypto' ? isCrypto : !isCrypto
         if (!matchAssetClass) return false
       }
@@ -272,6 +275,9 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
 
                   const isPositive = unrealizedPL >= 0
                   const isNeutral = unrealizedPL === 0
+                  const isCrypto = symbol?.includes('/') ||
+                                  /[-](USD|USDT|USDC)$/i.test(symbol) ||
+                                  position.asset_class === 'crypto'
 
                   return (
                     <tr
@@ -280,12 +286,23 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center space-x-3">
-                          <div className={`w-2 h-2 rounded-full ${
-                            side === 'long' ? 'bg-green-400' : 'bg-red-400'
-                          }`}></div>
+                          <AssetLogo
+                            symbol={symbol}
+                            isCrypto={isCrypto}
+                            size="md"
+                          />
                           <div>
-                            <div className="text-sm font-bold text-white">{symbol}</div>
-                            <div className="text-xs text-gray-400 capitalize">{side || 'long'}</div>
+                            <div className="flex items-center space-x-2">
+                              <div className="text-sm font-bold text-white">{symbol}</div>
+                              <div className={`w-2 h-2 rounded-full ${
+                                side === 'long' ? 'bg-green-400' : 'bg-red-400'
+                              }`}></div>
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              <span className="capitalize">{side || 'long'}</span>
+                              <span className="text-gray-500 mx-1">•</span>
+                              <span>{isCrypto ? 'Crypto' : 'Stock'}</span>
+                            </div>
                           </div>
                         </div>
                       </td>

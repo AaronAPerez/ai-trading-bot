@@ -4,6 +4,7 @@ import React from 'react'
 import { useState, useMemo } from 'react'
 import { useAlpacaOrders } from '@/hooks/api/useAlpacaData'
 import { AlertCircle, Filter, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { AssetLogo } from '@/components/ui/AssetLogo'
 
 interface OrdersTableProps {
   refreshInterval?: number
@@ -23,20 +24,9 @@ export default function OrdersTable({ refreshInterval = 5000, initialLimit = 10 
 
   const { data: ordersResponse, isLoading, error, refetch } = useAlpacaOrders(refreshInterval)
 
-  if (error) {
-    return (
-      <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-6">
-        <div className="flex items-center space-x-2 text-red-400">
-          <AlertCircle className="w-5 h-5" />
-          <span>Failed to load orders data</span>
-        </div>
-      </div>
-    )
-  }
-
   const allOrders = ordersResponse || []
 
-  // Apply all filters and search
+  // Apply all filters and search (MUST be before any early returns)
   const filteredOrders = useMemo(() => {
     return allOrders.filter((order: any) => {
       // Status filter
@@ -49,7 +39,9 @@ export default function OrdersTable({ refreshInterval = 5000, initialLimit = 10 
 
       // Asset class filter
       if (assetClassFilter !== 'all') {
-        const isCrypto = order.symbol?.includes('/') || order.asset_class === 'crypto'
+        const isCrypto = order.symbol?.includes('/') ||
+                        /[-](USD|USDT|USDC)$/i.test(order.symbol) ||
+                        order.asset_class === 'crypto'
         const matchAssetClass = assetClassFilter === 'crypto' ? isCrypto : !isCrypto
         if (!matchAssetClass) return false
       }
@@ -81,6 +73,18 @@ export default function OrdersTable({ refreshInterval = 5000, initialLimit = 10 
   // Reset to page 1 when filters change
   const handleFilterChange = () => {
     setCurrentPage(1)
+  }
+
+  // Error handling (MUST be after all hooks)
+  if (error) {
+    return (
+      <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-6">
+        <div className="flex items-center space-x-2 text-red-400">
+          <AlertCircle className="w-5 h-5" />
+          <span>Failed to load orders data</span>
+        </div>
+      </div>
+    )
   }
 
   const formatDateTime = (dateString: string) => {
@@ -295,21 +299,27 @@ export default function OrdersTable({ refreshInterval = 5000, initialLimit = 10 
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/30">
-                {paginatedOrders.map((order: any, index: number) => (
+                {paginatedOrders.map((order: any, index: number) => {
+                  const isCrypto = order.asset_class === 'crypto' ||
+                                  order.symbol?.includes('/') ||
+                                  /[-](USD|USDT|USDC)$/i.test(order.symbol)
+                  return (
                   <tr
                     key={order.id || index}
                     className="hover:bg-gray-800/30 transition-colors"
                   >
                     {/* Asset */}
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2">
-                        <div className={`w-2 h-2 rounded-full ${
-                          order.asset_class === 'crypto' || order.symbol?.includes('/') ? 'bg-orange-400' : 'bg-blue-400'
-                        }`}></div>
+                      <div className="flex items-center space-x-3">
+                        <AssetLogo
+                          symbol={order.symbol}
+                          isCrypto={isCrypto}
+                          size="md"
+                        />
                         <div>
                           <div className="text-sm font-bold text-white">{order.symbol}</div>
-                          <div className="text-xs text-gray-400 capitalize">
-                            {order.asset_class || (order.symbol?.includes('/') ? 'crypto' : 'stock')}
+                          <div className="text-xs text-gray-400">
+                            {isCrypto ? 'Crypto' : 'Stock'}
                           </div>
                         </div>
                       </div>
@@ -408,7 +418,8 @@ export default function OrdersTable({ refreshInterval = 5000, initialLimit = 10 
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -208,6 +208,52 @@ export class AlpacaServerClient {
       60000 // Cache for 60 seconds
     )
   }
+
+  async createOrder(orderData: {
+    symbol: string
+    notional?: number
+    qty?: number
+    side: string
+    type: string
+    time_in_force: string
+    client_order_id?: string
+  }) {
+    if (!this.client) {
+      throw new Error('Alpaca client not initialized. Check API credentials.')
+    }
+
+    return alpacaRateLimiter.enqueue(
+      '/v2/orders',
+      async () => {
+        try {
+          console.log('📤 Creating order via Alpaca SDK:', orderData)
+          const order = await this.client!.createOrder(orderData)
+          console.log('✅ Order created successfully:', order.id)
+          return order
+        } catch (error: any) {
+          console.error('❌ Failed to create order:', error)
+          console.error('Order API error details:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            message: error.message
+          })
+
+          // Provide helpful error messages for common issues
+          const errorMessage = error.message || error.response?.data?.message || 'Unknown error'
+
+          if (errorMessage.includes('crypto orders not allowed')) {
+            throw new Error('Crypto trading is not enabled for this Alpaca account. Please enable crypto trading in your Alpaca dashboard or use stock symbols instead.')
+          }
+
+          throw new Error(`Alpaca order API error: ${errorMessage}`)
+        }
+      },
+      'high',
+      undefined, // No cache for order creation
+      0
+    )
+  }
 }
 
 // Export singleton instance

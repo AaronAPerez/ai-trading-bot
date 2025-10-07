@@ -345,6 +345,58 @@ export class UnifiedAlpacaClient {
       'normal'
     )
   }
+
+  /**
+   * Get historical bars (OHLCV data) for technical analysis
+   */
+  async getBars(symbol: string, options: {
+    timeframe?: string
+    start?: string
+    end?: string
+    limit?: number
+  } = {}) {
+    const {
+      timeframe = '1Hour',
+      limit = 100,
+      start,
+      end
+    } = options
+
+    // Build query parameters
+    const params = new URLSearchParams({
+      timeframe,
+      limit: limit.toString()
+    })
+
+    if (start) params.append('start', start)
+    if (end) params.append('end', end)
+
+    // Determine if crypto or stock based on symbol format
+    const isCrypto = symbol.includes('/')
+
+    try {
+      if (isCrypto) {
+        // Crypto endpoint
+        const response = await this.request<any>(
+          `/v1beta3/crypto/us/bars?symbols=${symbol}&${params.toString()}`,
+          {},
+          'normal'
+        )
+        return response?.bars?.[symbol] || []
+      } else {
+        // Stock endpoint
+        const response = await this.request<any>(
+          `/v2/stocks/${symbol}/bars?${params.toString()}`,
+          {},
+          'normal'
+        )
+        return response?.bars || []
+      }
+    } catch (error) {
+      console.error(`Failed to get bars for ${symbol}:`, error)
+      return []
+    }
+  }
 }
 
 // Singleton instance

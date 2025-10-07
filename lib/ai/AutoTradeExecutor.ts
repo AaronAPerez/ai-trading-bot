@@ -184,15 +184,10 @@ export class AutoTradeExecutor {
 
     // Check 2: Market conditions (relaxed for crypto)
     const isCrypto = this.isCryptoSymbol(symbol)
-    if (this.config.executionRules.marketHoursOnly && !isCrypto && !this.isMarketOpen()) {
+    if (this.config.executionRules.marketHoursOnly && !isCrypto && !this.isMarketOpen(symbol)) {
       // Allow crypto trading 24/7, but respect market hours for stocks
-      const now = new Date()
-      const isWeekend = now.getDay() === 0 || now.getDay() === 6
-
-      if (!isWeekend || !this.config.executionRules.weekendTrading) {
-        decision.reason = 'Market closed and weekend trading disabled'
-        return decision
-      }
+      decision.reason = 'Stock market is closed - trading only allowed during market hours (9:30 AM - 4:00 PM ET, Mon-Fri)'
+      return decision
     }
 
     // Check 3: Daily trade limits (more lenient for bot)
@@ -407,8 +402,15 @@ export class AutoTradeExecutor {
 
     const startTime = Date.now()
 
-    // Clean symbol for Alpaca API (remove crypto suffixes)
-    const cleanSymbol = symbol.replace('-USD', '').replace('/USD', '')
+    // Determine if this is a crypto symbol
+    const isCrypto = this.isCryptoSymbol(symbol)
+
+    // Clean symbol for Alpaca API
+    // For crypto: keep format like BTC/USD (Alpaca requires it)
+    // For stocks: use as-is (e.g., AAPL)
+    const cleanSymbol = isCrypto
+      ? symbol.replace('-USD', '/USD') // Convert BTC-USD to BTC/USD if needed
+      : symbol
 
     // Create enhanced order payload
     const orderPayload = {
@@ -416,8 +418,8 @@ export class AutoTradeExecutor {
       notional: Math.round(notionalAmount * 100) / 100, // Round to 2 decimal places
       side: signal.action.toLowerCase(), // buy/sell
       type: 'market', // Use market orders for immediate execution
-      time_in_force: 'day',
-      client_order_id: `ai_auto_${cleanSymbol}_${Date.now()}`
+      time_in_force: isCrypto ? 'gtc' : 'day', // Crypto uses 'gtc', stocks use 'day'
+      client_order_id: `ai_auto_${cleanSymbol.replace('/', '_')}_${Date.now()}`
     }
 
     console.log('📝 Placing order with enhanced validation:', {
@@ -569,13 +571,6 @@ export class AutoTradeExecutor {
   }
 
   // Utility methods
-  private isMarketOpen(): boolean {
-    const now = new Date()
-    const hour = now.getHours()
-    const day = now.getDay()
-    return day >= 1 && day <= 5 && hour >= 9 && hour < 16
-  }
-
   private calculateAverageVolume(marketData: MarketData[]): number {
     const volumes = marketData.slice(-20).map(d => d.volume)
     return volumes.reduce((a, b) => a + b, 0) / volumes.length
@@ -814,27 +809,35 @@ export class AutoTradeExecutor {
   }
 
   private isCryptoSymbol(symbol: string): boolean {
-    // Comprehensive crypto symbols list for Alpaca
+    // Alpaca crypto format: BTC/USD, ETH/USD, etc.
+    if (symbol.includes('/')) {
+      return true // Alpaca uses / for crypto pairs
+    }
+
+    // Handle alternative formats: BTC-USD, BTCUSD
     const cryptoSymbols = [
       // Major Cryptos
-      'BTCUSD', 'ETHUSD', 'LTCUSD', 'BCHUSD',
+      'BTC', 'ETH', 'LTC', 'BCH', 'XRP',
       // Popular Altcoins
-      'ADAUSD', 'DOTUSD', 'SOLUSD', 'AVAXUSD', 'MATICUSD', 'SHIBUSD',
-      // Additional Crypto Assets
-      'LINKUSD', 'UNIUSD', 'AAVEUSD', 'ALGOUSD', 'BATUSD', 'COMPUSD',
-      'TRXUSD', 'XLMUSD', 'XTZUSD', 'ATOMUSD', 'EOSUSD', 'IOTAUSD'
+      'ADA', 'DOT', 'SOL', 'AVAX', 'MATIC', 'SHIB', 'DOGE',
+      // DeFi & Others
+      'LINK', 'UNI', 'AAVE', 'ALGO', 'BAT', 'COMP', 'CRV', 'SUSHI',
+      'TRX', 'XLM', 'XTZ', 'ATOM', 'EOS', 'IOTA', 'GRT', 'YFI', 'PEPE', 'TRUMP'
     ]
 
-    // Enhanced crypto detection - USD pairs with short names are likely crypto
-    return cryptoSymbols.includes(symbol) ||
-           (symbol.endsWith('USD') && symbol.length >= 6 && symbol.length <= 8) ||
-           (symbol.endsWith('USDT') && symbol.length <= 9) ||
-           (symbol.endsWith('USDC') && symbol.length <= 9)
+    // Check if symbol starts with a crypto ticker
+    for (const crypto of cryptoSymbols) {
+      if (symbol.startsWith(crypto)) {
+        return true
+      }
+    }
+
+    return false
   }
 
-  private isMarketOpen(): boolean {
-    // If crypto trading is enabled and we have crypto, market is always open
-    if (this.config.executionRules.cryptoTradingEnabled) {
+  private isMarketOpen(symbol?: string): boolean {
+    // If symbol is provided and it's crypto, market is always open
+    if (symbol && this.isCryptoSymbol(symbol) && this.config.executionRules.cryptoTradingEnabled) {
       return true
     }
 
@@ -852,17 +855,15 @@ export class AutoTradeExecutor {
 
     let isOpen = isWeekday && isAfterOpen && isBeforeClose
 
-    // Extended hours support
-    if (this.config.executionRules.afterHoursTrading) {
+    // Extended hours support for stocks only
+    if (this.config.executionRules.afterHoursTrading && (!symbol || !this.isCryptoSymbol(symbol))) {
       const isPreMarket = isWeekday && hour >= 4 && (hour < 9 || (hour === 9 && minute < 30))
       const isAfterHours = isWeekday && hour >= 16 && hour < 20
       isOpen = isOpen || isPreMarket || isAfterHours
     }
 
-    // Weekend trading for crypto
-    if (this.config.executionRules.weekendTrading && !isWeekday) {
-      isOpen = true
-    }
+    // Weekend trading is NOT allowed for stocks, only crypto
+    // (Crypto check is already handled above)
 
     return isOpen
   }

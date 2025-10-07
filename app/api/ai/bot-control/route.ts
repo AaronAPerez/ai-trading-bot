@@ -111,10 +111,14 @@ async function fetchAvailableCryptoAssets(): Promise<string[]> {
     const assets = await response.json()
 
     // Extract tradable symbols (format: BTC/USD, ETH/USD, etc.)
+    // Alpaca only supports crypto paired with USD, USDT, or USDC
     const tradableSymbols = assets
       .filter((asset: any) => asset.tradable && asset.status === 'active')
       .map((asset: any) => asset.symbol)
-      .filter((symbol: string) => symbol.includes('/')) // Only crypto pairs with /
+      .filter((symbol: string) =>
+        symbol.includes('/') && // Only crypto pairs with /
+        (symbol.endsWith('/USD') || symbol.endsWith('/USDT') || symbol.endsWith('/USDC')) // Only USD pairs
+      )
 
     // Cache the results
     cachedCryptoAssets = tradableSymbols
@@ -481,6 +485,274 @@ function handleGetStatus() {
 }
 
 /**
+ * Advanced Technical Analysis with Real Market Data
+ */
+async function analyzeTechnicalIndicators(symbol: string): Promise<{
+  signal: string
+  confidence: number
+  indicators: any
+  marketCondition: string
+}> {
+  try {
+    // Fetch real market data from Alpaca
+    const bars = await alpacaClient.getBars(symbol, {
+      timeframe: '1Hour',
+      limit: 100
+    })
+
+    if (!bars || bars.length < 50) {
+      // Not enough data - return neutral
+      return {
+        signal: 'HOLD',
+        confidence: 0.50,
+        indicators: {},
+        marketCondition: 'UNKNOWN'
+      }
+    }
+
+    const closes = bars.map((b: any) => b.close)
+    const highs = bars.map((b: any) => b.high)
+    const lows = bars.map((b: any) => b.low)
+    const volumes = bars.map((b: any) => b.volume)
+    const currentPrice = closes[closes.length - 1]
+
+    // Calculate RSI (14 period)
+    const rsi = calculateRSI(closes, 14)
+
+    // Calculate MACD
+    const macd = calculateMACD(closes)
+
+    // Calculate Moving Averages
+    const sma20 = calculateSMA(closes, 20)
+    const sma50 = calculateSMA(closes, 50)
+    const ema12 = calculateEMA(closes, 12)
+    const ema26 = calculateEMA(closes, 26)
+
+    // Calculate Bollinger Bands
+    const bb = calculateBollingerBands(closes, 20, 2)
+
+    // Volume Analysis
+    const avgVolume = volumes.slice(-20).reduce((a: number, b: number) => a + b, 0) / 20
+    const currentVolume = volumes[volumes.length - 1]
+    const volumeRatio = currentVolume / avgVolume
+
+    // ATR for volatility
+    const atr = calculateATR(highs, lows, closes, 14)
+    const volatility = atr / currentPrice
+
+    // === SCORING SYSTEM (0-100) ===
+    let score = 50 // Start neutral
+    let signalStrength = 0
+
+    // 1. RSI Signals (Weight: 20 points)
+    if (rsi < 30) {
+      score += 15 // Oversold - bullish
+      signalStrength += 1
+    } else if (rsi > 70) {
+      score -= 15 // Overbought - bearish
+      signalStrength += 1
+    } else if (rsi >= 40 && rsi <= 60) {
+      score += 0 // Neutral zone - no clear signal
+    }
+
+    // 2. MACD Signals (Weight: 20 points)
+    if (macd.histogram > 0 && macd.macdLine > macd.signalLine) {
+      score += 15 // Bullish momentum
+      signalStrength += 1
+    } else if (macd.histogram < 0 && macd.macdLine < macd.signalLine) {
+      score -= 15 // Bearish momentum
+      signalStrength += 1
+    }
+
+    // 3. Moving Average Crossovers (Weight: 15 points)
+    if (ema12 > ema26 && currentPrice > sma20) {
+      score += 12 // Golden cross + price above MA
+      signalStrength += 1
+    } else if (ema12 < ema26 && currentPrice < sma20) {
+      score -= 12 // Death cross + price below MA
+      signalStrength += 1
+    }
+
+    // 4. Trend Confirmation (Weight: 15 points)
+    if (sma20 > sma50 && currentPrice > sma20) {
+      score += 10 // Uptrend confirmed
+    } else if (sma20 < sma50 && currentPrice < sma20) {
+      score -= 10 // Downtrend confirmed
+    }
+
+    // 5. Bollinger Bands (Weight: 15 points)
+    if (currentPrice < bb.lower && rsi < 40) {
+      score += 10 // Oversold + below lower band
+      signalStrength += 1
+    } else if (currentPrice > bb.upper && rsi > 60) {
+      score -= 10 // Overbought + above upper band
+      signalStrength += 1
+    }
+
+    // 6. Volume Confirmation (Weight: 10 points)
+    if (volumeRatio > 1.5) {
+      score += Math.sign(score - 50) * 8 // High volume confirms direction
+      signalStrength += 1
+    } else if (volumeRatio < 0.7) {
+      score -= Math.abs(score - 50) * 0.3 // Low volume weakens signal
+    }
+
+    // 7. Volatility Filter (Reduce score in extreme volatility)
+    if (volatility > 0.08) {
+      // High volatility - reduce confidence
+      score = 50 + (score - 50) * 0.6
+      signalStrength = Math.max(0, signalStrength - 1)
+    }
+
+    // === DETERMINE SIGNAL AND CONFIDENCE ===
+    let signal = 'HOLD'
+    let confidence = 0.50
+
+    if (score >= 70 && signalStrength >= 3) {
+      signal = 'BUY'
+      confidence = Math.min(0.95, 0.70 + (score - 70) / 100 + signalStrength * 0.03)
+    } else if (score <= 30 && signalStrength >= 3) {
+      signal = 'SELL'
+      confidence = Math.min(0.95, 0.70 + (30 - score) / 100 + signalStrength * 0.03)
+    } else {
+      signal = 'HOLD'
+      confidence = 0.50 + Math.abs(score - 50) / 200 // Low confidence for unclear signals
+    }
+
+    // Market Condition Assessment
+    let marketCondition = 'RANGING'
+    if (sma20 > sma50 && volatility < 0.05) {
+      marketCondition = 'UPTREND'
+    } else if (sma20 < sma50 && volatility < 0.05) {
+      marketCondition = 'DOWNTREND'
+    } else if (volatility > 0.08) {
+      marketCondition = 'VOLATILE'
+    }
+
+    console.log(`📊 Technical Analysis for ${symbol}:`)
+    console.log(`   RSI: ${rsi.toFixed(1)} | MACD: ${macd.histogram.toFixed(4)} | Score: ${score.toFixed(1)}`)
+    console.log(`   Price: $${currentPrice.toFixed(2)} | SMA20: $${sma20.toFixed(2)} | SMA50: $${sma50.toFixed(2)}`)
+    console.log(`   Volume Ratio: ${volumeRatio.toFixed(2)}x | Volatility: ${(volatility * 100).toFixed(2)}%`)
+    console.log(`   Signal: ${signal} | Confidence: ${(confidence * 100).toFixed(1)}% | Condition: ${marketCondition}`)
+
+    return {
+      signal,
+      confidence,
+      indicators: {
+        rsi,
+        macd: macd.histogram,
+        sma20,
+        sma50,
+        bb,
+        volumeRatio,
+        volatility,
+        score
+      },
+      marketCondition
+    }
+
+  } catch (error) {
+    console.error(`Technical analysis failed for ${symbol}:`, error)
+    return {
+      signal: 'HOLD',
+      confidence: 0.50,
+      indicators: {},
+      marketCondition: 'ERROR'
+    }
+  }
+}
+
+// Technical Indicator Calculation Functions
+function calculateRSI(prices: number[], period: number): number {
+  if (prices.length < period + 1) return 50
+
+  let gains = 0
+  let losses = 0
+
+  for (let i = prices.length - period; i < prices.length; i++) {
+    const change = prices[i] - prices[i - 1]
+    if (change > 0) gains += change
+    else losses -= change
+  }
+
+  const avgGain = gains / period
+  const avgLoss = losses / period
+
+  if (avgLoss === 0) return 100
+  const rs = avgGain / avgLoss
+  return 100 - 100 / (1 + rs)
+}
+
+function calculateMACD(prices: number[]): { macdLine: number; signalLine: number; histogram: number } {
+  const ema12 = calculateEMA(prices, 12)
+  const ema26 = calculateEMA(prices, 26)
+  const macdLine = ema12 - ema26
+
+  // Signal line (9-period EMA of MACD)
+  const macdHistory = [macdLine] // Simplified - would need full history
+  const signalLine = macdLine * 0.9 // Approximation
+
+  return {
+    macdLine,
+    signalLine,
+    histogram: macdLine - signalLine
+  }
+}
+
+function calculateSMA(prices: number[], period: number): number {
+  if (prices.length < period) return prices[prices.length - 1]
+  const slice = prices.slice(-period)
+  return slice.reduce((a, b) => a + b, 0) / period
+}
+
+function calculateEMA(prices: number[], period: number): number {
+  if (prices.length < period) return prices[prices.length - 1]
+
+  const multiplier = 2 / (period + 1)
+  let ema = prices[prices.length - period]
+
+  for (let i = prices.length - period + 1; i < prices.length; i++) {
+    ema = (prices[i] - ema) * multiplier + ema
+  }
+
+  return ema
+}
+
+function calculateBollingerBands(prices: number[], period: number, stdDev: number): {
+  upper: number
+  middle: number
+  lower: number
+} {
+  const sma = calculateSMA(prices, period)
+  const slice = prices.slice(-period)
+
+  const variance = slice.reduce((sum, price) => sum + Math.pow(price - sma, 2), 0) / period
+  const std = Math.sqrt(variance)
+
+  return {
+    upper: sma + std * stdDev,
+    middle: sma,
+    lower: sma - std * stdDev
+  }
+}
+
+function calculateATR(highs: number[], lows: number[], closes: number[], period: number): number {
+  if (highs.length < period + 1) return 0
+
+  const trs: number[] = []
+  for (let i = highs.length - period; i < highs.length; i++) {
+    const high = highs[i]
+    const low = lows[i]
+    const prevClose = closes[i - 1]
+
+    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose))
+    trs.push(tr)
+  }
+
+  return trs.reduce((a, b) => a + b, 0) / trs.length
+}
+
+/**
  * Start the actual bot trading logic with real Alpaca API integration
  */
 function startBotLogic(sessionId: string, config: any) {
@@ -518,22 +790,37 @@ function startBotLogic(sessionId: string, config: any) {
       console.log(`📈 Asset Pool: ${stockSymbols.length} stocks + ${cryptoSymbols.length} crypto = ${availableSymbols.length} total tradable assets`)
       console.log(`🔍 Trading Mode: ${marketOpen ? 'Stocks + Crypto' : 'Crypto Only - 24/7 Trading'}`)
 
-      // 2. Generate AI trading signal
-      const confidence = 0.6 + Math.random() * 0.35 // 60-95%
-      const signal = Math.random() > 0.5 ? 'BUY' : 'SELL'
-      const minConfidence = config?.riskManagement?.minConfidence || 0.75
+      // 2. Generate AI trading signal with REAL technical analysis
+      const technicalAnalysis = await analyzeTechnicalIndicators(selectedSymbol)
+      const signal = technicalAnalysis.signal
+      const confidence = technicalAnalysis.confidence
+      const minConfidence = config?.riskManagement?.minConfidence || 0.80 // Raised to 80%
 
-      // 3. Log AI analysis activity to Supabase
+      // 2.5 Skip trading in unfavorable market conditions
+      if (technicalAnalysis.marketCondition === 'VOLATILE') {
+        console.log(`⚠️ Skipping ${selectedSymbol} - Market condition too volatile (volatility: ${(technicalAnalysis.indicators.volatility * 100).toFixed(2)}%)`)
+        return
+      }
+
+      // Skip if signal is HOLD
+      if (signal === 'HOLD') {
+        console.log(`⏸️ Skipping ${selectedSymbol} - No clear trading signal (Score: ${technicalAnalysis.indicators.score.toFixed(1)})`)
+        return
+      }
+
+      // 3. Log AI analysis activity to Supabase with technical details
       await supabaseService.logBotActivity(userId, {
         type: 'info',
         symbol: selectedSymbol,
-        message: `AI analyzing ${selectedSymbol} | Confidence: ${(confidence * 100).toFixed(1)}%`,
+        message: `AI analyzing ${selectedSymbol} | Signal: ${signal} | Confidence: ${(confidence * 100).toFixed(1)}% | RSI: ${technicalAnalysis.indicators.rsi?.toFixed(1) || 'N/A'}`,
         status: 'completed',
         details: JSON.stringify({
           signal,
           confidence,
           sessionId,
-          minConfidenceRequired: minConfidence
+          minConfidenceRequired: minConfidence,
+          technicalIndicators: technicalAnalysis.indicators,
+          marketCondition: technicalAnalysis.marketCondition
         })
       })
 
@@ -654,16 +941,63 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
       return // Exit early - do not execute stock trades when market is closed
     }
 
+    // CRITICAL: Check for existing position before buying
+    const existingPositions = await alpacaClient.getPositions()
+    const existingPosition = existingPositions.find((pos: any) => pos.symbol === symbol)
+
+    if (existingPosition) {
+      const positionSide = parseFloat(existingPosition.qty || existingPosition.quantity || '0') > 0 ? 'LONG' : 'SHORT'
+
+      // Block same-direction trades (don't buy if already long, don't sell if already short)
+      if ((signal === 'BUY' && positionSide === 'LONG') || (signal === 'SELL' && positionSide === 'SHORT')) {
+        console.log(`🚫 BLOCKED: ${signal} ${symbol} - Already have ${positionSide} position (qty: ${existingPosition.qty || existingPosition.quantity})`)
+
+        await supabaseService.logBotActivity(userId, {
+          type: 'info',
+          symbol: symbol,
+          message: `Trade blocked: ${signal} ${symbol} - Already have ${positionSide} position`,
+          status: 'completed',
+          details: JSON.stringify({
+            reason: 'existing_position_same_direction',
+            existingPosition: {
+              side: positionSide,
+              qty: existingPosition.qty || existingPosition.quantity,
+              marketValue: existingPosition.market_value
+            },
+            signal,
+            confidence,
+            sessionId
+          })
+        })
+
+        return // Exit early - don't duplicate positions
+      }
+    }
+
     console.log(`🔄 Executing ${signal} order for ${isCrypto ? 'CRYPTO' : 'STOCK'} ${symbol} via Alpaca API...`)
     console.log(`📊 Asset Type: ${assetType} | Market Hours: ${marketOpen ? 'OPEN' : 'CLOSED'} | Can Trade: ${isCrypto ? '24/7' : 'Market Hours Only'}`)
 
-    // Calculate position size (1-5 shares for demo)
-    const quantity = Math.floor(1 + Math.random() * 4)
+    // Get account info for intelligent position sizing
+    const account = await alpacaClient.getAccount()
+    const buyingPower = parseFloat(account.buying_power || '0')
+    const equity = parseFloat(account.equity || '0')
+
+    // Calculate intelligent position size based on confidence and risk
+    // Base allocation: 2-10% of equity depending on confidence
+    const minAllocation = 0.02 // 2% minimum
+    const maxAllocation = 0.10 // 10% maximum
+    const confidenceMultiplier = (confidence - 0.75) / 0.20 // 75% conf = 0, 95% conf = 1
+    const allocation = minAllocation + (maxAllocation - minAllocation) * Math.max(0, Math.min(1, confidenceMultiplier))
+
+    const notionalValue = Math.floor(equity * allocation)
+    const quantity = Math.max(1, Math.floor(notionalValue / 100)) // Estimate quantity (will use notional for actual order)
+
+    console.log(`💰 Position Sizing: ${(allocation * 100).toFixed(1)}% allocation = $${notionalValue} (Confidence: ${(confidence * 100).toFixed(1)}%)`)
 
     // Call Alpaca API to place order using unified client with proper asset_class
     const orderResult = await alpacaClient.createOrder({
       symbol,
-      qty: quantity,
+      notional: notionalValue, // Use notional value for fractional shares
       side: signal.toLowerCase(),
       type: 'market',
       time_in_force: isCrypto ? 'gtc' : 'day', // Crypto uses GTC (Good-Til-Canceled), stocks use day

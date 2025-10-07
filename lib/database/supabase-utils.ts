@@ -104,6 +104,11 @@ export class SupabaseService {
   }
 
   async saveAILearningData(learning: Tables['ai_learning_data']['Insert']) {
+    // Only allow on server-side to prevent RLS violations
+    if (typeof window !== 'undefined') {
+      throw new Error('saveAILearningData can only be called from server-side')
+    }
+
     // Use server client for server-side operations to bypass RLS
     const client = this.getServerClient()
     const { data, error } = await client
@@ -290,6 +295,12 @@ export class SupabaseService {
   // Missing methods that bot-control API needs
   async upsertBotMetrics(userId: string, metrics: Partial<Tables['bot_metrics']['Update']>) {
     try {
+      // Only allow on server-side to prevent RLS violations
+      if (typeof window !== 'undefined') {
+        console.warn('⚠️ upsertBotMetrics called from client-side, skipping...')
+        return null
+      }
+
       // Use server client to bypass RLS for bot operations
       const client = this.getServerClient()
 

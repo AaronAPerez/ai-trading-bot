@@ -164,7 +164,7 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       {/* Skip to main content link - WCAG 2.1 requirement */}
       <a
         href="#main-content"

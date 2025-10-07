@@ -13,6 +13,22 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'logo.clearbit.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.cryptocompare.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'financialmodelingprep.com',
+      },
+    ],
+  },
   experimental: {
     forceSwcTransforms: true
   },
