@@ -3,10 +3,7 @@ import { Database } from '../../types/supabase'
 import { SupabaseClient } from '@supabase/supabase-js'
 
 type Tables = Database['public']['Tables']
-type TradeHistory = Tables['trade_history']['Row']
-type BotMetrics = Tables['bot_metrics']['Row']
 type BotActivityLog = Tables['bot_activity_logs']['Row']
-type AILearningData = Tables['ai_learning_data']['Row']
 type MarketSentiment = Tables['market_sentiment']['Row']
 type Profile = Tables['profiles']['Row']
 
@@ -67,29 +64,6 @@ export class SupabaseService {
     return data
   }
 
-  async getBotMetrics(userId: string): Promise<BotMetrics | null> {
-    const { data, error } = await this._client
-      .from('bot_metrics')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (error && error.code !== 'PGRST116') throw error
-    return data
-  }
-
-  async logBotActivity(log: Tables['bot_activity_logs']['Insert']) {
-    // Use server client for server-side operations to bypass RLS
-    const client = this.getServerClient()
-    const { data, error } = await client
-      .from('bot_activity_logs')
-      .insert(log)
-      .select()
-      .single()
-
-    if (error) throw error
-    return data
-  }
 
   async getBotActivityLogs(userId: string, limit = 100): Promise<BotActivityLog[]> {
     const { data, error } = await this._client
@@ -121,22 +95,6 @@ export class SupabaseService {
     return data
   }
 
-  async getAILearningData(userId: string, symbol?: string): Promise<AILearningData[]> {
-    let query = this._client
-      .from('ai_learning_data')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-
-    if (symbol) {
-      query = query.eq('symbol', symbol)
-    }
-
-    const { data, error } = await query
-
-    if (error) throw error
-    return data || []
-  }
 
   async saveMarketSentiment(sentiment: Tables['market_sentiment']['Insert']) {
     const { data, error } = await this._client
@@ -194,7 +152,6 @@ export class SupabaseService {
     if (error) throw error
 
     const summary = trades?.reduce((acc, trade) => {
-      const value = trade.side === 'buy' ? -trade.value : trade.value
       acc.totalInvested += trade.side === 'buy' ? trade.value : 0
       acc.totalPnL += trade.pnl || 0
       acc.totalFees += trade.fees || 0
@@ -228,10 +185,18 @@ export class SupabaseService {
         .eq('status', 'FILLED')
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('Failed to get positions - Supabase error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
+      }
       return data || []
     } catch (error) {
-      console.error('Failed to get positions:', error)
+      console.error('Failed to get positions - caught error:', error instanceof Error ? error.message : String(error))
       return []
     }
   }
@@ -251,10 +216,18 @@ export class SupabaseService {
 
       const { data, error } = await query
 
-      if (error) throw error
+      if (error) {
+        console.error('Failed to get trade history - Supabase error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
+      }
       return data || []
     } catch (error) {
-      console.error('Failed to get trade history:', error)
+      console.error('Failed to get trade history - caught error:', error instanceof Error ? error.message : String(error))
       return []
     }
   }
@@ -416,7 +389,7 @@ export class SupabaseService {
 
   async testConnection(): Promise<boolean> {
     try {
-      const { data, error } = await this._client
+      const { error } = await this._client
         .from('profiles')
         .select('count(*)')
         .limit(1)
