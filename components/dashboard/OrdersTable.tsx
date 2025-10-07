@@ -1,16 +1,25 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useAlpacaOrders } from '@/hooks/api/useAlpacaData'
-import { AlertCircle, Filter, RefreshCw } from 'lucide-react'
+import { AlertCircle, Filter, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface OrdersTableProps {
   refreshInterval?: number
-  limit?: number
+  initialLimit?: number
 }
 
-export default function OrdersTable({ refreshInterval = 5000, limit = 50 }: OrdersTableProps) {
-  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed' | 'filled' | 'canceled'>('all')
+export default function OrdersTable({ refreshInterval = 5000, initialLimit = 10 }: OrdersTableProps) {
+  // Filters
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'filled' | 'canceled'>('all')
+  const [assetClassFilter, setAssetClassFilter] = useState<'all' | 'stock' | 'crypto'>('all')
+  const [sideFilter, setSideFilter] = useState<'all' | 'buy' | 'sell'>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(initialLimit)
+
   const { data: ordersResponse, isLoading, error, refetch } = useAlpacaOrders(refreshInterval)
 
   if (error) {
@@ -26,10 +35,52 @@ export default function OrdersTable({ refreshInterval = 5000, limit = 50 }: Orde
 
   const allOrders = ordersResponse || []
 
-  // Filter orders based on status
-  const filteredOrders = statusFilter === 'all'
-    ? allOrders
-    : allOrders.filter((order: any) => order.status === statusFilter)
+  // Apply all filters and search
+  const filteredOrders = useMemo(() => {
+    return allOrders.filter((order: any) => {
+      // Status filter
+      if (statusFilter !== 'all') {
+        const matchStatus = statusFilter === 'open'
+          ? ['new', 'accepted', 'pending_new', 'partially_filled'].includes(order.status)
+          : order.status === statusFilter
+        if (!matchStatus) return false
+      }
+
+      // Asset class filter
+      if (assetClassFilter !== 'all') {
+        const isCrypto = order.symbol?.includes('/') || order.asset_class === 'crypto'
+        const matchAssetClass = assetClassFilter === 'crypto' ? isCrypto : !isCrypto
+        if (!matchAssetClass) return false
+      }
+
+      // Side filter
+      if (sideFilter !== 'all' && order.side !== sideFilter) {
+        return false
+      }
+
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        const matchSymbol = order.symbol?.toLowerCase().includes(query)
+        const matchOrderId = order.id?.toLowerCase().includes(query)
+        const matchClientOrderId = order.client_order_id?.toLowerCase().includes(query)
+        if (!matchSymbol && !matchOrderId && !matchClientOrderId) return false
+      }
+
+      return true
+    })
+  }, [allOrders, statusFilter, assetClassFilter, sideFilter, searchQuery])
+
+  // Pagination
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedOrders = filteredOrders.slice(startIndex, endIndex)
+
+  // Reset to page 1 when filters change
+  const handleFilterChange = () => {
+    setCurrentPage(1)
+  }
 
   const formatDateTime = (dateString: string) => {
     if (!dateString) return 'N/A'
@@ -73,27 +124,10 @@ export default function OrdersTable({ refreshInterval = 5000, limit = 50 }: Orde
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">Orders</h2>
         <div className="flex items-center space-x-3">
-          {/* Status Filter */}
-          <div className="flex items-center space-x-2 bg-gray-800/50 rounded-lg p-1">
-            <Filter className="w-4 h-4 text-gray-400 ml-2" />
-            {(['all', 'open', 'filled', 'canceled'] as const).map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                  statusFilter === status
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </button>
-            ))}
-          </div>
-
           {/* Refresh Button */}
           <button
             onClick={() => refetch()}
@@ -106,11 +140,73 @@ export default function OrdersTable({ refreshInterval = 5000, limit = 50 }: Orde
 
           {/* Orders Count */}
           <div className="text-sm text-gray-400">
-            {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'}
+            {filteredOrders.length} of {allOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'}
           </div>
         </div>
       </div>
 
+      {/* Search and Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search symbol, order ID..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              handleFilterChange()
+            }}
+            className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        {/* Status Filter */}
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as any)
+            handleFilterChange()
+          }}
+          className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Status</option>
+          <option value="open">Open</option>
+          <option value="filled">Filled</option>
+          <option value="canceled">Canceled</option>
+        </select>
+
+        {/* Asset Class Filter */}
+        <select
+          value={assetClassFilter}
+          onChange={(e) => {
+            setAssetClassFilter(e.target.value as any)
+            handleFilterChange()
+          }}
+          className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Assets</option>
+          <option value="stock">Stocks</option>
+          <option value="crypto">Crypto</option>
+        </select>
+
+        {/* Side Filter */}
+        <select
+          value={sideFilter}
+          onChange={(e) => {
+            setSideFilter(e.target.value as any)
+            handleFilterChange()
+          }}
+          className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Sides</option>
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+        </select>
+      </div>
+
+      {/* Table Container with Scrollbar */}
       <div className="bg-gray-900/50 rounded-xl border border-gray-700/50 overflow-hidden">
         {isLoading && allOrders.length === 0 ? (
           <div className="p-8 space-y-4">
@@ -120,20 +216,20 @@ export default function OrdersTable({ refreshInterval = 5000, limit = 50 }: Orde
               </div>
             ))}
           </div>
-        ) : filteredOrders.length === 0 ? (
+        ) : paginatedOrders.length === 0 ? (
           <div className="p-8 text-center">
             <div className="text-gray-400 mb-2">No orders found</div>
             <div className="text-sm text-gray-500">
-              {statusFilter === 'all'
-                ? 'Orders will appear here once you start trading'
-                : `No ${statusFilter} orders found`}
+              {searchQuery || statusFilter !== 'all' || assetClassFilter !== 'all' || sideFilter !== 'all'
+                ? 'Try adjusting your filters'
+                : 'Orders will appear here once you start trading'}
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full">
-              <thead>
-                <tr className="bg-gray-800/50 border-b border-gray-700/50">
+              <thead className="sticky top-0 bg-gray-800/90 backdrop-blur-sm border-b border-gray-700/50 z-10">
+                <tr>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Asset
                   </th>
@@ -170,7 +266,7 @@ export default function OrdersTable({ refreshInterval = 5000, limit = 50 }: Orde
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/30">
-                {filteredOrders.map((order: any, index: number) => (
+                {paginatedOrders.map((order: any, index: number) => (
                   <tr
                     key={order.id || index}
                     className="hover:bg-gray-800/30 transition-colors"
@@ -179,12 +275,12 @@ export default function OrdersTable({ refreshInterval = 5000, limit = 50 }: Orde
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center space-x-2">
                         <div className={`w-2 h-2 rounded-full ${
-                          order.asset_class === 'crypto' ? 'bg-orange-400' : 'bg-blue-400'
+                          order.asset_class === 'crypto' || order.symbol?.includes('/') ? 'bg-orange-400' : 'bg-blue-400'
                         }`}></div>
                         <div>
                           <div className="text-sm font-bold text-white">{order.symbol}</div>
                           <div className="text-xs text-gray-400 capitalize">
-                            {order.asset_class || 'stock'}
+                            {order.asset_class || (order.symbol?.includes('/') ? 'crypto' : 'stock')}
                           </div>
                         </div>
                       </div>
@@ -289,6 +385,90 @@ export default function OrdersTable({ refreshInterval = 5000, limit = 50 }: Orde
           </div>
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {filteredOrders.length > 0 && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            {/* Items per page selector */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-400">Show:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
+                className="px-3 py-1 bg-gray-800 border border-gray-700 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span className="text-sm text-gray-400">per page</span>
+            </div>
+
+            {/* Page info */}
+            <div className="text-sm text-gray-400">
+              Showing {startIndex + 1}-{Math.min(endIndex, filteredOrders.length)} of {filteredOrders.length}
+            </div>
+          </div>
+
+          {/* Page navigation */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const pageNum = i + 1
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-1 rounded transition-colors ${
+                      currentPage === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              })}
+              {totalPages > 5 && (
+                <>
+                  <span className="text-gray-500 px-2">...</span>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    className={`px-3 py-1 rounded transition-colors ${
+                      currentPage === totalPages
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Summary Stats */}
       {filteredOrders.length > 0 && (
