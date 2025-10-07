@@ -123,6 +123,42 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
         </div>
       </div>
 
+       {/* Summary Stats */}
+      {filteredPositions.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 p-4">
+            <div className="text-xs text-gray-400 mb-1">Total Positions</div>
+            <div className="text-lg font-bold text-white">{filteredPositions.length}</div>
+          </div>
+          <div className="bg-blue-900/20 rounded-lg border border-blue-700/50 p-4">
+            <div className="text-xs text-gray-400 mb-1">Market Value</div>
+            <div className="text-lg font-bold text-blue-400">
+              {formatCurrency(totalMarketValue)}
+            </div>
+          </div>
+          <div className={`rounded-lg border p-4 ${
+            totalUnrealizedPL >= 0
+              ? 'bg-green-900/20 border-green-700/50'
+              : 'bg-red-900/20 border-red-700/50'
+          }`}>
+            <div className="text-xs text-gray-400 mb-1">Total P/L</div>
+            <div className={`text-lg font-bold ${
+              totalUnrealizedPL >= 0 ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {formatCurrency(totalUnrealizedPL)}
+            </div>
+          </div>
+          <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 p-4">
+            <div className="text-xs text-gray-400 mb-1">Win/Loss</div>
+            <div className="text-lg font-bold text-white">
+              <span className="text-green-400">{profitablePositions}</span>
+              {' / '}
+              <span className="text-red-400">{losingPositions}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search and Filters */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Search */}
@@ -386,41 +422,6 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
         </div>
       )}
 
-      {/* Summary Stats */}
-      {filteredPositions.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 p-4">
-            <div className="text-xs text-gray-400 mb-1">Total Positions</div>
-            <div className="text-lg font-bold text-white">{filteredPositions.length}</div>
-          </div>
-          <div className="bg-blue-900/20 rounded-lg border border-blue-700/50 p-4">
-            <div className="text-xs text-gray-400 mb-1">Market Value</div>
-            <div className="text-lg font-bold text-blue-400">
-              {formatCurrency(totalMarketValue)}
-            </div>
-          </div>
-          <div className={`rounded-lg border p-4 ${
-            totalUnrealizedPL >= 0
-              ? 'bg-green-900/20 border-green-700/50'
-              : 'bg-red-900/20 border-red-700/50'
-          }`}>
-            <div className="text-xs text-gray-400 mb-1">Total P/L</div>
-            <div className={`text-lg font-bold ${
-              totalUnrealizedPL >= 0 ? 'text-green-400' : 'text-red-400'
-            }`}>
-              {formatCurrency(totalUnrealizedPL)}
-            </div>
-          </div>
-          <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 p-4">
-            <div className="text-xs text-gray-400 mb-1">Win/Loss</div>
-            <div className="text-lg font-bold text-white">
-              <span className="text-green-400">{profitablePositions}</span>
-              {' / '}
-              <span className="text-red-400">{losingPositions}</span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

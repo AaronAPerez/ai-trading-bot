@@ -71,7 +71,7 @@ export default function LandingPage() {
       </div>
 
       {/* Navigation */}
-      <nav className="relative z-10 flex items-center justify-between p-6 max-w-7xl mx-auto">
+      {/* <nav className="relative z-10 flex items-center justify-between p-6 max-w-7xl mx-auto">
         <div className="flex items-center space-x-2">
           <div className="w-10 h-10 bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-xl flex items-center justify-center">
             <Brain className="w-6 h-6 text-white" />
@@ -93,7 +93,7 @@ export default function LandingPage() {
             Get Started
           </Link>
         </div>
-      </nav>
+      </nav> */}
 
       {/* Hero Section */}
       <section className="relative z-10 max-w-7xl mx-auto px-6 pt-20 pb-32">
@@ -200,7 +200,8 @@ export default function LandingPage() {
               <div className="flex items-center justify-between mb-6">
                 <h4 className="text-xl font-semibold text-white">Live Performance</h4>
                 <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                  <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse">  
+                  </div>
                   <span className="text-green-400 text-sm font-medium">LIVE</span>
                 </div>
               </div>
@@ -211,7 +212,7 @@ export default function LandingPage() {
                   <span className="text-white font-semibold">$1,247,892</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-400">Today's P&L</span>
+                  <span className="text-gray-400">Today&apos;s P&L</span>
                   <span className="text-green-400 font-semibold">+$12,847 (+1.04%)</span>
                 </div>
                 <div className="flex items-center justify-between">

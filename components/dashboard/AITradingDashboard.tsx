@@ -24,6 +24,7 @@ import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
 import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
 import LiveTradesDisplay from "../trading/LiveTradesDisplay"
 import MarketStatusDisplay from "../market/MarketStatusDisplay"
+import { BotConfiguration } from "@/types/trading"
 
 import PortfolioOverview from "./PortfolioOverview"
 import PortfolioSummaryCards from "./PortfolioSummaryCards"
@@ -189,7 +190,7 @@ export default function AITradingDashboard() {
   }, [stopTradingMonitoring])
 
   // Enhanced start function that starts both bot and activity monitoring
-  const handleStart = async (config: any) => {
+  const handleStart = async (config: BotConfiguration) => {
     await tradingBot.startBot(config)
     await aiActivity.startSimulation()
 
@@ -399,7 +400,7 @@ export default function AITradingDashboard() {
         />
       </div>
 
-            {/* Portfolio Positions Table */}
+      {/* Portfolio Positions Table */}
       <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border border-gray-700/50">
         <PortfolioPositionsTable
           refreshInterval={persistentBotState.isRunning ? 5000 : 30000}

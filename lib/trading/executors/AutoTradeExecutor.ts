@@ -1,4 +1,4 @@
-import { TradeSignal, Portfolio, MarketData, ExecutionResult, Position } from '../../../types/trading'
+import { TradeSignal, Portfolio, MarketData, Position } from '../../../types/trading'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
 import { AILearningSystem, TradeOutcome } from '../ml/AILearningSystem'
 

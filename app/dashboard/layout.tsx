@@ -164,7 +164,7 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+    <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Skip to main content link - WCAG 2.1 requirement */}
       <a
         href="#main-content"
@@ -184,13 +184,13 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
       </div>
 
       {/* Header - Sticky with proper landmark */}
-      <header
+      {/* <header
         className="bg-gray-800 border-b border-gray-700 sticky top-0 z-40 shadow-lg"
         role="banner"
       >
         <div className="flex items-center justify-between px-4 py-3 md:px-6">
           {/* Logo and Mobile Menu Button */}
-          <div className="flex items-center space-x-3">
+          {/* <div className="flex items-center space-x-3">
             <button
               onClick={toggleSidebar}
               className="md:hidden p-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation"
@@ -212,12 +212,12 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
                 AI Trading Bot
               </h1>
             </div>
-          </div>
+          </div> */}
 
           {/* Status Indicators - Responsive */}
-          <div className="flex items-center space-x-2 md:space-x-4">
+          {/* <div className="flex items-center space-x-2 md:space-x-4"> */}
             {/* Connection Status */}
-            <div
+            {/* <div
               className="flex items-center space-x-2 px-2 md:px-3 py-2 rounded-lg bg-gray-700 min-h-[44px]"
               role="status"
               aria-label={`Connection status: ${isOnline ? 'Online' : 'Offline'}`}
@@ -228,10 +228,10 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
               <span className="text-xs md:text-sm font-medium hidden sm:inline">
                 {isOnline ? 'Online' : 'Offline'}
               </span>
-            </div>
+            </div> */}
 
             {/* Bot Status */}
-            <div
+            {/* <div
               className="flex items-center space-x-2 px-2 md:px-3 py-2 rounded-lg bg-gray-700 min-h-[44px]"
               role="status"
               aria-label={`Bot status: ${botStatus.isRunning ? 'Running' : 'Stopped'}. ${botStatus.isRunning ? `Uptime: ${formatUptime(botStatus.uptime)}` : ''}`}
@@ -245,10 +245,10 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
               <span className="text-xs md:text-sm font-medium hidden sm:inline">
                 {botStatus.isRunning ? 'Active' : 'Stopped'}
               </span>
-            </div>
+            </div> */}
 
             {/* Trading Mode Badge */}
-            <div
+            {/* <div
               className={`hidden md:flex items-center px-3 py-2 rounded-lg text-xs font-bold min-h-[44px] ${
                 isLiveTrading
                   ? 'bg-red-900/70 text-red-200 border-2 border-red-500'
@@ -260,10 +260,10 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
               {isLiveTrading ? '🔴 LIVE' : '📝 PAPER'}
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Desktop Navigation */}
-        <nav
+        {/* <nav
           className="hidden md:flex items-center space-x-1 px-6 pb-3"
           role="navigation"
           aria-label="Main navigation"
@@ -279,8 +279,8 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
               <span>{item.label}</span>
             </a>
           ))}
-        </nav>
-      </header>
+        </nav> 
+      </header> */}
 
       {/* Mobile Sidebar Navigation */}
       <nav

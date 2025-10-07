@@ -1,5 +1,6 @@
 "use client"
 
+import React from 'react'
 import { useState, useMemo } from 'react'
 import { useAlpacaOrders } from '@/hooks/api/useAlpacaData'
 import { AlertCircle, Filter, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -144,6 +145,34 @@ export default function OrdersTable({ refreshInterval = 5000, initialLimit = 10 
           </div>
         </div>
       </div>
+
+          {/* Summary Stats */}
+      {filteredOrders.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 p-4">
+            <div className="text-xs text-gray-400 mb-1">Total Orders</div>
+            <div className="text-lg font-bold text-white">{filteredOrders.length}</div>
+          </div>
+          <div className="bg-green-900/20 rounded-lg border border-green-700/50 p-4">
+            <div className="text-xs text-gray-400 mb-1">Filled Orders</div>
+            <div className="text-lg font-bold text-green-400">
+              {filteredOrders.filter((o: any) => o.status === 'filled').length}
+            </div>
+          </div>
+          <div className="bg-yellow-900/20 rounded-lg border border-yellow-700/50 p-4">
+            <div className="text-xs text-gray-400 mb-1">Pending Orders</div>
+            <div className="text-lg font-bold text-yellow-400">
+              {filteredOrders.filter((o: any) => ['new', 'accepted', 'pending_new', 'partially_filled'].includes(o.status)).length}
+            </div>
+          </div>
+          <div className="bg-red-900/20 rounded-lg border border-red-700/50 p-4">
+            <div className="text-xs text-gray-400 mb-1">Canceled/Rejected</div>
+            <div className="text-lg font-bold text-red-400">
+              {filteredOrders.filter((o: any) => ['canceled', 'expired', 'rejected'].includes(o.status)).length}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -470,33 +499,6 @@ export default function OrdersTable({ refreshInterval = 5000, initialLimit = 10 
         </div>
       )}
 
-      {/* Summary Stats */}
-      {filteredOrders.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 p-4">
-            <div className="text-xs text-gray-400 mb-1">Total Orders</div>
-            <div className="text-lg font-bold text-white">{filteredOrders.length}</div>
-          </div>
-          <div className="bg-green-900/20 rounded-lg border border-green-700/50 p-4">
-            <div className="text-xs text-gray-400 mb-1">Filled Orders</div>
-            <div className="text-lg font-bold text-green-400">
-              {filteredOrders.filter((o: any) => o.status === 'filled').length}
-            </div>
-          </div>
-          <div className="bg-yellow-900/20 rounded-lg border border-yellow-700/50 p-4">
-            <div className="text-xs text-gray-400 mb-1">Pending Orders</div>
-            <div className="text-lg font-bold text-yellow-400">
-              {filteredOrders.filter((o: any) => ['new', 'accepted', 'pending_new', 'partially_filled'].includes(o.status)).length}
-            </div>
-          </div>
-          <div className="bg-red-900/20 rounded-lg border border-red-700/50 p-4">
-            <div className="text-xs text-gray-400 mb-1">Canceled/Rejected</div>
-            <div className="text-lg font-bold text-red-400">
-              {filteredOrders.filter((o: any) => ['canceled', 'expired', 'rejected'].includes(o.status)).length}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
