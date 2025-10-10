@@ -141,10 +141,24 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
     let availableFunds = 0
     if (isCrypto) {
       availableFunds = parseFloat(account.cash || '0')
-      console.log(`💳 Available cash for crypto: $${availableFunds}`)
+      const equity = parseFloat(account.equity || '0')
+      const buyingPower = parseFloat(account.buying_power || '0')
+
+      console.log(`💳 Crypto wallet status: Cash=$${availableFunds.toFixed(2)}, Equity=$${equity.toFixed(2)}, Stock BP=$${buyingPower.toFixed(2)}`)
+
+      // Check for negative balance (pending orders/settlements)
+      if (availableFunds < 0) {
+        console.log(`⚠️ NEGATIVE CRYPTO BALANCE: $${availableFunds.toFixed(2)}`)
+        console.log('💡 Possible causes:')
+        console.log('   1. Pending orders that have not settled')
+        console.log('   2. Open positions using margin')
+        console.log('   3. Recent transfers not yet cleared')
+        console.log('💡 SOLUTION: Wait for pending orders to settle or close positions')
+        return 0
+      }
 
       // Special check for crypto: Alpaca has separate wallets
-      if (availableFunds === 0 && parseFloat(account.equity || '0') > 0) {
+      if (availableFunds === 0 && equity > 0) {
         console.log('⚠️ CRYPTO WALLET EMPTY: You have funds in your stock account but $0 in crypto wallet')
         console.log('💡 TIP: Transfer USD from stock account to crypto wallet in Alpaca dashboard')
         console.log('💡 Go to: Alpaca Dashboard > Crypto Trading > Transfer Funds')
@@ -152,11 +166,18 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
       }
     } else {
       availableFunds = parseFloat(account.buying_power || '0')
-      console.log(`💳 Available buying power for stocks: $${availableFunds}`)
+      console.log(`💳 Available buying power for stocks: $${availableFunds.toFixed(2)}`)
+
+      // Check for negative buying power
+      if (availableFunds < 0) {
+        console.log(`⚠️ NEGATIVE BUYING POWER: $${availableFunds.toFixed(2)}`)
+        console.log('💡 Close some positions or wait for settlements to clear')
+        return 0
+      }
     }
 
     if (availableFunds < 25) {
-      console.log(`❌ Insufficient funds: $${availableFunds}`)
+      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $25 required)`)
       return 0 // Not enough to trade
     }
 

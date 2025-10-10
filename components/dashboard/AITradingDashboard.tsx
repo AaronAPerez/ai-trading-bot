@@ -775,7 +775,7 @@ export default function AITradingDashboard() {
         <LiveAIActivity />
       </div>
       
-
+      
     
       {/* Advanced AI Insights Dashboard */}
       <div className="bg-gradient-to-r from-gray-800/40 to-purple-900/20 rounded-xl p-6 border border-gray-700/50">

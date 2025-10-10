@@ -1,15 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '../types/supabase'
+// DEPRECATED: Use @/lib/supabase/client instead
+// This file is kept for backwards compatibility only
+// Import from @/lib/supabase/client to avoid multiple client instances
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { createClient, createServerSupabaseClient as createServerClient, supabase as browserClient } from '@/lib/supabase/client'
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
-
-export const createServerSupabaseClient = () => {
-  return createClient<Database>(
-    supabaseUrl,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
+export const supabase = browserClient
+export const createServerSupabaseClient = createServerClient
+export { createClient }
 

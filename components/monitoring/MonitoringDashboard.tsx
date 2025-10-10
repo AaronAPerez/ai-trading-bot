@@ -7,7 +7,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Activity, AlertTriangle, TrendingUp, Clock } from 'lucide-react';
 
@@ -25,10 +25,8 @@ export function MonitoringDashboard({ userId }: { userId: string }) {
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    // Use singleton client
+    const supabase = createClient();
 
     // Fetch real metrics from Supabase
     const fetchMetrics = async () => {

@@ -97,6 +97,8 @@ export interface Position {
 // ===============================================
 
 export interface TradeSignal {
+  stopLoss: number
+  takeProfit: number
   symbol: string
   action: TradeAction
   confidence: number
@@ -113,6 +115,68 @@ export interface TradeSignal {
     [key: string]: any
   }
 }
+
+// ===============================================
+// TRADING STRATEGY TYPES
+// ===============================================
+
+export interface TradingStrategy {
+  name: string
+  type: string
+  description: string
+  timeframe: string
+  parameters: Record<string, any>
+  analyze(data: MarketData[]): Promise<TradeSignal>
+  backtest?(historicalData: MarketData[]): Promise<BacktestResult>
+}
+
+export interface BacktestTrade {
+  entryTime: Date
+  exitTime: Date
+  entryPrice: number
+  exitPrice: number
+  action: TradeAction
+  quantity: number
+  profit: number
+  profitPercent: number
+  holdingPeriod: number
+  reason: string
+}
+
+export interface BacktestResult {
+  trades: BacktestTrade[]
+  totalTrades: number
+  winningTrades: number
+  losingTrades: number
+  winRate: number
+  profitFactor: number
+  maxDrawdown: number
+  sharpeRatio: number
+  calmarRatio: number
+
+  // Optional extended properties
+  startDate?: Date
+  endDate?: Date
+  totalProfit?: number
+  totalLoss?: number
+  netProfit?: number
+  averageWin?: number
+  averageLoss?: number
+  sortino?: number
+  sortinoRatio?: number
+  maxConsecutiveWins?: number
+  maxConsecutiveLosses?: number
+  averageHoldingPeriod?: number
+  expectancy?: number
+  totalReturn?: number
+  annualizedReturn?: number
+  volatility?: number
+  avgTrade?: number
+  avgWinningTrade?: number
+  avgLosingTrade?: number
+  equityCurve?: number[]
+}
+
 export interface TechnicalSummary {
   rsi: number
   macd: number
