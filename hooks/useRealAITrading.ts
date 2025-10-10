@@ -133,63 +133,6 @@ export default function useRealAITrading({
     }
   }, [userId])
 
-  // Enhanced simulation that saves to database
-  const simulateAndSaveAITrading = useCallback(async () => {
-    const symbols = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'META', 'NVDA', 'AMD', 'NFLX', 'UBER']
-    const randomSymbol = symbols[Math.floor(Math.random() * symbols.length)]
-    const isBuy = Math.random() > 0.5
-    const quantity = Math.floor(Math.random() * 100) + 1
-    const price = Math.random() * 300 + 50
-    const confidence = 0.6 + Math.random() * 0.35 // 60-95%
-    const strategies = ['AI_MOMENTUM', 'AI_REVERSAL', 'AI_BREAKOUT', 'AI_SCALPING']
-    const strategy = strategies[Math.floor(Math.random() * strategies.length)]
-
-    try {
-      // Save the trade to database
-      const savedTrade = await saveAITrade({
-        symbol: randomSymbol,
-        side: isBuy ? 'buy' : 'sell',
-        quantity,
-        price,
-        confidence,
-        strategy
-      })
-
-      // Save learning data
-      await saveAILearningData({
-        symbol: randomSymbol,
-        confidence,
-        predicted_direction: isBuy ? 'UP' : 'DOWN',
-        market_conditions: {
-          volatility: Math.random() * 0.5,
-          volume: Math.floor(Math.random() * 1000000) + 100000,
-          momentum: (Math.random() - 0.5) * 0.2
-        },
-        technical_indicators: {
-          rsi: Math.random() * 100,
-          macd: (Math.random() - 0.5) * 2,
-          bollingerPosition: Math.random()
-        }
-      })
-
-      // Trigger custom event for UI notifications
-      const event = new CustomEvent('ai-trade-executed', {
-        detail: {
-          symbol: randomSymbol,
-          side: isBuy ? 'buy' : 'sell',
-          quantity,
-          price,
-          confidence
-        }
-      })
-      window.dispatchEvent(event)
-
-      return savedTrade
-    } catch (error) {
-      console.error('Failed to simulate and save AI trading:', error)
-      return null
-    }
-  }, [saveAITrade, saveAILearningData])
 
   // Fetch real trades from Alpaca API and save to Supabase
   const fetchAndSaveRealTrades = useCallback(async () => {
@@ -259,7 +202,6 @@ export default function useRealAITrading({
     saveAITrade,
     saveAILearningData,
     updateBotMetrics,
-    simulateAndSaveAITrading,
     fetchAndSaveRealTrades
   }
 }

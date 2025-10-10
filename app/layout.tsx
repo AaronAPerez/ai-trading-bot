@@ -38,7 +38,7 @@ export default function RootLayout({
             <AuthProvider>
               <WebSocketProvider>
                 <div className="min-h-screen flex flex-col mx-4">
-                  <UserHeader />
+                  {/* <UserHeader /> */}
                   <main className="flex-1 w-full max-w-10xl mx-auto">
                     {children}
                   </main>

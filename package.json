@@ -6,6 +6,7 @@
     "dev": "npm run validate:env:quick && next dev -p 3000",
     "build": "next build",
     "start": "npm run validate:env:quick && next start",
+    "validate:real-data": "ts-node scripts/validate-real-data.ts",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "validate:env": "node scripts/startup-validation.js",

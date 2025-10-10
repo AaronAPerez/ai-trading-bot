@@ -96,11 +96,12 @@ export const UserHeader = () => {
   } = useQuery<AlpacaAccount>({
     queryKey: ['account'],
     queryFn: async () => {
-      const response = await fetch('/api/alpaca?action=account')
+      const response = await fetch('/api/alpaca/account')
       if (!response.ok) {
         throw new Error('Failed to fetch account data')
       }
-      return response.json()
+      const data = await response.json()
+      return data.account || data
     },
     refetchInterval: 30000,
     staleTime: 20000,

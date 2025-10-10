@@ -91,9 +91,18 @@ export function StrategyBuilder({ onSave, onStartBot }: StrategyBuilderProps) {
         .eq('user_id', userId)
         .single()
 
-      if (error && error.code !== 'PGRST116') throw error
+      if (error) {
+        // Handle table not found or no records gracefully
+        if (error.code === 'PGRST116' || error.code === 'PGRST204' || error.code === '42P01') {
+          console.warn('bot_configurations not found - using default')
+          return null
+        }
+        throw error
+      }
       return data?.configuration as BotConfiguration | null
-    }
+    },
+    retry: false,
+    enabled: !!userId
   })
 
   // Local state for form
@@ -120,7 +129,14 @@ export function StrategyBuilder({ onSave, onStartBot }: StrategyBuilderProps) {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        // Handle table not found
+        if (error.code === 'PGRST204' || error.code === '42P01') {
+          console.warn('bot_configurations table not found - run migration')
+          throw new Error('Database table missing. Please run migrations.')
+        }
+        throw error
+      }
       return data
     },
     onSuccess: () => {

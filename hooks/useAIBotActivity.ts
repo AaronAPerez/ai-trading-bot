@@ -53,14 +53,11 @@ interface AIBotActivityState {
   activities: BotActivityLog[]
   metrics: BotMetrics | null
   orderExecution: OrderExecution | null
-  isSimulating: boolean
   isLoading: boolean
   error: string | null
 }
 
 interface AIBotActivityHook extends AIBotActivityState {
-  startSimulation: () => Promise<void>
-  stopSimulation: () => Promise<void>
   toggleOrderExecution: () => Promise<void>
   refreshActivity: () => Promise<void>
   addCustomActivity: (activity: Partial<BotActivityLog>) => Promise<void>
@@ -69,19 +66,16 @@ interface AIBotActivityHook extends AIBotActivityState {
 interface UseAIBotActivityOptions {
   refreshInterval?: number
   maxActivities?: number
-  autoStart?: boolean
 }
 
 export function useAIBotActivity({
   refreshInterval = 5000,
-  maxActivities = 20,
-  autoStart = false
+  maxActivities = 20
 }: UseAIBotActivityOptions = {}): AIBotActivityHook {
   const [state, setState] = useState<AIBotActivityState>({
     activities: [],
     metrics: null,
     orderExecution: null,
-    isSimulating: false,
     isLoading: false,
     error: null
   })
@@ -104,7 +98,7 @@ export function useAIBotActivity({
         throw new Error(result.error || 'Failed to fetch bot activity')
       }
 
-      const { activities: apiActivities, metrics: apiMetrics, isSimulating } = result.data
+      const { activities: apiActivities, metrics: apiMetrics } = result.data
 
       // Transform API data to match interface
       const activities = apiActivities.map((log: any) => ({
@@ -138,7 +132,6 @@ export function useAIBotActivity({
         ...prev,
         activities,
         metrics: botMetrics,
-        isSimulating: isSimulating || false,
         error: null
       }))
 
@@ -151,58 +144,6 @@ export function useAIBotActivity({
     }
   }, [maxActivities])
 
-  // Start bot activity simulation
-  const startSimulation = useCallback(async () => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }))
-
-    try {
-      // Use API endpoint to start simulation (avoids RLS issues)
-      const response = await fetch('/api/ai-bot?action=start-simulation')
-
-      if (!response.ok) {
-        throw new Error('Failed to start bot activity simulation')
-      }
-
-      setState(prev => ({ ...prev, isSimulating: true }))
-      // Refresh after starting
-      setTimeout(fetchBotActivity, 1000)
-
-    } catch (err) {
-      console.error('Failed to start bot activity:', err)
-      setState(prev => ({
-        ...prev,
-        error: err instanceof Error ? err.message : 'Failed to start AI bot'
-      }))
-    } finally {
-      setState(prev => ({ ...prev, isLoading: false }))
-    }
-  }, [fetchBotActivity])
-
-  // Stop bot activity simulation
-  const stopSimulation = useCallback(async () => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }))
-
-    try {
-      // Use API endpoint to stop simulation (avoids RLS issues)
-      const response = await fetch('/api/ai-bot?action=stop-simulation')
-
-      if (!response.ok) {
-        throw new Error('Failed to stop bot activity simulation')
-      }
-
-      setState(prev => ({ ...prev, isSimulating: false }))
-      fetchBotActivity()
-
-    } catch (err) {
-      console.error('Failed to stop bot activity:', err)
-      setState(prev => ({
-        ...prev,
-        error: err instanceof Error ? err.message : 'Failed to stop AI bot'
-      }))
-    } finally {
-      setState(prev => ({ ...prev, isLoading: false }))
-    }
-  }, [fetchBotActivity])
 
   // Toggle order execution
   const toggleOrderExecution = useCallback(async () => {
@@ -285,17 +226,8 @@ export function useAIBotActivity({
     return () => clearInterval(interval)
   }, [fetchBotActivity, refreshInterval])
 
-  // Separate effect for auto-start to avoid dependency loops
-  useEffect(() => {
-    if (autoStart) {
-      startSimulation()
-    }
-  }, [autoStart, startSimulation])
-
   return {
     ...state,
-    startSimulation,
-    stopSimulation,
     toggleOrderExecution,
     refreshActivity,
     addCustomActivity

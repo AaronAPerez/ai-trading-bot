@@ -1,17 +1,18 @@
 /**
- * Enhanced Alpaca Market Data Service
- * 
+ * Alpaca Market Data Service - Production Only
+ *
  * Features:
- * ✅ Real-time quotes and historical data
+ * ✅ Real-time quotes and historical data from Alpaca API
  * ✅ Comprehensive error handling and retry logic
  * ✅ Intelligent caching with TTL
  * ✅ Rate limiting and connection management
- * ✅ Demo mode with realistic mock data
  * ✅ WebSocket support for live streaming
  * ✅ Professional data transformation
- * 
+ *
+ * NO MOCK DATA - Uses only real Alpaca API
+ *
  * @author Trading Platform Team
- * @version 5.0.0 - Production Ready
+ * @version 6.0.0 - Real Data Only
  */
 
 import { AlpacaClient } from './client'
@@ -170,24 +171,15 @@ export class AlpacaMarketDataService {
         }
       }
 
-      // Fetch uncached symbols
+      // Fetch uncached symbols from real Alpaca API
       if (symbolsToFetch.length > 0) {
-        if (this.client.isDemoModeActive()) {
-          // Generate realistic demo data
-          for (const symbol of symbolsToFetch) {
-            const quote = this.generateMockQuote(symbol)
-            result[symbol] = quote
-            this.setCachedQuote(symbol, quote)
-          }
-        } else {
-          // Fetch real data from Alpaca
-          const alpacaQuotes = await this.client.getLatestQuotes({ symbols: symbolsToFetch })
-          
-          for (const [symbol, alpacaQuote] of Object.entries(alpacaQuotes)) {
-            const quote = this.transformAlpacaQuote(symbol, alpacaQuote)
-            result[symbol] = quote
-            this.setCachedQuote(symbol, quote)
-          }
+        // Fetch real data from Alpaca
+        const alpacaQuotes = await this.client.getLatestQuotes({ symbols: symbolsToFetch })
+
+        for (const [symbol, alpacaQuote] of Object.entries(alpacaQuotes)) {
+          const quote = this.transformAlpacaQuote(symbol, alpacaQuote)
+          result[symbol] = quote
+          this.setCachedQuote(symbol, quote)
         }
       }
 
@@ -243,28 +235,21 @@ export class AlpacaMarketDataService {
         return cached
       }
 
-      let result: Record<string, MarketBar[]>
+      // Fetch real historical data from Alpaca API
+      const alpacaBarsRequest: AlpacaBarsRequest = {
+        symbols: params.symbols,
+        timeframe: params.timeframe,
+        start: params.start?.toISOString(),
+        end: params.end?.toISOString(),
+        limit: params.limit,
+        adjustment: params.adjustment
+      }
 
-      if (this.client.isDemoModeActive()) {
-        // Generate realistic historical data
-        result = this.generateMockBars(params)
-      } else {
-        // Fetch real historical data
-        const alpacaBarsRequest: AlpacaBarsRequest = {
-          symbols: params.symbols,
-          timeframe: params.timeframe,
-          start: params.start?.toISOString(),
-          end: params.end?.toISOString(),
-          limit: params.limit,
-          adjustment: params.adjustment
-        }
+      const alpacaBars = await this.client.getBarsV2(alpacaBarsRequest)
 
-        const alpacaBars = await this.client.getBarsV2(alpacaBarsRequest)
-        
-        result = {}
-        for (const [symbol, bars] of Object.entries(alpacaBars)) {
-          result[symbol] = bars.map(bar => this.transformAlpacaBar(symbol, bar, params.timeframe))
-        }
+      const result: Record<string, MarketBar[]> = {}
+      for (const [symbol, bars] of Object.entries(alpacaBars)) {
+        result[symbol] = bars.map(bar => this.transformAlpacaBar(symbol, bar, params.timeframe))
       }
 
       // Cache the result
@@ -324,17 +309,23 @@ export class AlpacaMarketDataService {
   // =============================================================================
 
   /**
-   * Get current market status
+   * Get current market status from Alpaca API
    */
   async getMarketStatus(): Promise<MarketStatus> {
-    if (this.client.isDemoModeActive()) {
-      return this.generateMockMarketStatus()
-    }
-
     try {
-      // In a real implementation, this would call Alpaca's clock endpoint
-      // For now, we'll generate realistic market hours
-      return this.generateMockMarketStatus()
+      // Call Alpaca's clock endpoint for real market status
+      const clock = await this.client.getClock()
+
+      return {
+        isOpen: clock.is_open,
+        nextOpen: new Date(clock.next_open),
+        nextClose: new Date(clock.next_close),
+        currentTime: new Date(clock.timestamp),
+        session: clock.is_open ? 'regular' : 'closed',
+        timeUntilNext: clock.is_open
+          ? new Date(clock.next_close).getTime() - Date.now()
+          : new Date(clock.next_open).getTime() - Date.now()
+      }
     } catch (error) {
       throw new Error(`Failed to fetch market status: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
@@ -348,12 +339,6 @@ export class AlpacaMarketDataService {
    * Initialize WebSocket connection for real-time data
    */
   private initializeWebSocket(): void {
-    if (this.client.isDemoModeActive()) {
-      // Demo mode - simulate real-time updates
-      this.simulateRealTimeUpdates()
-      return
-    }
-
     try {
       // WebSocket URL for Alpaca market data
       const wsUrl = 'wss://stream.data.alpaca.markets/v2/iex'
@@ -407,11 +392,6 @@ export class AlpacaMarketDataService {
    * Subscribe to real-time quotes for symbols
    */
   subscribeToQuotes(symbols: string[]): void {
-    if (this.client.isDemoModeActive()) {
-      symbols.forEach(symbol => this.subscriptions.add(symbol))
-      return
-    }
-
     if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket not connected, cannot subscribe to quotes')
       return
@@ -430,11 +410,6 @@ export class AlpacaMarketDataService {
    * Unsubscribe from real-time quotes
    */
   unsubscribeFromQuotes(symbols: string[]): void {
-    if (this.client.isDemoModeActive()) {
-      symbols.forEach(symbol => this.subscriptions.delete(symbol))
-      return
-    }
-
     if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) return
 
     const unsubscribeMessage = {
@@ -503,18 +478,6 @@ export class AlpacaMarketDataService {
     this.emitQuoteUpdate(symbol, quote)
   }
 
-  /**
-   * Simulate real-time updates for demo mode
-   */
-  private simulateRealTimeUpdates(): void {
-    setInterval(() => {
-      this.subscriptions.forEach(symbol => {
-        const quote = this.generateMockQuote(symbol, true)
-        this.setCachedQuote(symbol, quote)
-        this.emitQuoteUpdate(symbol, quote)
-      })
-    }, 5000) // Update every 5 seconds in demo mode
-  }
 
   // =============================================================================
   // Data Transformation Methods
@@ -562,191 +525,8 @@ export class AlpacaMarketDataService {
   }
 
   // =============================================================================
-  // Mock Data Generation (Demo Mode)
+  // Real Data Only - No Mock Data
   // =============================================================================
-
-  /**
-   * Generate realistic mock quote data
-   */
-  private generateMockQuote(symbol: string, isUpdate: boolean = false): MarketQuote {
-    // Base prices for different symbols
-    const basePrices: Record<string, number> = {
-      'AAPL': 175,
-      'GOOGL': 140,
-      'MSFT': 380,
-      'TSLA': 240,
-      'NVDA': 450,
-      'AMZN': 150,
-      'META': 320,
-      'SPY': 450,
-      'QQQ': 380
-    }
-
-    const basePrice = basePrices[symbol] || 100 + Math.random() * 200
-
-    // Add some realistic volatility
-    const volatility = isUpdate ? 0.002 : 0.01 // Lower volatility for updates
-    const priceChange = (Math.random() - 0.5) * volatility * basePrice
-    const currentPrice = basePrice + priceChange
-
-    const spread = currentPrice * 0.001 // 0.1% spread
-    const bidPrice = currentPrice - spread / 2
-    const askPrice = currentPrice + spread / 2
-
-    // Ensure all values are valid numbers before using toFixed
-    const safeBidPrice = isNaN(bidPrice) || !isFinite(bidPrice) ? basePrice - 0.1 : bidPrice
-    const safeAskPrice = isNaN(askPrice) || !isFinite(askPrice) ? basePrice + 0.1 : askPrice
-    const safeCurrentPrice = isNaN(currentPrice) || !isFinite(currentPrice) ? basePrice : currentPrice
-    const safeSpread = isNaN(spread) || !isFinite(spread) ? 0.001 : spread
-    const safePriceChange = isNaN(priceChange) || !isFinite(priceChange) ? 0 : priceChange
-    const safeBasePrice = isNaN(basePrice) || !isFinite(basePrice) ? 100 : basePrice
-
-    return {
-      symbol,
-      bidPrice: Number(safeBidPrice.toFixed(2)),
-      askPrice: Number(safeAskPrice.toFixed(2)),
-      midPrice: Number(safeCurrentPrice.toFixed(2)),
-      spread: Number(safeSpread.toFixed(2)),
-      bidSize: 100 + Math.floor(Math.random() * 900),
-      askSize: 100 + Math.floor(Math.random() * 900),
-      lastPrice: Number(safeCurrentPrice.toFixed(2)),
-      timestamp: new Date(),
-      volume: Math.floor(1000000 + Math.random() * 9000000),
-      dayChange: Number(safePriceChange.toFixed(2)),
-      dayChangePercent: Number(((safePriceChange / safeBasePrice) * 100).toFixed(2)),
-      isMockData: true
-    }
-  }
-
-  /**
-   * Generate realistic mock historical bars
-   */
-  private generateMockBars(params: {
-    symbols: string[]
-    timeframe: AlpacaTimeframe
-    limit?: number
-  }): Record<string, MarketBar[]> {
-    const result: Record<string, MarketBar[]> = {}
-    const limit = params.limit || 100
-
-    params.symbols.forEach(symbol => {
-      const bars: MarketBar[] = []
-      const quote = this.generateMockQuote(symbol)
-      let currentPrice = quote.midPrice
-
-      for (let i = 0; i < limit; i++) {
-        const timestamp = new Date()
-        
-        // Calculate time intervals based on timeframe
-        const intervals = {
-          '1Min': 60000,
-          '5Min': 300000,
-          '15Min': 900000,
-          '30Min': 1800000,
-          '1Hour': 3600000,
-          '1Day': 86400000
-        }
-        
-        const interval = intervals[params.timeframe] || 3600000
-        timestamp.setTime(timestamp.getTime() - (limit - i) * interval)
-
-        // Generate realistic OHLCV data
-        const open = currentPrice
-        const volatility = 0.02 // 2% volatility
-        const change = (Math.random() - 0.5) * volatility * open
-        const high = open + Math.abs(change) + Math.random() * open * 0.01
-        const low = open - Math.abs(change) - Math.random() * open * 0.01
-        const close = open + change
-        const volume = Math.floor(100000 + Math.random() * 900000)
-
-        // Ensure all values are valid numbers before using toFixed
-        const safeOpen = isNaN(open) || !isFinite(open) ? currentPrice : open
-        const safeHigh = isNaN(high) || !isFinite(high) ? safeOpen * 1.01 : high
-        const safeLow = isNaN(low) || !isFinite(low) ? safeOpen * 0.99 : low
-        const safeClose = isNaN(close) || !isFinite(close) ? safeOpen : close
-        const safeChange = isNaN(change) || !isFinite(change) ? 0 : change
-        const safeVwap = (safeOpen + safeHigh + safeLow + safeClose) / 4
-
-        bars.push({
-          symbol,
-          timestamp,
-          timeframe: params.timeframe,
-          open: Number(safeOpen.toFixed(2)),
-          high: Number(safeHigh.toFixed(2)),
-          low: Number(safeLow.toFixed(2)),
-          close: Number(safeClose.toFixed(2)),
-          volume,
-          vwap: Number(safeVwap.toFixed(2)),
-          tradeCount: Math.floor(100 + Math.random() * 400),
-          change: Number(safeChange.toFixed(2)),
-          changePercent: Number(safeOpen > 0 ? ((safeChange / safeOpen) * 100).toFixed(2) : '0')
-        })
-
-        currentPrice = close
-      }
-
-      result[symbol] = bars
-    })
-
-    return result
-  }
-
-  /**
-   * Generate mock market status
-   */
-  private generateMockMarketStatus(): MarketStatus {
-    const now = new Date()
-    const currentHour = now.getHours()
-    const currentDay = now.getDay()
-
-    // Market hours: 9:30 AM - 4:00 PM ET, Monday-Friday
-    const isWeekday = currentDay >= 1 && currentDay <= 5
-    const isMarketHours = currentHour >= 9 && currentHour < 16
-    const isOpen = isWeekday && isMarketHours
-
-    let session: 'pre_market' | 'regular' | 'after_hours' | 'closed'
-    if (!isWeekday) {
-      session = 'closed'
-    } else if (currentHour < 9) {
-      session = 'pre_market'
-    } else if (currentHour >= 9 && currentHour < 16) {
-      session = 'regular'
-    } else {
-      session = 'after_hours'
-    }
-
-    // Calculate next market open/close
-    const nextOpen = new Date(now)
-    const nextClose = new Date(now)
-
-    if (isOpen) {
-      nextClose.setHours(16, 0, 0, 0)
-    } else {
-      if (currentDay === 5 && currentHour >= 16) {
-        // Friday after hours - next open is Monday
-        nextOpen.setDate(nextOpen.getDate() + 3)
-      } else if (currentDay === 6) {
-        // Saturday - next open is Monday
-        nextOpen.setDate(nextOpen.getDate() + 2)
-      } else if (currentDay === 0) {
-        // Sunday - next open is Monday
-        nextOpen.setDate(nextOpen.getDate() + 1)
-      } else {
-        // Weekday before market open
-        nextOpen.setDate(nextOpen.getDate() + (currentHour >= 16 ? 1 : 0))
-      }
-      nextOpen.setHours(9, 30, 0, 0)
-    }
-
-    return {
-      isOpen,
-      nextOpen,
-      nextClose,
-      currentTime: now,
-      session,
-      timeUntilNext: isOpen ? nextClose.getTime() - now.getTime() : nextOpen.getTime() - now.getTime()
-    }
-  }
 
   // =============================================================================
   // Caching Methods

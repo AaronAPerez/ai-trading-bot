@@ -58,10 +58,11 @@ export function isDemoMode(): boolean {
 }
 
 /**
- * Get user email (mock for now)
+ * Get user email
+ * TODO: Implement real authentication
  */
 export function getUserEmail(): string {
-  // TODO: Replace with actual auth
+  // TODO: Replace with actual auth from session/Supabase
   return 'demo@tradingbot.com'
 }
 
