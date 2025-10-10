@@ -99,7 +99,7 @@ export function useRealTimeAIMetrics() {
   const metricsQuery = useQuery({
     queryKey: ['ai-metrics-real-time'],
     queryFn: fetchAIMetrics,
-    refetchInterval: 5000, // Refetch every 5 seconds for real-time data
+    refetchInterval: 15000, // Refetch every 15 seconds (reduced from 5s to prevent rate limiting)
     staleTime: 2000,
   })
 

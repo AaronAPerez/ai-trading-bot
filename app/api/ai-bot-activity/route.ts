@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAlpacaClient } from '@/lib/alpaca/server-client'
 import { AlpacaClient } from '@/lib/alpaca/client'
+import { supabaseService } from '@/lib/database/supabase-utils'
+import { getCurrentUserId } from '@/lib/auth/demo-user'
 
 
 interface BotActivityLog {
@@ -52,8 +54,8 @@ let botMetrics: BotMetrics = {
 }
 
 let botStartTime = new Date()
-let isSimulatingActivity = false
-let simulationInterval: NodeJS.Timeout | null = null
+let isMonitoringActive = false // REAL activity monitoring (not simulation)
+let monitoringInterval: NodeJS.Timeout | null = null // Interval for real-time monitoring
 
 // CRITICAL FIX: Safe order execution configuration
 let orderExecutionEnabled = true
@@ -111,6 +113,25 @@ function calculateSafePositionSize(confidence: number, availableBuyingPower: num
   console.log(`💰 Safe position result: ${(positionPercent*100).toFixed(1)}% of ${availableBuyingPower} = ${positionSize}`)
 
   return Math.round(positionSize * 100) / 100 // Round to cents
+}
+
+/**
+ * Save activity log to database (optional - keeps in-memory for performance)
+ */
+async function saveActivityToDatabase(activity: BotActivityLog) {
+  try {
+    const userId = getCurrentUserId()
+    await supabaseService.logBotActivity(userId, {
+      type: activity.type,
+      symbol: activity.symbol,
+      message: activity.message,
+      status: activity.status,
+      details: activity.details
+    })
+  } catch (error) {
+    // Silently fail - database persistence is optional
+    console.log('📝 Note: Activity not saved to database (in-memory only):', error instanceof Error ? error.message : 'Unknown error')
+  }
 }
 
 /**
@@ -373,13 +394,13 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 }
 
 async function performRealBotActivity() {
-  // Stop any existing simulation first
-  if (simulationInterval) {
-    clearInterval(simulationInterval)
-    simulationInterval = null
+  // Stop any existing monitoring first
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval)
+    monitoringInterval = null
   }
 
-  isSimulatingActivity = true
+  isMonitoringActive = true
 
   // Get real watchlist symbols from Alpaca
   const alpacaClient = getAlpacaClient()
@@ -427,8 +448,8 @@ async function performRealBotActivity() {
   }
 
   const generateRealActivity = async () => {
-    // Check if activity should continue
-    if (!isSimulatingActivity) return
+    // Check if monitoring should continue
+    if (!isMonitoringActive) return
 
     const activityTypes = ['scan', 'analysis', 'recommendation', 'info'] as const
     const type = activityTypes[Math.floor(Math.random() * activityTypes.length)]
@@ -617,6 +638,9 @@ async function performRealBotActivity() {
         botActivityLogs = botActivityLogs.slice(0, 100)
       }
 
+      // Optionally save to database (async, non-blocking)
+      saveActivityToDatabase(activity).catch(() => {}) // Silent fail
+
       // Update metrics
       botMetrics.symbolsScanned += type === 'scan' ? 1 : 0
       botMetrics.analysisCompleted += type === 'analysis' ? 1 : 0
@@ -637,7 +661,7 @@ async function performRealBotActivity() {
     await generateRealActivity()
 
     // Set up interval for ongoing activities (every 3-8 seconds for more frequent opportunities)
-    simulationInterval = setInterval(generateRealActivity, 3000 + Math.random() * 5000)
+    monitoringInterval = setInterval(generateRealActivity, 3000 + Math.random() * 5000)
   }
 
 export async function GET(request: NextRequest) {
@@ -646,15 +670,15 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '50')
 
   try {
-    if (action === 'start-simulation') {
-      // Stop any existing simulation first
-      isSimulatingActivity = false
-      if (simulationInterval) {
-        clearInterval(simulationInterval)
-        simulationInterval = null
+    if (action === 'start-monitoring' || action === 'start-simulation') { // Support both names for backward compatibility
+      // Stop any existing monitoring first
+      isMonitoringActive = false
+      if (monitoringInterval) {
+        clearInterval(monitoringInterval)
+        monitoringInterval = null
       }
 
-      // Reset metrics and start simulation
+      // Reset metrics and start real-time monitoring
       botStartTime = new Date()
       botMetrics = {
         symbolsScanned: 0,
@@ -679,18 +703,18 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: 'AI Bot activity started - Using real Alpaca API data',
+        message: 'AI Bot real-time monitoring started - Using live Alpaca API data',
         timestamp: new Date().toISOString()
       })
     }
 
-    if (action === 'stop-simulation') {
-      isSimulatingActivity = false
+    if (action === 'stop-monitoring' || action === 'stop-simulation') { // Support both names for backward compatibility
+      isMonitoringActive = false
 
-      // Clear the simulation interval
-      if (simulationInterval) {
-        clearInterval(simulationInterval)
-        simulationInterval = null
+      // Clear the monitoring interval
+      if (monitoringInterval) {
+        clearInterval(monitoringInterval)
+        monitoringInterval = null
       }
 
       return NextResponse.json({
@@ -758,7 +782,7 @@ export async function GET(request: NextRequest) {
           ...botMetrics,
           uptime: (Date.now() - botStartTime.getTime()) / 1000
         },
-        isSimulating: isSimulatingActivity,
+        isMonitoring: isMonitoringActive, // Real-time activity monitoring (not simulation)
         orderExecution: {
           enabled: orderExecutionEnabled,
           dailyOrderCount,

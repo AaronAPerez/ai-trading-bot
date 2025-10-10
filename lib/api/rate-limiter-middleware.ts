@@ -23,9 +23,10 @@ const RATE_LIMIT_CONFIG: Record<string, { requestsPerMinute: number }> = {
 export async function withRateLimit<T>(
   endpoint: string,
   request: () => Promise<T>,
-  priority: 'low' | 'normal' | 'high' = 'normal'
+  priority: 'low' | 'normal' | 'high' = 'normal',
+  params?: any
 ): Promise<T> {
-  return rateLimiter.request(request, endpoint)
+  return rateLimiter.request(request, endpoint, 3, params)
 }
 
 /**

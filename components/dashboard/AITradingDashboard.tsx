@@ -28,6 +28,7 @@ import { RiskMetricsChart } from '../charts/RiskMetricsChart'
 import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
 import LiveAIActivity from './LiveAIActivity'
 import { useQuery } from '@tanstack/react-query'
+import PortfolioPositionsTable from './PortfolioPositionsTable'
 
 // Type definitions
 interface AlpacaPosition {
@@ -806,7 +807,7 @@ export default function AITradingDashboard() {
           learningActive={aiLearningManager.isActive}
         />
       </div>
-
+    <PortfolioPositionsTable/>
       {/* Market Data */}
       <div className="bg-gradient-to-r from-gray-800/40 to-blue-900/20 rounded-xl p-6 border border-gray-700/50">
         <div className="flex items-center space-x-2 mb-4">
@@ -817,6 +818,8 @@ export default function AITradingDashboard() {
         </div>
         <MarketStatusDisplay />
       </div>
+
+  
 
       {/* 24/7 Crypto Trading Section */}
       <div className="space-y-6">

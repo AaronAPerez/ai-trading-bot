@@ -139,9 +139,25 @@ export class SupabaseService {
   }
 
   async saveMarketSentiment(sentiment: Tables['market_sentiment']['Insert']) {
+    // Filter out any invalid columns (like 'confidence' which doesn't exist in schema)
+    const validSentiment: any = {
+      symbol: sentiment.symbol,
+      sentiment_score: sentiment.sentiment_score,
+      sentiment_label: sentiment.sentiment_label,
+      news_count: sentiment.news_count,
+      source: sentiment.source,
+      data_points: sentiment.data_points,
+      timestamp: sentiment.timestamp
+    }
+
+    // Only include optional fields if provided
+    if (sentiment.created_at) validSentiment.created_at = sentiment.created_at
+    if (sentiment.id) validSentiment.id = sentiment.id
+    if (sentiment.social_mentions !== undefined) validSentiment.social_mentions = sentiment.social_mentions
+
     const { data, error } = await this._client
       .from('market_sentiment')
-      .insert(sentiment)
+      .insert(validSentiment)
       .select()
       .single()
 

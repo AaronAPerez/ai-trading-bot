@@ -142,6 +142,14 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
     if (isCrypto) {
       availableFunds = parseFloat(account.cash || '0')
       console.log(`💳 Available cash for crypto: $${availableFunds}`)
+
+      // Special check for crypto: Alpaca has separate wallets
+      if (availableFunds === 0 && parseFloat(account.equity || '0') > 0) {
+        console.log('⚠️ CRYPTO WALLET EMPTY: You have funds in your stock account but $0 in crypto wallet')
+        console.log('💡 TIP: Transfer USD from stock account to crypto wallet in Alpaca dashboard')
+        console.log('💡 Go to: Alpaca Dashboard > Crypto Trading > Transfer Funds')
+        return 0 // Can't trade crypto without USD in crypto wallet
+      }
     } else {
       availableFunds = parseFloat(account.buying_power || '0')
       console.log(`💳 Available buying power for stocks: $${availableFunds}`)
@@ -311,7 +319,15 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
             console.log(`❌ Cannot SELL ${symbol} - no existing position (would be shorting)`)
             return { success: false, reason: 'Cannot sell without existing position (shorting not allowed)' }
           }
-          console.log(`✅ Confirmed existing position in ${symbol}, proceeding with SELL`)
+
+          // Check if we have enough quantity to sell
+          const availableQty = parseFloat(existingPosition.qty || existingPosition.qty_available || '0')
+          if (availableQty <= 0) {
+            console.log(`❌ Cannot SELL ${symbol} - no available quantity (qty: ${availableQty})`)
+            return { success: false, reason: 'No shares available to sell' }
+          }
+
+          console.log(`✅ Confirmed existing position in ${symbol}: ${availableQty} shares available, market value: $${existingPosition.market_value}`)
         } else if (recommendation.toUpperCase() === 'BUY') {
           // For BUY: Check if we already own this asset
           if (existingPosition && autoExecutionConfig.preventDuplicatePositions) {
@@ -344,13 +360,35 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       ? symbol.replace('-USD', '/USD')  // Convert BTC-USD to BTC/USD if needed
       : symbol                           // Keep stock symbols as-is
 
-    const orderData = {
+    // For SELL orders, we need to sell the actual quantity owned, not use notional value
+    let orderData: any = {
       symbol: cleanSymbol,
       side: recommendation.toLowerCase(),
-      notional: Math.round(positionSize * 100) / 100, // Round to 2 decimal places
       type: 'market',
       time_in_force: isCrypto ? 'gtc' : 'day', // Crypto uses GTC (Good-Til-Canceled), stocks use day
       client_order_id: `AI_BOT_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
+    }
+
+    // SELL vs BUY: Different order structure
+    if (recommendation.toUpperCase() === 'SELL') {
+      // For SELL: Use 'qty' to sell all shares we own (close position)
+      // We already verified position exists in the check above
+      const positionsResponse = await fetch(`${process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'}/v2/positions`, {
+        headers: {
+          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
+          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
+        }
+      })
+      const positions = await positionsResponse.json()
+      const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
+      const qtyToSell = parseFloat(existingPosition.qty || '0')
+
+      orderData.qty = qtyToSell // Sell exact quantity owned
+      console.log(`📝 SELL order: selling ${qtyToSell} shares of ${cleanSymbol}`)
+    } else {
+      // For BUY: Use 'notional' to buy dollar amount
+      orderData.notional = Math.round(positionSize * 100) / 100 // Round to 2 decimal places
+      console.log(`📝 BUY order: buying $${orderData.notional} worth of ${cleanSymbol}`)
     }
 
     console.log('📝 Placing order:', orderData)
@@ -408,12 +446,27 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     } else {
       const errorText = await orderResponse.text()
       console.error('❌ Order placement failed:', errorText)
-      
+
       orderExecutionMetrics.failedOrders++
-      
+
+      // Parse error for better messaging
+      let errorMessage = errorText
+      try {
+        const errorJson = JSON.parse(errorText)
+        if (errorJson.code === 40310000 && errorJson.message?.includes('insufficient balance for USD')) {
+          errorMessage = 'Insufficient USD balance in crypto wallet. Transfer funds from stock account to crypto wallet in Alpaca dashboard.'
+          console.log('💡 TIP: In Alpaca Paper Trading, you need to transfer USD from your stock account to crypto wallet.')
+          console.log('💡 Go to: Alpaca Dashboard > Crypto Trading > Transfer Funds')
+        } else {
+          errorMessage = errorJson.message || errorText
+        }
+      } catch {
+        // Use raw error text if not JSON
+      }
+
       return {
         success: false,
-        reason: `Order placement failed: ${errorText}`
+        reason: errorMessage
       }
     }
 

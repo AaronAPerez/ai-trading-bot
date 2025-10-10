@@ -38,13 +38,14 @@ export class UnifiedAlpacaClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
-    priority: 'low' | 'normal' | 'high' = 'normal'
+    priority: 'low' | 'normal' | 'high' = 'normal',
+    params?: any
   ): Promise<T> {
     return withRateLimit(
       endpoint,
       async () => {
         const url = `${this.baseUrl}${endpoint}`
-        
+
         const response = await fetch(url, {
           ...options,
           headers: {
@@ -57,7 +58,7 @@ export class UnifiedAlpacaClient {
         if (!response.ok) {
           const errorText = await response.text()
           let errorData: any
-          
+
           try {
             errorData = JSON.parse(errorText)
           } catch {
@@ -89,7 +90,8 @@ export class UnifiedAlpacaClient {
 
         return response.json()
       },
-      priority
+      priority,
+      params
     )
   }
 
@@ -99,7 +101,7 @@ export class UnifiedAlpacaClient {
    * Get account information
    */
   async getAccount() {
-    return this.request('/v2/account', {}, 'high')
+    return this.request('/v2/account', {}, 'high', { type: 'account' })
   }
 
   /**
@@ -216,7 +218,7 @@ export class UnifiedAlpacaClient {
    * Get all positions
    */
   async getPositions() {
-    return this.request('/v2/positions', {}, 'normal')
+    return this.request('/v2/positions', {}, 'normal', { type: 'positions' })
   }
 
   /**
@@ -262,7 +264,8 @@ export class UnifiedAlpacaClient {
     return this.request(
       `/v2/stocks/${symbol}/quotes/latest`,
       {},
-      'normal'
+      'normal',
+      { type: 'quote', symbol }
     )
   }
 

@@ -69,7 +69,7 @@ export function useRealTimeActivity() {
   const activitiesQuery = useQuery({
     queryKey: ['real-time-activities'],
     queryFn: fetchRealTimeActivities,
-    refetchInterval: 1000, // Refetch every 1 second for real-time feel
+    refetchInterval: 5000, // Refetch every 5 seconds (reduced from 1s to prevent rate limiting)
     staleTime: 500,
     refetchOnWindowFocus: true,
     refetchOnMount: true,
@@ -79,8 +79,8 @@ export function useRealTimeActivity() {
   const statsQuery = useQuery({
     queryKey: ['activity-stats'],
     queryFn: fetchActivityStats,
-    refetchInterval: 5000, // Refetch every 5 seconds
-    staleTime: 2000,
+    refetchInterval: 10000, // Refetch every 10 seconds (reduced to prevent rate limiting)
+    staleTime: 5000,
   })
 
   // Update local state when data changes

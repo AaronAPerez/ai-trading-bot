@@ -1,5 +1,6 @@
 "use client"
 
+import React from 'react'
 import { useState, useMemo } from 'react'
 import { TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAlpacaPositions } from '@/hooks/api/useAlpacaData'

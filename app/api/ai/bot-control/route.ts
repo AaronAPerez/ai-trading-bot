@@ -120,8 +120,10 @@ async function fetchAvailableCryptoAssets(): Promise<string[]> {
       .map((asset: any) => asset.symbol)
       .filter((symbol: string) => {
         const baseCurrency = symbol.split('/')[0]
+        // CRITICAL: Alpaca only supports /USD pairs for crypto (not /USDT or /USDC for most pairs)
+        // Most liquidity is in /USD pairs
         return symbol.includes('/') && // Only crypto pairs with /
-          (symbol.endsWith('/USD') || symbol.endsWith('/USDT') || symbol.endsWith('/USDC')) && // Only USD pairs
+          symbol.endsWith('/USD') && // ONLY /USD pairs (most reliable)
           !stablecoins.includes(baseCurrency) // Exclude stablecoins
       })
 
