@@ -1,4 +1,4 @@
-import { TradingStrategy, TradeSignal, MarketData, BacktestResult } from '@/types/trading'
+import { TradeSignal, MarketData, TradingStrategy } from '@/types/trading';
 import { calculateSMA, calculateRSI } from '@/lib/utils/technicalIndicators'
 import { logger } from '@/lib/utils/logger'
 
@@ -34,23 +34,12 @@ export class MeanReversionStrategy implements TradingStrategy {
   async analyze(data: MarketData[]): Promise<TradeSignal> {
     try {
       if (data.length < this.parameters.lookbackPeriod + this.parameters.rsiPeriod) {
-        return {
-          symbol: data[0]?.symbol || 'UNKNOWN',
-          action: 'HOLD',
-          confidence: 0,
-          reason: 'Insufficient data for mean reversion analysis',
-          timestamp: new Date(),
-          riskScore: 0.5,
-          strategy: this.name,
-          stopLoss: 0,
-          takeProfit: 0
-        }
+        return { action: 'HOLD', confidence: 0, reason: 'Insufficient data for mean reversion analysis', riskScore: 0.5 }
       }
 
       const sortedData = data.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
       const prices = sortedData.map(d => d.close)
       const volumes = sortedData.map(d => d.volume)
-      const symbol = sortedData[0].symbol
 
       const currentPrice = prices[prices.length - 1]
 
@@ -76,15 +65,10 @@ export class MeanReversionStrategy implements TradingStrategy {
       // Skip mean reversion in trending markets
       if (isExhausted) {
         return {
-          symbol,
           action: 'HOLD',
           confidence: 0.2,
           reason: `Mean reversion exhausted - trending market detected (Vol: ${volatilityRegime})`,
-          timestamp: new Date(),
-          riskScore: 0.7,
-          strategy: this.name,
-          stopLoss: 0,
-          takeProfit: 0
+          riskScore: 0.7
         }
       }
 
@@ -92,57 +76,37 @@ export class MeanReversionStrategy implements TradingStrategy {
       if (zScore <= -dynamicZScoreThreshold && currentRSI <= this.parameters.rsiOversold) {
         const confidence = this.calculateMeanReversionConfidence(zScore, currentRSI, volumeConfirmation, 'BUY')
         tradeSignal = {
-          symbol,
           action: 'BUY',
           confidence,
           reason: `Mean reversion BUY: Z-score ${zScore.toFixed(2)}, RSI ${currentRSI.toFixed(1)}`,
-          timestamp: new Date(),
-          riskScore: this.calculateRiskScore(zScore, currentRSI, confidence),
-          strategy: this.name,
-          stopLoss: this.calculateStopLoss(currentPrice, 'BUY'),
-          takeProfit: this.calculateTakeProfit(currentPrice, 'BUY')
+          riskScore: this.calculateRiskScore(zScore, currentRSI, confidence)
         }
       }
       // Overbought condition: Price significantly above mean (using dynamic threshold)
       else if (zScore >= dynamicZScoreThreshold && currentRSI >= this.parameters.rsiOverbought) {
         const confidence = this.calculateMeanReversionConfidence(zScore, currentRSI, volumeConfirmation, 'SELL')
         tradeSignal = {
-          symbol,
           action: 'SELL',
           confidence,
           reason: `Mean reversion SELL: Z-score ${zScore.toFixed(2)}, RSI ${currentRSI.toFixed(1)} (Vol: ${volatilityRegime})`,
-          timestamp: new Date(),
-          riskScore: this.calculateRiskScore(zScore, currentRSI, confidence),
-          strategy: this.name,
-          stopLoss: this.calculateStopLoss(currentPrice, 'SELL'),
-          takeProfit: this.calculateTakeProfit(currentPrice, 'SELL')
+          riskScore: this.calculateRiskScore(zScore, currentRSI, confidence)
         }
       }
       // Partial signals (one indicator triggered, using dynamic threshold)
       else if (Math.abs(zScore) >= dynamicZScoreThreshold * 0.8) {
         const action = zScore < 0 ? 'BUY' : 'SELL'
         tradeSignal = {
-          symbol,
           action,
           confidence: 0.4,
           reason: `Weak mean reversion signal: Z-score ${zScore.toFixed(2)}, RSI ${currentRSI.toFixed(1)} (Vol: ${volatilityRegime})`,
-          timestamp: new Date(),
-          riskScore: this.calculateRiskScore(zScore, currentRSI, 0.4),
-          strategy: this.name,
-          stopLoss: this.calculateStopLoss(currentPrice, action),
-          takeProfit: this.calculateTakeProfit(currentPrice, action)
+          riskScore: this.calculateRiskScore(zScore, currentRSI, 0.4)
         }
       } else {
         tradeSignal = {
-          symbol,
           action: 'HOLD',
           confidence: 0.3,
           reason: `Price near mean: Z-score ${zScore.toFixed(2)}`,
-          timestamp: new Date(),
-          riskScore: 0.3,
-          strategy: this.name,
-          stopLoss: 0,
-          takeProfit: 0
+          riskScore: 0.3
         }
       }
 
@@ -160,21 +124,17 @@ export class MeanReversionStrategy implements TradingStrategy {
         tradeSignal.reason += ` | Hold: ${this.parameters.minHoldingPeriod}-${this.parameters.maxHoldingPeriod}h`
       }
 
+      // Set risk management levels
+      if (tradeSignal.action !== 'HOLD') {
+        tradeSignal.stopLoss = this.calculateStopLoss(currentPrice, tradeSignal.action)
+        tradeSignal.takeProfit = this.calculateTakeProfit(currentPrice, tradeSignal.action)
+      }
+
       return tradeSignal
 
     } catch (error) {
       logger.error(`Mean Reversion Strategy error: ${error}`)
-      return {
-        symbol: data[0]?.symbol || 'UNKNOWN',
-        action: 'HOLD',
-        confidence: 0,
-        reason: `Analysis error: ${error}`,
-        timestamp: new Date(),
-        riskScore: 1.0,
-        strategy: this.name,
-        stopLoss: 0,
-        takeProfit: 0
-      }
+      return { action: 'HOLD', confidence: 0, reason: `Analysis error: ${error}`, riskScore: 1.0 }
     }
   }
 
