@@ -1,4 +1,4 @@
-"use client"
+// "use client"
 
 import React from 'react'
 import Link from 'next/link'
@@ -9,12 +9,8 @@ import {
   Zap,
   Target,
   BarChart3,
-  Users,
-  DollarSign,
-  Clock,
   ArrowRight,
   CheckCircle,
-  Star,
   Bot
 } from 'lucide-react'
 
@@ -200,7 +196,8 @@ export default function LandingPage() {
               <div className="flex items-center justify-between mb-6">
                 <h4 className="text-xl font-semibold text-white">Live Performance</h4>
                 <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                  <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse">  
+                  </div>
                   <span className="text-green-400 text-sm font-medium">LIVE</span>
                 </div>
               </div>
@@ -211,7 +208,7 @@ export default function LandingPage() {
                   <span className="text-white font-semibold">$1,247,892</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-400">Today's P&L</span>
+                  <span className="text-gray-400">Today&apos;s P&L</span>
                   <span className="text-green-400 font-semibold">+$12,847 (+1.04%)</span>
                 </div>
                 <div className="flex items-center justify-between">

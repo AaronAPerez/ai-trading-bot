@@ -1,12 +1,11 @@
-
-import { UnifiedAlpacaClient } from '@/lib/alpaca/unified-client'
 import { TradeSignal, Portfolio, MarketData, Position } from '../../../types/trading'
 import { RiskManagementEngine } from '../engines/RiskManagementEngine'
-import { AILearningSystem } from '../ml/AILearningSystem'
-import { tradePersistence } from '@/lib/services/TradePersistenceService'
+import { AILearningSystem, TradeOutcome } from '../ml/AILearningSystem'
 
+import { detectAssetType } from '../../../config/symbols'
+import { AlpacaClient } from '@/lib/marketData/AlpacaClient'
 
-interface ExecutionConfig {
+interface EnhancedExecutionConfig {
   autoExecuteEnabled: boolean
   confidenceThresholds: {
     minimum: number
@@ -74,7 +73,7 @@ interface TradeExecution {
   tradeId: string
   symbol: string
   action: 'BUY' | 'SELL'
-  notional: number
+  quantity: number
   notionalValue: number
   executionPrice: number
   orderId: string
@@ -138,14 +137,11 @@ interface ExecutionMetrics {
   }
 }
 
-export class AutoTradeExecutor {
-  getStats() {
-    throw new Error('Method not implemented.')
-  }
-  private config: ExecutionConfig
+export class EnhancedAutoTradeExecutor {
+  private config: EnhancedExecutionConfig
   private riskEngine: RiskManagementEngine
   private learningSystem: AILearningSystem
-  private alpacaClient: UnifiedAlpacaClient
+  private alpacaClient: AlpacaClient
   
   // Execution tracking
   private executionHistory: TradeExecution[] = []
@@ -155,7 +151,6 @@ export class AutoTradeExecutor {
   private dailyPnL = 0
   private sessionStartTime = new Date()
   private isExecutionEnabled = true
-  private lastExecutorResetDate: string = ''
   
   // Risk and learning integration
   private lastRiskAssessment: any = null
@@ -164,10 +159,10 @@ export class AutoTradeExecutor {
   private concurrentExecutions = 0
 
   constructor(
-    config: ExecutionConfig,
+    config: EnhancedExecutionConfig,
     riskEngine: RiskManagementEngine,
     learningSystem: AILearningSystem,
-    alpacaClient: UnifiedAlpacaClient
+    alpacaClient: AlpacaClient
   ) {
     this.config = config
     this.riskEngine = riskEngine
@@ -242,25 +237,10 @@ export class AutoTradeExecutor {
       console.log(`🔍 Evaluating trade: ${signal.symbol} ${signal.action} - ${(signal.confidence * 100).toFixed(1)}% confidence`)
       
       // Step 1: Get market data and positions
-      const [barsResponse, positions] = await Promise.all([
-        this.alpacaClient.getBarsV2(signal.symbol, { timeframe: '1Hour', limit: 50 }),
+      const [marketData, positions] = await Promise.all([
+        this.alpacaClient.getMarketData(signal.symbol),
         this.alpacaClient.getPositions()
       ])
-
-      // Convert bars to MarketData format
-      const marketData: MarketData[] = Array.isArray(barsResponse)
-        ? barsResponse.map((bar: any) => ({
-            symbol: signal.symbol,
-            timestamp: new Date(bar.t || bar.timestamp),
-            timeframe: '1Hour',
-            open: bar.o || bar.open || 0,
-            high: bar.h || bar.high || 0,
-            low: bar.l || bar.low || 0,
-            close: bar.c || bar.close || 0,
-            volume: bar.v || bar.volume || 0,
-            source: 'alpaca'
-          }))
-        : []
 
       // Step 2: Comprehensive risk assessment
       const riskAssessment = await this.performComprehensiveRiskAssessment(
@@ -427,16 +407,24 @@ export class AutoTradeExecutor {
 
       // Calculate notional value for order
       const notionalValue = Math.max(1, Math.round(decision.positionSize * portfolio.totalValue))
-      
+
+      // Detect asset type for proper API routing
+      const assetType = detectAssetType(symbol)
+      const isCrypto = assetType === 'crypto'
+
       // Create order with enhanced parameters
       const orderRequest = {
         symbol,
         notional: notionalValue,
         side: signal.action.toLowerCase() as 'buy' | 'sell',
         type: 'market' as const,
-        time_in_force: 'day' as const,
+        time_in_force: isCrypto ? 'gtc' as const : 'day' as const, // Crypto uses GTC, stocks use day
+        asset_class: isCrypto ? 'crypto' as const : 'us_equity' as const,
         client_order_id: `ai_auto_${symbol}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        extended_hours: this.config.executionRules.afterHoursTrading,
+        // Extended hours only applies to stocks, not crypto (crypto is always 24/7)
+        ...(!isCrypto && this.config.executionRules.afterHoursTrading && {
+          extended_hours: true
+        }),
         // Add stop loss if required and available
         ...(this.config.riskControls.maxDailyLoss && signal.metadata?.stopLoss && {
           stop_loss: {
@@ -446,41 +434,35 @@ export class AutoTradeExecutor {
       }
 
       // Execute through Alpaca client
-      const order = await this.alpacaClient.createOrder({
-        symbol: orderRequest.symbol,
-        qty: orderRequest.notional,
-        side: orderRequest.side,
-        type: orderRequest.type || 'market',
-        time_in_force: orderRequest.time_in_force || 'day'
-      })
-
-      if (!order) {
+      const orderResponse = await this.alpacaClient.placeOrder(orderRequest)
+      
+      if (!orderResponse.success) {
         decision.shouldExecute = false
-        decision.reason = `Order execution failed: Order creation returned null`
+        decision.reason = `Order execution failed: ${orderResponse.error || 'Unknown error'}`
         return decision
       }
 
       const executionTime = Date.now() - startTime
-      const actualPrice = order.filled_avg_price || currentPrice
-      const actualnotional = order.filled_qty || (notionalValue / actualPrice)
+      const actualPrice = orderResponse.order?.filled_avg_price || currentPrice
+      const actualQuantity = orderResponse.order?.filled_qty || (notionalValue / actualPrice)
       const actualSlippage = Math.abs(actualPrice - currentPrice) / currentPrice
-
+      
       // Create execution record
       const execution: TradeExecution = {
-        tradeId: order.client_order_id || `trade_${Date.now()}`,
+        tradeId: orderResponse.order?.client_order_id || `trade_${Date.now()}`,
         symbol,
         action: signal.action,
-        notional: actualnotional,
+        quantity: actualQuantity,
         notionalValue,
         executionPrice: actualPrice,
-        orderId: order.id || `order_${Date.now()}`,
+        orderId: orderResponse.order?.id || `order_${Date.now()}`,
         timestamp: new Date(),
         confidence: signal.confidence,
         aiScore: signal.metadata?.aiScore || 0,
         executionTime,
         slippage: actualSlippage,
         fees: this.estimateTradingFees(notionalValue),
-        fillStatus: order.status === 'filled' ? 'FILLED' : 'PARTIAL',
+        fillStatus: orderResponse.order?.status === 'filled' ? 'FILLED' : 'PARTIAL',
         riskMetrics: {
           portfolioImpact: notionalValue / portfolio.totalValue,
           positionSizePercent: decision.positionSize / portfolio.totalValue,
@@ -517,30 +499,6 @@ export class AutoTradeExecutor {
           notionalValue
         )
       }
-
-      // Save to Supabase database
-      await tradePersistence.saveTradeExecution({
-        symbol,
-        side: signal.action.toLowerCase() as 'buy' | 'sell',
-        notional: actualnotional,
-        price: actualPrice,
-        notionalValue,
-        orderId: execution.orderId,
-        status: execution.fillStatus,
-        confidence: signal.confidence,
-        aiScore: signal.metadata?.aiScore || 0,
-        strategy: signal.strategy,
-        riskScore: decision.riskScore,
-        executionTime,
-        slippage: actualSlippage,
-        fees: execution.fees,
-        metadata: {
-          sessionId: order.client_order_id,
-          signalType: signal.metadata?.signalType,
-          targetPrice: signal.metadata?.targetPrice,
-          stopLoss: signal.metadata?.stopLoss
-        }
-      })
 
       console.log(`✅ TRADE EXECUTED: ${symbol} ${signal.action} - $${notionalValue.toLocaleString()} @ $${actualPrice.toFixed(4)}`)
       console.log(`   📊 Execution Time: ${executionTime}ms | Slippage: ${(actualSlippage * 100).toFixed(3)}% | Fill: ${execution.fillStatus}`)
@@ -747,8 +705,8 @@ export class AutoTradeExecutor {
     const currentVolume = marketData[marketData.length - 1].volume
     
     // Estimate position as percentage of volume
-    const sharenotional = positionSize / currentPrice
-    const volumeImpact = sharenotional / Math.max(currentVolume, 1000) // Avoid division by zero
+    const shareQuantity = positionSize / currentPrice
+    const volumeImpact = shareQuantity / Math.max(currentVolume, 1000) // Avoid division by zero
     
     // Estimate slippage based on volume impact
     let estimatedSlippage = 0.001 // Base slippage
@@ -791,42 +749,58 @@ export class AutoTradeExecutor {
     marketData: MarketData[],
     symbol: string
   ): Promise<{ suitable: boolean; reason?: string }> {
-    
+
     if (marketData.length === 0) {
       return { suitable: false, reason: 'No market data available' }
     }
-    
+
     const currentData = marketData[marketData.length - 1]
-    const isCrypto = symbol.includes('USD') && symbol.length <= 7
-    
-    // Market hours check (skip for crypto)
-    if (this.config.executionRules.marketHoursOnly && !isCrypto) {
+
+    // Detect asset type using proper detection function
+    const assetType = detectAssetType(symbol)
+    const isCrypto = assetType === 'crypto'
+
+    // CRYPTO TRADES 24/7 - No market hours restrictions
+    if (isCrypto) {
+      console.log(`✅ Crypto symbol ${symbol} - 24/7 trading enabled`)
+
+      // Volume check for crypto
+      const avgVolume = marketData.slice(-20).reduce((sum, data) => sum + data.volume, 0) / Math.min(20, marketData.length)
+      if (currentData.volume < this.config.executionRules.volumeThreshold) {
+        return { suitable: false, reason: `Volume too low: ${currentData.volume.toLocaleString()} < ${this.config.executionRules.volumeThreshold.toLocaleString()}` }
+      }
+
+      return { suitable: true }
+    }
+
+    // STOCK MARKET HOURS CHECK (only for stocks)
+    if (this.config.executionRules.marketHoursOnly) {
       const now = new Date()
       const hour = now.getHours()
       const day = now.getDay()
-      
-      // Weekend check
+
+      // Weekend check for stocks
       if (day === 0 || day === 6) { // Sunday = 0, Saturday = 6
         if (!this.config.executionRules.weekendTrading) {
-          return { suitable: false, reason: 'Weekend trading disabled' }
+          return { suitable: false, reason: 'Stock market closed on weekends (weekend trading disabled)' }
         }
       }
-      
+
       // Market hours check (9:30 AM - 4:00 PM EST roughly 14:30 - 21:00 UTC)
       const utcHour = now.getUTCHours()
       if (utcHour < 14.5 || utcHour > 21) {
         if (!this.config.executionRules.afterHoursTrading) {
-          return { suitable: false, reason: 'Outside market hours and after-hours trading disabled' }
+          return { suitable: false, reason: 'Stock market closed - outside market hours (after-hours trading disabled)' }
         }
       }
     }
-    
-    // Volume check
+
+    // Volume check for stocks
     const avgVolume = marketData.slice(-20).reduce((sum, data) => sum + data.volume, 0) / Math.min(20, marketData.length)
     if (currentData.volume < this.config.executionRules.volumeThreshold) {
       return { suitable: false, reason: `Volume too low: ${currentData.volume.toLocaleString()} < ${this.config.executionRules.volumeThreshold.toLocaleString()}` }
     }
-    
+
     return { suitable: true }
   }
 
@@ -934,19 +908,8 @@ export class AutoTradeExecutor {
     if (executionResult.shouldExecute) {
       // Successful execution - metrics updated during execution
     } else {
-      // Rejected execution - log to Supabase for analytics
+      // Rejected execution
       console.log(`📊 Trade rejected: ${signal.symbol} - ${executionResult.reason}`)
-
-      await tradePersistence.saveRejectedTrade(
-        signal.symbol,
-        executionResult.reason,
-        signal.confidence,
-        {
-          riskScore: executionResult.riskScore,
-          strategy: signal.strategy,
-          action: signal.action
-        }
-      )
     }
   }
 
@@ -1040,9 +1003,9 @@ export class AutoTradeExecutor {
     for (const [tradeId, execution] of this.activeExecutions) {
       try {
         // Check order status with Alpaca
-        const order = await this.alpacaClient.getOrder(execution.orderId)
-
-        if (order?.status === 'filled') {
+        const orderStatus = await this.alpacaClient.getOrderStatus(execution.orderId)
+        
+        if (orderStatus?.status === 'filled') {
           // Update execution record
           execution.fillStatus = 'FILLED'
           
@@ -1050,7 +1013,7 @@ export class AutoTradeExecutor {
           if (this.config.learningIntegration.enabled) {
             await this.learningSystem.trackTradeExit(
               tradeId,
-              order.filled_avg_price || execution.executionPrice,
+              orderStatus.filled_avg_price || execution.executionPrice,
               new Date()
             )
           }
@@ -1070,10 +1033,12 @@ export class AutoTradeExecutor {
   private checkDailyReset(): void {
     const now = new Date()
     const today = now.toDateString()
-
-    if (this.lastExecutorResetDate !== today) {
+    const lastResetKey = 'executor_last_reset'
+    
+    const lastReset = localStorage.getItem(lastResetKey)
+    if (lastReset !== today) {
       this.resetDailyCounters()
-      this.lastExecutorResetDate = today
+      localStorage.setItem(lastResetKey, today)
       console.log('🔄 Daily execution counters reset')
     }
   }
@@ -1211,7 +1176,7 @@ export class AutoTradeExecutor {
     return this.isExecutionEnabled && this.riskEngine.isReady() && this.learningSystem.isReady()
   }
 
-  public updateConfig(newConfig: Partial<ExecutionConfig>): void {
+  public updateConfig(newConfig: Partial<EnhancedExecutionConfig>): void {
     this.config = { ...this.config, ...newConfig }
     console.log('⚙️ Enhanced AutoTradeExecutor config updated')
   }
@@ -1261,3 +1226,6 @@ ${this.getExecutionHistory(5).map(exec =>
     `.trim()
   }
 }
+
+// Export alias for backward compatibility
+export { EnhancedAutoTradeExecutor as AutoTradeExecutor }

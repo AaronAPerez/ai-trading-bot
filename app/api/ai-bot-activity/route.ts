@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAlpacaClient } from '@/lib/alpaca/server-client'
 import { AlpacaClient } from '@/lib/alpaca/client'
-import { YahooFinanceClient } from '@/lib/market-data/YahooFinanceClient'
-import { FreeMarketDataProvider } from '@/lib/marketData/FreeMarketDataProvider'
+
 
 interface BotActivityLog {
   id: string
