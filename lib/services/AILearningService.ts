@@ -1,5 +1,5 @@
 import { supabaseService } from '@/lib/database/supabase-utils'
-import { getCurrentUserId } from '@/lib/auth/demo-user'
+import { getCurrentUserId } from '@/lib/auth/auth-utils'
 import { AILearningSystem, TradeOutcome, LearningInsights } from '@/lib/trading/ml/AILearningSystem'
 import { supabaseOptimizer, DatabaseMaintenance, ConnectionOptimizer } from '@/lib/utils/supabase-optimization'
 

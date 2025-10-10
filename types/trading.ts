@@ -372,6 +372,7 @@ export interface Order {
 // ===============================================
 
 export interface BotConfiguration {
+  watchlist: string[]
   enabled: boolean
   mode: 'CONSERVATIVE' | 'BALANCED' | 'AGGRESSIVE'
   strategies: BotStrategy[]

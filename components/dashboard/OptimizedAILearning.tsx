@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { Brain, Target, BarChart3, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import { supabaseService } from '@/lib/database/supabase-utils'
-import { getCurrentUserId } from '@/lib/auth/demo-user'
+import { getCurrentUserId } from '@/lib/auth/auth-utils'
 
 interface LearningStats {
   totalTrades: number

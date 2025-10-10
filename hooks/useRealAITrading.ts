@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react'
 import { supabaseService } from '@/lib/database/supabase-utils'
-import { getCurrentUserId } from '@/lib/auth/demo-user'
+import { getCurrentUserId } from '@/lib/auth/auth-utils'
 
 interface UseRealAITradingProps {
   userId?: string

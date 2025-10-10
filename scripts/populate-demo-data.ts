@@ -1,6 +1,6 @@
 // Script to populate demo data for testing
 import { supabaseService } from '../lib/database/supabase-utils'
-import { DEMO_USER_ID } from '../lib/auth/demo-user'
+import { DEMO_USER_ID } from '../lib/auth/auth-utils'
 
 async function populateDemoData() {
   console.log('Populating demo data for user:', DEMO_USER_ID)

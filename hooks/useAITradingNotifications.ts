@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { TradingNotification } from '@/components/notifications/AITradingNotifications'
 import { supabaseService } from '@/lib/database/supabase-utils'
-import { getCurrentUserId } from '@/lib/auth/demo-user'
+import { getCurrentUserId } from '@/lib/auth/auth-utils'
 
 interface TradeData {
   symbol: string

@@ -7,6 +7,9 @@ import { detectAssetType, getSymbolMetadata } from '@/config/symbols'
  * POST /api/trading/execute
  * Execute trades with standardized error handling
  */
+
+export const dynamic = 'force-dynamic'
+
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const { order, mode = 'paper' } = await request.json()
 

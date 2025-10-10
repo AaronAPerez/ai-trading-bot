@@ -8,6 +8,8 @@ import { alpacaRateLimiter } from '@/lib/alpaca/rate-limiter'
  * POST /api/alpaca/rate-limiter - Control rate limiter (clear queue, throttle)
  */
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const stats = alpacaRateLimiter.getStats()
