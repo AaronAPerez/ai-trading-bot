@@ -47,7 +47,7 @@ export const useAITradingEngine = () => {
       }
       return response.json()
     },
-    refetchInterval: 5000, // Check every 5 seconds
+    refetchInterval: 15000, // Check every 15 seconds (reduced from 5s to prevent rate limiting)
     enabled: true
   })
 

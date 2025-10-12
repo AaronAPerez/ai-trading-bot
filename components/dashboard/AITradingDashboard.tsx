@@ -28,6 +28,14 @@ import { RiskMetricsChart } from '../charts/RiskMetricsChart'
 import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
 import LiveAIActivity from './LiveAIActivity'
 import { useQuery } from '@tanstack/react-query'
+import PortfolioPositionsTable from './PortfolioPositionsTable'
+import MultiStrategyComparison from './MultiStrategyComparison'
+import StrategyAutoSwitcher from './StrategyAutoSwitcher'
+import EngineActivityPanel from './EngineActivityPanel'
+import HedgeFundAnalyticsPanel from './HedgeFundAnalyticsPanel'
+import StrategyGuidancePanel from './StrategyGuidancePanel'
+import RecentOrdersTable from './RecentOrdersTable'
+import { useBotStore } from '@/store/slices/botSlice'
 
 // Type definitions
 interface AlpacaPosition {
@@ -116,6 +124,7 @@ const defaultBotConfig = {
 export default function AITradingDashboard() {
   const tradingBot = useTradingBot()
   const autoExecution = useAutoExecution(tradingBot.engine)
+  const { tradingMode, setTradingMode } = useBotStore()
 
   // Listen for WebSocket trade events and auto-invalidate React Query cache
   const { isConnected: wsConnected } = useTradeWebSocketListener()
@@ -126,7 +135,7 @@ export default function AITradingDashboard() {
     startTime: null as Date | null,
     config: defaultBotConfig
   })
-  
+
 
   // Only poll Alpaca data when AI bot is active to reduce unnecessary API calls
   const account = useAlpacaAccount(persistentBotState.isRunning ? 5000 : undefined)
@@ -160,6 +169,14 @@ export default function AITradingDashboard() {
   // Store interval reference for cleanup
   const [tradingInterval, setTradingInterval] = useState<NodeJS.Timeout | null>(null)
   const [isStoppingBot, setIsStoppingBot] = useState(false)
+  const [inverseMode, setInverseMode] = useState(() => {
+    // Load inverse mode from localStorage on initial render
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ai-inverse-mode')
+      return saved === 'true'
+    }
+    return false
+  })
 
   // Real trading monitoring - no simulation
   const startTradingMonitoring = useCallback(() => {
@@ -191,18 +208,18 @@ export default function AITradingDashboard() {
 
 
   const { data: orders, isLoading } = useQuery({
-  queryKey: ['alpacaOrders'],
-  queryFn: async () => {
-    const res = await fetch('/api/alpaca/orders?limit=20')
-    const json = await res.json()
-    return json.orders
-  },
-  refetchInterval: persistentBotState.isRunning ? 30000 : false
-})
+    queryKey: ['alpacaOrders'],
+    queryFn: async () => {
+      const res = await fetch('/api/alpaca/orders?limit=20')
+      const json = await res.json()
+      return json.orders
+    },
+    refetchInterval: persistentBotState.isRunning ? 30000 : false
+  })
 
 
-// const totalPnL = positions_data.reduce(...)
-// const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
+  // const totalPnL = positions_data.reduce(...)
+  // const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
 
   // Load persistent state from localStorage on mount
   useEffect(() => {
@@ -226,6 +243,21 @@ export default function AITradingDashboard() {
     } catch (error) {
       console.error('Error loading bot state from localStorage:', error)
     }
+
+    // Sync inverse mode with backend (but don't overwrite localStorage on mount)
+    // The localStorage value takes precedence
+    const savedInverseMode = localStorage.getItem('ai-inverse-mode')
+    if (savedInverseMode !== null) {
+      const inverseModeValue = savedInverseMode === 'true'
+      // Sync to backend
+      fetch('/api/ai/bot-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: inverseMode ? 'enable-inverse' : 'disable-inverse'
+        })
+      }).catch(err => console.error('Failed to sync inverse mode to backend:', err))
+    }
   }, [])  // Keep empty to only run once on mount to avoid infinite loops
 
   // Save state to localStorage whenever it changes
@@ -236,6 +268,15 @@ export default function AITradingDashboard() {
       console.error('Error saving bot state to localStorage:', error)
     }
   }, [persistentBotState])
+
+  // Save inverse mode to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('ai-inverse-mode', inverseMode.toString())
+    } catch (error) {
+      console.error('Error saving inverse mode to localStorage:', error)
+    }
+  }, [inverseMode])
 
   // Update persistent state when trading bot state changes
   useEffect(() => {
@@ -333,6 +374,23 @@ export default function AITradingDashboard() {
     }
   }
 
+  // Toggle inverse mode
+  const handleToggleInverse = async () => {
+    try {
+      const response = await fetch('/api/ai/bot-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle-inverse' })
+      })
+      const result = await response.json()
+      if (result.success) {
+        setInverseMode(result.data.inverseMode)
+        console.log(`🔄 Inverse mode ${result.data.inverseMode ? 'enabled' : 'disabled'}`)
+      }
+    } catch (error) {
+      console.error('Failed to toggle inverse mode:', error)
+    }
+  }
 
   // Calculate financial metrics for bot metrics (simplified since LiveBalanceDisplay handles the main metrics)
   const positions_data = Array.isArray(positions.data) ? positions.data : []
@@ -368,7 +426,7 @@ export default function AITradingDashboard() {
           </div>
         </div>
 
-      
+
 
 
 
@@ -416,6 +474,56 @@ export default function AITradingDashboard() {
             </div>
           </div>
 
+          {/* Inverse Mode Toggle */}
+          <button
+            onClick={handleToggleInverse}
+            className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 border-2 ${inverseMode
+                ? 'bg-orange-600 hover:bg-orange-700 text-white border-orange-500'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-300 border-gray-600'
+              }`}
+            title={inverseMode ? 'Inverse Mode ON: BUY signals become SELL' : 'Inverse Mode OFF: Normal trading'}
+          >
+            <span className="text-lg">🔄</span>
+            <span className="text-sm">{inverseMode ? 'Inverse ON' : 'Inverse OFF'}</span>
+          </button>
+
+          {/* Paper/Live Trading Mode Toggle */}
+          <button
+            onClick={() => {
+              // Safety confirmation when switching to LIVE mode
+              if (tradingMode === 'paper') {
+                const confirmed = window.confirm(
+                  '⚠️ WARNING: You are about to switch to LIVE TRADING MODE\n\n' +
+                  'This will execute trades with REAL MONEY on your live Alpaca account.\n\n' +
+                  'Make sure you:\n' +
+                  '✓ Have tested thoroughly in paper mode\n' +
+                  '✓ Have proper risk management settings\n' +
+                  '✓ Understand you can lose money\n\n' +
+                  'Are you sure you want to continue?'
+                )
+                if (!confirmed) return
+              }
+              setTradingMode(tradingMode === 'paper' ? 'live' : 'paper')
+            }}
+            disabled={persistentBotState.isRunning}
+            className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 border-2 ${persistentBotState.isRunning
+                ? 'bg-gray-700 cursor-not-allowed text-gray-500 border-gray-600 opacity-50'
+                : tradingMode === 'live'
+                  ? 'bg-red-600 hover:bg-red-700 text-white border-red-500 animate-pulse'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-500'
+              }`}
+            title={
+              persistentBotState.isRunning
+                ? 'Stop the bot to change trading mode'
+                : tradingMode === 'paper'
+                  ? 'Paper Trading Mode: Simulated trades (safe)'
+                  : 'LIVE Trading Mode: Real money trades (⚠️ CAUTION)'
+            }
+          >
+            <span className="text-lg">{tradingMode === 'paper' ? '📝' : '💰'}</span>
+            <span className="text-sm font-bold">{tradingMode === 'paper' ? 'PAPER' : '🔴 LIVE'}</span>
+          </button>
+
           {/* Start/Stop Button */}
           <button
             onClick={persistentBotState.isRunning ? handleStop : () => handleStart(defaultBotConfig)}
@@ -460,449 +568,486 @@ export default function AITradingDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-  <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
-    <h4 className="text-sm text-gray-400 mb-1">Total Equity</h4>
-    <div className="text-xl font-bold text-white">
-      {account.isLoading ? (
-        <div className="animate-pulse bg-gray-600 h-6 w-24 rounded"></div>
-      ) : (
-        `$${parseFloat(account.data?.equity || '0').toFixed(2)}`
-      )}
+      {/* Portfolio Header */}
+      <div className="bg-gray-900/40 rounded-lg p-6 border border-gray-700/50">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-white">Your Portfolio</h2>
+          <div className="flex items-center space-x-2">
+            <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">1D</button>
+            <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">1M</button>
+            <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">1Y</button>
+            <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">All</button>
+          </div>
+        </div>
+
+        
+ 
+
+  
+
+      {/* Main Portfolio Value */}
+      <div className="mb-6">
+        <div className="text-4xl font-bold text-white mb-2">
+          {account.isLoading ? (
+            <div className="animate-pulse bg-gray-600 h-10 w-48 rounded"></div>
+          ) : (
+            `$${parseFloat(account.data?.equity || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          )}
+        </div>
+        <div className={`flex items-center space-x-2 ${dayPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          {!account.isLoading && (
+            <>
+                  <div className="space-y-2">
+
+          <div className="flex items-center justify-between">
+  
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-300">Total P&L</span>
+            <div className="flex items-center space-x-1">
+                <span className={`font-bold ${realTimeMetrics.metrics.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                }`}>
+                {realTimeMetrics.isLoading ? (
+                  <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
+                ) : (
+                  `${realTimeMetrics.metrics.totalPnL >= 0 ? '+' : ''}$${realTimeMetrics.metrics.totalPnL.toFixed(2)}`
+                )}
+              </span>
+              {Math.abs(realTimeMetrics.metrics.totalPnL) > 100 && (
+                <span className="text-xs">{realTimeMetrics.metrics.totalPnL >= 0 ? '📈' : '📉'}</span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-300">Daily P&L</span>
+            <div className="flex items-center space-x-1">
+              <span className={`font-bold ${realTimeMetrics.metrics.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                }`}>
+                {realTimeMetrics.isLoading ? (
+                  <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
+                ) : (
+                  `${realTimeMetrics.metrics.dailyPnL >= 0 ? '+' : ''}$${realTimeMetrics.metrics.dailyPnL.toFixed(2)}`
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+              <span className="text-sm text-gray-400">
+                {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} PDT
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Portfolio Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <h4 className="text-sm text-gray-400 mb-1">Buying Power</h4>
+          <div className="text-lg font-bold text-white">
+            {account.isLoading ? (
+              <div className="animate-pulse bg-gray-600 h-6 w-24 rounded"></div>
+            ) : (
+              `$${parseFloat(account.data?.buying_power || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            )}
+          </div>
+        </div>
+        <div>
+          <h4 className="text-sm text-gray-400 mb-1">Invested Amount</h4>
+          <div className="text-lg font-bold text-white">
+            {account.isLoading ? (
+              <div className="animate-pulse bg-gray-600 h-6 w-24 rounded"></div>
+            ) : (
+              `$${parseFloat(account.data?.buying_power || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            )}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-sm text-gray-400 mb-1">Invested Amount</h4>
+          <div className="text-lg font-bold text-white">
+         
+            <div className="flex items-center space-x-1">
+              <span className="font-bold text-blue-400">
+                {realTimeMetrics.isLoading ? (
+                  <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
+                ) : (
+                  `$${realTimeMetrics.metrics.investedAmount.toFixed(2)}`
+                )}
+              </span>
+              {realTimeMetrics.metrics.positionCount > 0 && (
+                <span className="text-xs text-gray-400">({realTimeMetrics.metrics.positionCount} pos)</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+
+
+  
+
+        <div>
+          <h4 className="text-sm text-gray-400 mb-1">Open Positions</h4>
+          <div className="text-lg font-bold text-white">
+            {positions.isLoading ? (
+              <div className="animate-pulse bg-gray-600 h-6 w-12 rounded"></div>
+            ) : (
+              positions.data?.length || 0
+            )}
+          </div>
+        </div>
+      </div>
     </div>
+{/* Advanced Charts Section */ }
+  <div className="space-y-6">
+    <div className="flex items-center justify-between">
+      <h2 className="text-xl font-bold text-white">Advanced Analytics</h2>
+      <div className="text-xs text-gray-400">Real-time charts powered by Alpaca API</div>
+    </div>
+
+    {/* Portfolio Performance & Allocation */}
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <PerformanceChart period="1M" height={350} />
+      <PortfolioAllocationChart height={350} />
+    </div>
+
+    {/* Risk Metrics */}
+    <RiskMetricsChart height={400} showPositionRisks={true} />
+
+    {/* Price Charts for Top Positions */}
+    {positions.data && positions.data.length > 0 && (
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {(positions.data as AlpacaPosition[]).slice(0, 4).map((position) => (
+          <PriceChart
+            key={position.symbol}
+            symbol={position.symbol}
+            timeframe="1Day"
+            limit={30}
+            showVolume={true}
+            height={300}
+          />
+        ))}
+      </div>
+    )}
+  </div>
+  {/* Top Positions Table */ }
+  <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border border-gray-700/50">
+    <PortfolioPositionsTable
+      refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+      initialLimit={10}
+    />
   </div>
 
-  <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
-    <h4 className="text-sm text-gray-400 mb-1">Buying Power</h4>
-    <div className="text-xl font-bold text-white">
-      {account.isLoading ? (
-        <div className="animate-pulse bg-gray-600 h-6 w-24 rounded"></div>
-      ) : (
-        `$${parseFloat(account.data?.buying_power || '0').toFixed(2)}`
-      )}
-    </div>
+  {/* Recent Orders Table */ }
+  <div className="bg-gradient-to-r from-gray-800/50 to-purple-900/30 rounded-xl p-6 border border-gray-700/50">
+    <RecentOrdersTable
+      refreshInterval={persistentBotState.isRunning ? 10000 : 30000}
+      initialLimit={20}
+    />
   </div>
 
-  <div className="bg-gray-900/40 rounded-lg p-4 border border-gray-700/50">
-    <h4 className="text-sm text-gray-400 mb-1">Open Positions</h4>
-    <div className="text-xl font-bold text-white">
-      {positions.isLoading ? (
-        <div className="animate-pulse bg-gray-600 h-6 w-12 rounded"></div>
-      ) : (
-        positions.data?.length || 0
-      )}
-    </div>
-  </div>
-</div>
-
-
-
-
-      {/* Live Portfolio Balance */}
+  {/* Live Portfolio Balance */ }
       <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
         <LiveBalanceDisplay
           refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
           showChangeIndicators={true}
         />
-        
+
       </div>
 
-        {/* 🔥 MAIN FOCUS: Live Trading Activity - Full Width Showcase */}
-      <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-white">Live Trading Activity</h2>
-              <p className="text-sm text-gray-400">Real-time orders & AI activity from Alpaca API</p>
-            </div>
-          </div>
-          {persistentBotState.isRunning && (
-            <div className="flex items-center space-x-2 bg-green-900/40 px-4 py-2 rounded-lg border border-green-500/40">
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-sm text-green-300 font-semibold">Trading Active</span>
-            </div>
-          )}
-        </div>
-        <LiveTradesDisplay />
-      </div>
-
-
-
-      {/* AI Progress and Learning Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-2 gap-6">
-        {/* AI Learning Progress - Real-time Data */}
-        <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <Brain className="w-5 h-5 text-purple-400" />
-              <h3 className="text-lg font-semibold text-white">AI Learning Progress</h3>
-            </div>
-            <div className="flex items-center space-x-2">
-              {realTimeMetrics.isLoading && (
-                <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-              )}
-              <div className={`w-2 h-2 rounded-full ${realTimeMetrics.metrics.isLearningActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
-                }`}></div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-300">Accuracy Rate</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg font-bold text-green-400">
-                  {realTimeMetrics.isLoading ? (
-                    <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
-                  ) : (
-                    `${(realTimeMetrics.metrics.accuracy * 100).toFixed(1)}%`
-                  )}
-                </span>
-                {realTimeMetrics.metrics.accuracy > 0.8 && (
-                  <span className="text-xs text-green-300">↗</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-300">Patterns Identified</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg font-bold text-blue-400">
-                  {realTimeMetrics.isLoading ? (
-                    <div className="animate-pulse bg-gray-600 h-5 w-8 rounded"></div>
-                  ) : (
-                    realTimeMetrics.metrics.patternsIdentified.toLocaleString()
-                  )}
-                </span>
-                {realTimeMetrics.metrics.patternsIdentified > 10 && (
-                  <span className="text-xs text-blue-300">+{Math.floor(realTimeMetrics.metrics.patternsIdentified / 5)}</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-300">Data Points Processed</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg font-bold text-purple-400">
-                  {realTimeMetrics.isLoading ? (
-                    <div className="animate-pulse bg-gray-600 h-5 w-16 rounded"></div>
-                  ) : (
-                    realTimeMetrics.metrics.dataPointsProcessed.toLocaleString()
-                  )}
-                </span>
-                {realTimeMetrics.metrics.dataPointsProcessed > 100 && (
-                  <span className="text-xs text-purple-300">📈</span>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 pt-4 border-t border-purple-700/30">
-              <div className="text-xs text-gray-400 mb-2">Learning Sources</div>
-              <div className="space-y-1 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-300">Alpaca API</span>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span className="text-green-400">Live</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-300">Supabase DB</span>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                    <span className="text-blue-400">Synced</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-300">React Query</span>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                    <span className="text-purple-400">Caching</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-
-        
-
-        {/* AI Performance Metrics - Real-time Alpaca Data */}
-        <div className="bg-gradient-to-br from-green-900/50 to-emerald-900/50 rounded-xl p-6 border border-green-700/50">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-              <h3 className="text-lg font-semibold text-white">AI Performance</h3>
-            </div>
-            <div className="flex items-center space-x-2">
-              {realTimeMetrics.isLoading && (
-                <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
-              )}
-              <div className="text-xs text-green-400 font-medium">
-                {persistentBotState.isRunning ? 'Live' : 'Inactive'}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-300">Success Rate</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg font-bold text-green-400">
-                  {realTimeMetrics.isLoading ? (
-                    <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
-                  ) : (
-                    `${(realTimeMetrics.metrics.successRate * 100).toFixed(1)}%`
-                  )}
-                </span>
-                {realTimeMetrics.metrics.successRate > 0.7 && (
-                  <span className="text-xs text-green-300">🎯</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-300">Trades Executed</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg font-bold text-blue-400">
-                  {realTimeMetrics.isLoading ? (
-                    <div className="animate-pulse bg-gray-600 h-5 w-8 rounded"></div>
-                  ) : (
-                    realTimeMetrics.metrics.tradesExecuted.toLocaleString()
-                  )}
-                </span>
-                {realTimeMetrics.metrics.tradesExecuted > 0 && (
-                  <span className="text-xs text-blue-300">📊</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-300">Recommendations</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg font-bold text-purple-400">
-                  {realTimeMetrics.isLoading ? (
-                    <div className="animate-pulse bg-gray-600 h-5 w-8 rounded"></div>
-                  ) : (
-                    realTimeMetrics.metrics.recommendationsGenerated.toLocaleString()
-                  )}
-                </span>
-                {realTimeMetrics.metrics.recommendationsGenerated > 5 && (
-                  <span className="text-xs text-purple-300">💡</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-300">Risk Score</span>
-              <div className="flex items-center space-x-2">
-                <span className={`text-lg font-bold ${realTimeMetrics.metrics.riskScore > 70 ? 'text-red-400' :
-                  realTimeMetrics.metrics.riskScore > 40 ? 'text-yellow-400' : 'text-green-400'
-                  }`}>
-                  {realTimeMetrics.isLoading ? (
-                    <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
-                  ) : (
-                    `${realTimeMetrics.metrics.riskScore}/100`
-                  )}
-                </span>
-                {realTimeMetrics.metrics.riskScore < 30 && (
-                  <span className="text-xs text-green-300">🛡️</span>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 pt-4 border-t border-green-700/30">
-              <div className="text-xs text-gray-400 mb-2">Real-time Alpaca Portfolio</div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">Invested Amount</span>
-                  <div className="flex items-center space-x-1">
-                    <span className="font-bold text-blue-400">
-                      {realTimeMetrics.isLoading ? (
-                        <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
-                      ) : (
-                        `$${realTimeMetrics.metrics.investedAmount.toFixed(2)}`
-                      )}
-                    </span>
-                    {realTimeMetrics.metrics.positionCount > 0 && (
-                      <span className="text-xs text-gray-400">({realTimeMetrics.metrics.positionCount} pos)</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">Total P&L</span>
-                  <div className="flex items-center space-x-1">
-                    <span className={`font-bold ${realTimeMetrics.metrics.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                      }`}>
-                      {realTimeMetrics.isLoading ? (
-                        <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
-                      ) : (
-                        `${realTimeMetrics.metrics.totalPnL >= 0 ? '+' : ''}$${realTimeMetrics.metrics.totalPnL.toFixed(2)}`
-                      )}
-                    </span>
-                    {Math.abs(realTimeMetrics.metrics.totalPnL) > 100 && (
-                      <span className="text-xs">{realTimeMetrics.metrics.totalPnL >= 0 ? '📈' : '📉'}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">Daily P&L</span>
-                  <div className="flex items-center space-x-1">
-                    <span className={`font-bold ${realTimeMetrics.metrics.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                      }`}>
-                      {realTimeMetrics.isLoading ? (
-                        <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
-                      ) : (
-                        `${realTimeMetrics.metrics.dailyPnL >= 0 ? '+' : ''}$${realTimeMetrics.metrics.dailyPnL.toFixed(2)}`
-                      )}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Live Activity Feed - Real-time Console Capture */}
-        <LiveAIActivity />
-      </div>
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <HedgeFundAnalyticsPanel />
+              <StrategyGuidancePanel />
+            </section>
       
+            <section>
+              <EngineActivityPanel />
+            </section>
 
-    
-      {/* Advanced AI Insights Dashboard */}
-      <div className="bg-gradient-to-r from-gray-800/40 to-purple-900/20 rounded-xl p-6 border border-gray-700/50">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-3">
-            <Brain className="w-6 h-6 text-purple-400" />
-            <h2 className="text-xl font-bold text-white">Advanced AI Insights</h2>
-          </div>
-          <div className="flex items-center space-x-4">
-            {persistentBotState.isRunning && (
-              <div className="flex items-center space-x-2 bg-green-900/30 px-3 py-1 rounded-full border border-green-500/30">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
-                <span className="text-xs text-green-400 font-medium">AI Learning Active</span>
-              </div>
-            )}
-            {notifications.notifications.length > 0 && (
-              <div className="flex items-center space-x-2 bg-blue-900/30 px-3 py-1 rounded-full border border-blue-500/30">
-                <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-                <span className="text-xs text-blue-400 font-medium">{notifications.notifications.length} Recent Trades</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <AIInsightsDashboard
-          botIsActive={persistentBotState.isRunning}
-          learningActive={aiLearningManager.isActive}
-        />
-      </div>
-
-      {/* Market Data */}
-      <div className="bg-gradient-to-r from-gray-800/40 to-blue-900/20 rounded-xl p-6 border border-gray-700/50">
-        <div className="flex items-center space-x-2 mb-4">
-          <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  {/* 🔥 MAIN FOCUS: Live Trading Activity - Full Width Showcase */ }
+  <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-2xl">
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center space-x-3">
+        <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+          <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
-          <h3 className="text-lg font-semibold text-white">Market Overview</h3>
         </div>
-        <MarketStatusDisplay />
+        <div>
+          <h2 className="text-2xl font-bold text-white">Live Trading Activity</h2>
+          <p className="text-sm text-gray-400">Real-time orders & AI activity from Alpaca API</p>
+        </div>
+      </div>
+      {persistentBotState.isRunning && (
+        <div className="flex items-center space-x-2 bg-green-900/40 px-4 py-2 rounded-lg border border-green-500/40">
+          <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+          <span className="text-sm text-green-300 font-semibold">Trading Active</span>
+        </div>
+      )}
+    </div>
+    <LiveTradesDisplay />
+  </div>
+
+
+
+  {/* AI Progress and Learning Overview */ }
+  <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-2 gap-6">
+    {/* AI Learning Progress - Real-time Data */}
+    <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-2">
+          <Brain className="w-5 h-5 text-purple-400" />
+          <h3 className="text-lg font-semibold text-white">AI Learning Progress</h3>
+        </div>
+        <div className="flex items-center space-x-2">
+          {realTimeMetrics.isLoading && (
+            <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+          )}
+          <div className={`w-2 h-2 rounded-full ${realTimeMetrics.metrics.isLearningActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+            }`}></div>
+        </div>
       </div>
 
-      {/* 24/7 Crypto Trading Section */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white">24/7 Crypto Trading</h2>
-          <div className="text-xs text-gray-400">Never stop learning & trading</div>
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-300">Accuracy Rate</span>
+          <div className="flex items-center space-x-2">
+            <span className="text-lg font-bold text-green-400">
+              {realTimeMetrics.isLoading ? (
+                <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
+              ) : (
+                `${(realTimeMetrics.metrics.accuracy * 100).toFixed(1)}%`
+              )}
+            </span>
+            {realTimeMetrics.metrics.accuracy > 0.8 && (
+              <span className="text-xs text-green-300">↗</span>
+            )}
+          </div>
         </div>
 
-        <CryptoTradingPanel />
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-300">Patterns Identified</span>
+          <div className="flex items-center space-x-2">
+            <span className="text-lg font-bold text-blue-400">
+              {realTimeMetrics.isLoading ? (
+                <div className="animate-pulse bg-gray-600 h-5 w-8 rounded"></div>
+              ) : (
+                realTimeMetrics.metrics.patternsIdentified.toLocaleString()
+              )}
+            </span>
+            {realTimeMetrics.metrics.patternsIdentified > 10 && (
+              <span className="text-xs text-blue-300">+{Math.floor(realTimeMetrics.metrics.patternsIdentified / 5)}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-300">Data Points Processed</span>
+          <div className="flex items-center space-x-2">
+            <span className="text-lg font-bold text-purple-400">
+              {realTimeMetrics.isLoading ? (
+                <div className="animate-pulse bg-gray-600 h-5 w-16 rounded"></div>
+              ) : (
+                realTimeMetrics.metrics.dataPointsProcessed.toLocaleString()
+              )}
+            </span>
+            {realTimeMetrics.metrics.dataPointsProcessed > 100 && (
+              <span className="text-xs text-purple-300">📈</span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-purple-700/30">
+          <div className="text-xs text-gray-400 mb-2">Learning Sources</div>
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-300">Alpaca API</span>
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="text-green-400">Live</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-300">Supabase DB</span>
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                <span className="text-blue-400">Synced</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-300">React Query</span>
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                <span className="text-purple-400">Caching</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+
+
+    {/* AI Performance Metrics - Real-time Alpaca Data */}
+    <div className="bg-gradient-to-br from-green-900/50 to-emerald-900/50 rounded-xl p-6 border border-green-700/50">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-2">
+          <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+          <h3 className="text-lg font-semibold text-white">AI Performance</h3>
+        </div>
+        <div className="flex items-center space-x-2">
+          {realTimeMetrics.isLoading && (
+            <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
+          )}
+          <div className="text-xs text-green-400 font-medium">
+            {persistentBotState.isRunning ? 'Live' : 'Inactive'}
+          </div>
+        </div>
       </div>
 
-      {/* Advanced Charts Section */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white">Advanced Analytics</h2>
-          <div className="text-xs text-gray-400">Real-time charts powered by Alpaca API</div>
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-300">Success Rate</span>
+          <div className="flex items-center space-x-2">
+            <span className="text-lg font-bold text-green-400">
+              {realTimeMetrics.isLoading ? (
+                <div className="animate-pulse bg-gray-600 h-5 w-12 rounded"></div>
+              ) : (
+                `${(realTimeMetrics.metrics.successRate * 100).toFixed(1)}%`
+              )}
+            </span>
+            {realTimeMetrics.metrics.successRate > 0.7 && (
+              <span className="text-xs text-green-300">🎯</span>
+            )}
+          </div>
         </div>
 
-        {/* Portfolio Performance & Allocation */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <PerformanceChart period="1M" height={350} />
-          <PortfolioAllocationChart height={350} />
-        </div>
 
-        {/* Risk Metrics */}
-        <RiskMetricsChart height={400} showPositionRisks={true} />
+      </div>
+    </div>
 
-        {/* Price Charts for Top Positions */}
-        {positions.data && positions.data.length > 0 && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {(positions.data as AlpacaPosition[]).slice(0, 4).map((position) => (
-              <PriceChart
-                key={position.symbol}
-                symbol={position.symbol}
-                timeframe="1Day"
-                limit={30}
-                showVolume={true}
-                height={300}
-              />
-            ))}
+    {/* Live Activity Feed - Real-time Console Capture */}
+    <LiveAIActivity />
+  </div>
+
+
+
+  {/* Advanced AI Insights Dashboard */ }
+  <div className="bg-gradient-to-r from-gray-800/40 to-purple-900/20 rounded-xl p-6 border border-gray-700/50">
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center space-x-3">
+        <Brain className="w-6 h-6 text-purple-400" />
+        <h2 className="text-xl font-bold text-white">Advanced AI Insights</h2>
+      </div>
+      <div className="flex items-center space-x-4">
+        {persistentBotState.isRunning && (
+          <div className="flex items-center space-x-2 bg-green-900/30 px-3 py-1 rounded-full border border-green-500/30">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
+            <span className="text-xs text-green-400 font-medium">AI Learning Active</span>
+          </div>
+        )}
+        {notifications.notifications.length > 0 && (
+          <div className="flex items-center space-x-2 bg-blue-900/30 px-3 py-1 rounded-full border border-blue-500/30">
+            <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            <span className="text-xs text-blue-400 font-medium">{notifications.notifications.length} Recent Trades</span>
           </div>
         )}
       </div>
+    </div>
 
-      {/* Enhanced Data Sources Footer */}
-      <div className="bg-gradient-to-r from-gray-900/50 to-gray-800/50 rounded-xl p-6 border border-gray-700/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse"></div>
-              <div className="text-sm">
-                <span className="text-blue-400 font-medium">Alpaca API</span>
-                <div className="text-xs text-gray-400">Real-time market data & trading</div>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-              <div className="text-sm">
-                <span className="text-green-400 font-medium">Supabase</span>
-                <div className="text-xs text-gray-400">AI learning database</div>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
-              <div className="text-sm">
-                <span className="text-purple-400 font-medium">Zustand + React Query</span>
-                <div className="text-xs text-gray-400">State management & caching</div>
-              </div>
-            </div>
+    <AIInsightsDashboard
+      botIsActive={persistentBotState.isRunning}
+      learningActive={aiLearningManager.isActive}
+    />
+  </div>
+
+  {/* Strategy Auto-Switcher */ }
+  <StrategyAutoSwitcher
+    botIsActive={persistentBotState.isRunning}
+    onStrategyChange={(strategyId) => {
+      console.log(`🔄 Strategy changed to: ${strategyId}`)
+    }}
+  />
+
+  {/* Multi-Strategy Performance Comparison */ }
+  <MultiStrategyComparison
+    symbol=""
+    autoAnalyze={persistentBotState.isRunning}
+    refreshInterval={30000}
+  />
+
+  {/* Market Data */ }
+  <div className="bg-gradient-to-r from-gray-800/40 to-blue-900/20 rounded-xl p-6 border border-gray-700/50">
+    <div className="flex items-center space-x-2 mb-4">
+      <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+      <h3 className="text-lg font-semibold text-white">Market Overview</h3>
+    </div>
+    <MarketStatusDisplay />
+  </div>
+
+
+
+  {/* 24/7 Crypto Trading Section */ }
+  <div className="space-y-6">
+    <div className="flex items-center justify-between">
+      <h2 className="text-xl font-bold text-white">24/7 Crypto Trading</h2>
+      <div className="text-xs text-gray-400">Never stop learning & trading</div>
+    </div>
+
+    <CryptoTradingPanel />
+  </div>
+
+
+
+  {/* Enhanced Data Sources Footer */ }
+  <div className="bg-gradient-to-r from-gray-900/50 to-gray-800/50 rounded-xl p-6 border border-gray-700/30">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center space-x-6">
+        <div className="flex items-center space-x-2">
+          <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse"></div>
+          <div className="text-sm">
+            <span className="text-blue-400 font-medium">Alpaca API</span>
+            <div className="text-xs text-gray-400">Real-time market data & trading</div>
           </div>
-          <div className="text-right">
-            <div className="text-xs text-gray-400">Last updated</div>
-            <div className="text-sm text-white font-medium">
-              <ClientSafeTime timestamp={new Date()} format="time" />
-            </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+          <div className="text-sm">
+            <span className="text-green-400 font-medium">Supabase</span>
+            <div className="text-xs text-gray-400">AI learning database</div>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
+          <div className="text-sm">
+            <span className="text-purple-400 font-medium">Zustand + React Query</span>
+            <div className="text-xs text-gray-400">State management & caching</div>
           </div>
         </div>
       </div>
-
-      {/* AI Trading Notifications */}
-      <AITradingNotifications
-        notifications={notifications.notifications}
-        onDismiss={notifications.dismissNotification}
-        autoHideDuration={notifications.autoHideDuration}
-      />
-
+      <div className="text-right">
+        <div className="text-xs text-gray-400">Last updated</div>
+        <div className="text-sm text-white font-medium">
+          <ClientSafeTime timestamp={new Date()} format="time" />
+        </div>
+      </div>
     </div>
+  </div>
+
+  {/* AI Trading Notifications */ }
+  <AITradingNotifications
+    notifications={notifications.notifications}
+    onDismiss={notifications.dismissNotification}
+    autoHideDuration={notifications.autoHideDuration}
+  />
+
+    </div >
   )
 }

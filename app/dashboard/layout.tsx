@@ -64,6 +64,13 @@ export default function DashboardLayoutWrapper({ children }: DashboardLayoutProp
       icon: '🏠',
     },
     {
+      id: 'hedge-fund',
+      label: 'Hedge Fund Engine',
+      path: '/dashboard/hedge-fund',
+      ariaLabel: 'Go to hedge fund engine',
+      icon: '🏦',
+    },
+    {
       id: 'trading',
       label: 'Trading',
       path: '/dashboard/trading',

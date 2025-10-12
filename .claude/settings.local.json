@@ -22,7 +22,22 @@
       "Bash(test:*)",
       "Bash(bash:*)",
       "Bash(npm install:*)",
-      "Bash(npx jest:*)"
+      "Bash(npx jest:*)",
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(python:*)",
+      "Bash(cat:*)",
+      "Bash(del nul)",
+      "Bash(if exist phase2_implementation.ts del phase2_implementation.ts)",
+      "Bash(if exist:*)",
+      "Bash(grep:*)",
+      "Bash(dir database.types.ts)",
+      "Bash(scoop bucket:*)",
+      "Bash(scoop install:*)",
+      "Bash(supabase:*)",
+      "Bash(scoop update:*)",
+      "Bash(docker:*)",
+      "Bash(powershell:*)"
     ],
     "deny": [],
     "ask": []

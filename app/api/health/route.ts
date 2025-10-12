@@ -1,6 +1,6 @@
 // app/api/health/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerSupabaseClient } from '@/lib/supabase/client';
 
 export async function GET() {
   const checks = {
@@ -13,11 +13,8 @@ export async function GET() {
   };
 
   try {
-    // Check Supabase connection
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    // Check Supabase connection using singleton server client
+    const supabase = createServerSupabaseClient();
 
     const { error: dbError } = await supabase
       .from('bot_metrics')

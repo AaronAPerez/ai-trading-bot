@@ -27,9 +27,9 @@ export const GET = withErrorHandling(async () => {
       alpacaClient.getOrders({ limit: 100, status: 'all' }).catch(() => []),
 
       // Supabase AI learning data
-      supabaseService.getRecentLearningData(userId, 1000).catch(() => []),
+      supabaseService.getAILearningData(userId).catch(() => []),
       supabaseService.getBotMetrics(userId).catch(() => null),
-      supabaseService.getRecentActivity(userId, 50).catch(() => [])
+      supabaseService.getBotActivityLogs(userId, 50).catch(() => [])
     ])
 
     // Calculate AI learning metrics

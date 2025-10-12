@@ -1,4 +1,4 @@
-import { TradingStrategy, TradeSignal, MarketData, BacktestResult } from '@/types/trading'
+import { TradeSignal, MarketData, TradingStrategy } from '@/types/trading';
 import { calculateSMA, calculateRSI } from '@/lib/utils/technicalIndicators'
 import { logger } from '@/lib/utils/logger'
 
@@ -40,23 +40,40 @@ export class MeanReversionStrategy implements TradingStrategy {
       const sortedData = data.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
       const prices = sortedData.map(d => d.close)
       const volumes = sortedData.map(d => d.volume)
-      
+
       const currentPrice = prices[prices.length - 1]
-      
+
+      // ENHANCEMENT: Assess volatility regime for dynamic thresholds
+      const volatilityRegime = this.assessVolatilityRegime(prices)
+      const dynamicZScoreThreshold = this.getDynamicZScoreThreshold(volatilityRegime)
+
       // Calculate z-score (price deviation from mean)
       const zScore = this.calculateZScore(prices, this.parameters.lookbackPeriod)
-      
+
+      // ENHANCEMENT: Check for mean reversion exhaustion (avoid catching falling knives)
+      const isExhausted = this.checkMeanReversionExhaustion(prices)
+
       // Calculate RSI for confirmation
       const rsiValues = calculateRSI(prices, this.parameters.rsiPeriod)
       const currentRSI = rsiValues[rsiValues.length - 1]
-      
+
       // Volume analysis
       const volumeConfirmation = this.analyzeVolume(volumes)
 
       let tradeSignal: TradeSignal
 
-      // Oversold condition: Price significantly below mean
-      if (zScore <= -this.parameters.zScoreThreshold && currentRSI <= this.parameters.rsiOversold) {
+      // Skip mean reversion in trending markets
+      if (isExhausted) {
+        return {
+          action: 'HOLD',
+          confidence: 0.2,
+          reason: `Mean reversion exhausted - trending market detected (Vol: ${volatilityRegime})`,
+          riskScore: 0.7
+        }
+      }
+
+      // Oversold condition: Price significantly below mean (using dynamic threshold)
+      if (zScore <= -dynamicZScoreThreshold && currentRSI <= this.parameters.rsiOversold) {
         const confidence = this.calculateMeanReversionConfidence(zScore, currentRSI, volumeConfirmation, 'BUY')
         tradeSignal = {
           action: 'BUY',
@@ -65,23 +82,23 @@ export class MeanReversionStrategy implements TradingStrategy {
           riskScore: this.calculateRiskScore(zScore, currentRSI, confidence)
         }
       }
-      // Overbought condition: Price significantly above mean
-      else if (zScore >= this.parameters.zScoreThreshold && currentRSI >= this.parameters.rsiOverbought) {
+      // Overbought condition: Price significantly above mean (using dynamic threshold)
+      else if (zScore >= dynamicZScoreThreshold && currentRSI >= this.parameters.rsiOverbought) {
         const confidence = this.calculateMeanReversionConfidence(zScore, currentRSI, volumeConfirmation, 'SELL')
         tradeSignal = {
           action: 'SELL',
           confidence,
-          reason: `Mean reversion SELL: Z-score ${zScore.toFixed(2)}, RSI ${currentRSI.toFixed(1)}`,
+          reason: `Mean reversion SELL: Z-score ${zScore.toFixed(2)}, RSI ${currentRSI.toFixed(1)} (Vol: ${volatilityRegime})`,
           riskScore: this.calculateRiskScore(zScore, currentRSI, confidence)
         }
       }
-      // Partial signals (one indicator triggered)
-      else if (Math.abs(zScore) >= this.parameters.zScoreThreshold * 0.8) {
+      // Partial signals (one indicator triggered, using dynamic threshold)
+      else if (Math.abs(zScore) >= dynamicZScoreThreshold * 0.8) {
         const action = zScore < 0 ? 'BUY' : 'SELL'
         tradeSignal = {
           action,
           confidence: 0.4,
-          reason: `Weak mean reversion signal: Z-score ${zScore.toFixed(2)}, RSI ${currentRSI.toFixed(1)}`,
+          reason: `Weak mean reversion signal: Z-score ${zScore.toFixed(2)}, RSI ${currentRSI.toFixed(1)} (Vol: ${volatilityRegime})`,
           riskScore: this.calculateRiskScore(zScore, currentRSI, 0.4)
         }
       } else {
@@ -237,8 +254,63 @@ export class MeanReversionStrategy implements TradingStrategy {
   }
 
   validateParameters(params: Record<string, any>): boolean {
-    return params.lookbackPeriod > 0 && 
-           params.zScoreThreshold > 0 && 
+    return params.lookbackPeriod > 0 &&
+           params.zScoreThreshold > 0 &&
            params.minHoldingPeriod <= params.maxHoldingPeriod
+  }
+
+  // ===================================================
+  // ENHANCEMENTS FOR IMPROVED PROFITABILITY
+  // ===================================================
+
+  /**
+   * Assess current volatility regime to adapt strategy thresholds
+   */
+  private assessVolatilityRegime(prices: number[]): 'LOW' | 'MEDIUM' | 'HIGH' {
+    const returns = []
+    for (let i = 1; i < prices.length; i++) {
+      returns.push((prices[i] - prices[i-1]) / prices[i-1])
+    }
+
+    const variance = returns.reduce((sum, r) => sum + r * r, 0) / returns.length
+    const volatility = Math.sqrt(variance * 252) // Annualized volatility
+
+    if (volatility < 0.15) return 'LOW'       // <15% volatility
+    if (volatility < 0.30) return 'MEDIUM'    // 15-30% volatility
+    return 'HIGH'                              // >30% volatility
+  }
+
+  /**
+   * Get dynamic z-score threshold based on volatility regime
+   * Lower threshold in low vol (easier to trigger), higher in high vol (more selective)
+   */
+  private getDynamicZScoreThreshold(regime: 'LOW' | 'MEDIUM' | 'HIGH'): number {
+    const thresholds = {
+      LOW: this.parameters.zScoreThreshold * 0.75,    // 1.5 instead of 2.0
+      MEDIUM: this.parameters.zScoreThreshold,         // 2.0 (default)
+      HIGH: this.parameters.zScoreThreshold * 1.25     // 2.5 instead of 2.0
+    }
+    return thresholds[regime]
+  }
+
+  /**
+   * Check if mean reversion is exhausted (trending market detected)
+   * Avoid catching falling knives in strong trends
+   */
+  private checkMeanReversionExhaustion(prices: number[]): boolean {
+    // Calculate recent trend strength
+    const recentPrices = prices.slice(-20)
+    const oldestPrice = recentPrices[0]
+    const newestPrice = recentPrices[recentPrices.length - 1]
+    const trendPercent = (newestPrice - oldestPrice) / oldestPrice
+
+    // Calculate momentum (rate of change)
+    const momentum = prices.slice(-10).reduce((sum, price, i, arr) => {
+      if (i === 0) return 0
+      return sum + (price - arr[i-1]) / arr[i-1]
+    }, 0) / 10
+
+    // Strong momentum or trend indicates exhausted mean reversion
+    return Math.abs(momentum) > 0.15 || Math.abs(trendPercent) > 0.20
   }
 }

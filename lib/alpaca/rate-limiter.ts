@@ -15,9 +15,16 @@ interface RequestRecord {
   endpoint: string
 }
 
+interface PendingRequest<T> {
+  promise: Promise<T>
+  timestamp: number
+}
+
 export class AlpacaRateLimiter {
   private requests: RequestRecord[] = []
   private cleanupInterval: NodeJS.Timeout | number | null = null
+  private pendingRequests: Map<string, PendingRequest<any>> = new Map()
+  private requestCache: Map<string, { data: any; timestamp: number }> = new Map()
   
   // Rate limit rules for different Alpaca API endpoints
   private rules: Record<string, RateLimitRule> = {
@@ -220,37 +227,100 @@ export class AlpacaRateLimiter {
       this.cleanupInterval = null
     }
     this.requests = []
+    this.pendingRequests.clear()
+    this.requestCache.clear()
   }
 
   /**
-   * Request wrapper with rate limiting
+   * Generate cache key for request deduplication
+   */
+  private getCacheKey(endpoint: string, params?: any): string {
+    return params ? `${endpoint}:${JSON.stringify(params)}` : endpoint
+  }
+
+  /**
+   * Check if cached response is still valid (within 2 seconds)
+   */
+  private getCachedResponse<T>(cacheKey: string): T | null {
+    const cached = this.requestCache.get(cacheKey)
+    if (cached && Date.now() - cached.timestamp < 2000) {
+      return cached.data
+    }
+    return null
+  }
+
+  /**
+   * Request wrapper with rate limiting, deduplication, and caching
    */
   async request<T>(
     requestFn: () => Promise<T>,
     endpoint: string = 'default',
-    retries: number = 3
+    retries: number = 3,
+    params?: any
   ): Promise<T> {
-    await this.waitAndRecord(endpoint)
+    const cacheKey = this.getCacheKey(endpoint, params)
 
-    try {
-      return await requestFn()
-    } catch (error: any) {
-      // In test environment, log the error for debugging
-      if (process.env.NODE_ENV === 'test') {
-        console.error(`[RateLimiter] Error for ${endpoint}:`, error)
-      }
-
-      // Handle rate limit errors with exponential backoff
-      if (error.status === 429 && retries > 0) {
-        const backoffTime = Math.pow(2, 4 - retries) * 1000 // 1s, 2s, 4s
-        console.log(`Rate limited by server. Backing off for ${backoffTime}ms...`)
-        await this.sleep(backoffTime)
-        return this.request(requestFn, endpoint, retries - 1)
-      }
-
-      // Always re-throw the error
-      throw error
+    // Check cache first (prevents duplicate API calls within 2 seconds)
+    const cached = this.getCachedResponse<T>(cacheKey)
+    if (cached !== null) {
+      console.log(`[Cache] Using cached response for ${cacheKey}`)
+      return cached
     }
+
+    // Check if identical request is already in flight (deduplication)
+    const pending = this.pendingRequests.get(cacheKey)
+    if (pending && Date.now() - pending.timestamp < 5000) {
+      console.log(`[Dedup] Reusing in-flight request for ${cacheKey}`)
+      return pending.promise
+    }
+
+    // Create new request
+    const promise = (async () => {
+      await this.waitAndRecord(endpoint)
+
+      try {
+        const result = await requestFn()
+
+        // Cache the result
+        this.requestCache.set(cacheKey, { data: result, timestamp: Date.now() })
+
+        // Cleanup cache if it gets too large
+        if (this.requestCache.size > 100) {
+          const now = Date.now()
+          for (const [key, value] of this.requestCache.entries()) {
+            if (now - value.timestamp > 2000) {
+              this.requestCache.delete(key)
+            }
+          }
+        }
+
+        return result
+      } catch (error: any) {
+        // In test environment, log the error for debugging
+        if (process.env.NODE_ENV === 'test') {
+          console.error(`[RateLimiter] Error for ${endpoint}:`, error)
+        }
+
+        // Handle rate limit errors with exponential backoff
+        if (error.status === 429 && retries > 0) {
+          const backoffTime = Math.pow(2, 4 - retries) * 1000 // 1s, 2s, 4s
+          console.log(`Rate limited by server. Backing off for ${backoffTime}ms...`)
+          await this.sleep(backoffTime)
+          return this.request(requestFn, endpoint, retries - 1, params)
+        }
+
+        // Always re-throw the error
+        throw error
+      } finally {
+        // Remove from pending requests
+        this.pendingRequests.delete(cacheKey)
+      }
+    })()
+
+    // Store as pending request
+    this.pendingRequests.set(cacheKey, { promise, timestamp: Date.now() })
+
+    return promise
   }
 }
 

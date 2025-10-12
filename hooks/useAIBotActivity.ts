@@ -86,55 +86,64 @@ export function useAIBotActivity({
     error: null
   })
 
-  // Fetch real bot activity data from Supabase
+  // Fetch real bot activity data from API
   const fetchBotActivity = useCallback(async () => {
     try {
       const userId = getCurrentUserId()
 
-      // Fetch real bot activity logs from Supabase
-      const activityLogs = await supabaseService.getBotActivityLogs(userId, maxActivities)
+      // Fetch bot data from API endpoint instead of direct Supabase access
+      const response = await fetch(`/api/ai-bot?userId=${userId}&limit=${maxActivities}`)
 
-      // Fetch bot metrics
-      const metrics = await supabaseService.getBotMetrics(userId)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch bot activity: ${response.statusText}`)
+      }
 
-      // Transform Supabase data to match interface
-      const activities = activityLogs.map(log => ({
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch bot activity')
+      }
+
+      const { activities: apiActivities, metrics: apiMetrics, isSimulating } = result.data
+
+      // Transform API data to match interface
+      const activities = apiActivities.map((log: any) => ({
         id: log.id,
         timestamp: log.timestamp,
         type: log.type as 'scan' | 'analysis' | 'recommendation' | 'trade' | 'error' | 'info',
         symbol: log.symbol || undefined,
         message: log.message,
         details: log.details || undefined,
-        confidence: log.metadata?.confidence as number || undefined,
+        confidence: log.confidence || undefined,
         status: log.status as 'active' | 'completed' | 'failed',
-        executionTime: log.execution_time || undefined
+        executionTime: log.executionTime || undefined
       }))
 
-      const botMetrics = metrics ? {
-        symbolsScanned: 0, // This would come from aggregating activity logs
-        analysisCompleted: activities.filter(a => a.type === 'info').length,
-        recommendationsGenerated: metrics.recommendations_generated || 0,
-        tradesExecuted: metrics.trades_executed || 0,
-        lastActivityTime: activities[0]?.timestamp || new Date().toISOString(),
-        currentSymbol: activities.find(a => a.symbol)?.symbol || null,
-        nextScanIn: 30,
-        avgAnalysisTime: 0,
-        successRate: metrics.success_rate || 0,
-        uptime: metrics.uptime || 0,
-        totalProcessingTime: 0,
-        errorCount: activities.filter(a => a.type === 'error').length
+      const botMetrics = apiMetrics ? {
+        symbolsScanned: apiMetrics.symbolsScanned || 0,
+        analysisCompleted: apiMetrics.analysisCompleted || 0,
+        recommendationsGenerated: apiMetrics.recommendationsGenerated || 0,
+        tradesExecuted: apiMetrics.tradesExecuted || 0,
+        lastActivityTime: apiMetrics.lastActivityTime || new Date().toISOString(),
+        currentSymbol: apiMetrics.currentSymbol || null,
+        nextScanIn: apiMetrics.nextScanIn || 30,
+        avgAnalysisTime: apiMetrics.avgAnalysisTime || 0,
+        successRate: apiMetrics.successRate || 0,
+        uptime: apiMetrics.uptime || 0,
+        totalProcessingTime: apiMetrics.totalProcessingTime || 0,
+        errorCount: apiMetrics.errorCount || 0
       } : null
 
       setState(prev => ({
         ...prev,
         activities,
         metrics: botMetrics,
-        isSimulating: metrics?.is_running || false,
+        isSimulating: isSimulating || false,
         error: null
       }))
 
     } catch (err) {
-      console.error('Failed to fetch bot activity from Supabase:', err)
+      console.error('Failed to fetch bot activity from API:', err)
       setState(prev => ({
         ...prev,
         error: err instanceof Error ? err.message : 'Failed to fetch activity'
@@ -142,37 +151,24 @@ export function useAIBotActivity({
     }
   }, [maxActivities])
 
-  // Start bot activity and log to Supabase
+  // Start bot activity simulation
   const startSimulation = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     try {
-      const userId = getCurrentUserId()
+      // Use API endpoint to start simulation (avoids RLS issues)
+      const response = await fetch('/api/ai-bot?action=start-simulation')
 
-      // Update bot metrics to indicate it's running
-      await supabaseService.updateBotMetrics(userId, {
-        is_running: true,
-        last_activity: new Date().toISOString()
-      })
-
-      // Log start activity
-      await supabaseService.logBotActivity({
-        user_id: userId,
-        timestamp: new Date().toISOString(),
-        type: 'system',
-        message: 'AI Trading Bot started - monitoring Alpaca API',
-        status: 'completed',
-        metadata: {
-          action: 'start',
-          timestamp: new Date().toISOString()
-        }
-      })
+      if (!response.ok) {
+        throw new Error('Failed to start bot activity simulation')
+      }
 
       setState(prev => ({ ...prev, isSimulating: true }))
       // Refresh after starting
       setTimeout(fetchBotActivity, 1000)
 
     } catch (err) {
+      console.error('Failed to start bot activity:', err)
       setState(prev => ({
         ...prev,
         error: err instanceof Error ? err.message : 'Failed to start AI bot'
@@ -182,36 +178,23 @@ export function useAIBotActivity({
     }
   }, [fetchBotActivity])
 
-  // Stop bot activity and log to Supabase
+  // Stop bot activity simulation
   const stopSimulation = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     try {
-      const userId = getCurrentUserId()
+      // Use API endpoint to stop simulation (avoids RLS issues)
+      const response = await fetch('/api/ai-bot?action=stop-simulation')
 
-      // Update bot metrics to indicate it's stopped
-      await supabaseService.updateBotMetrics(userId, {
-        is_running: false,
-        last_activity: new Date().toISOString()
-      })
-
-      // Log stop activity
-      await supabaseService.logBotActivity({
-        user_id: userId,
-        timestamp: new Date().toISOString(),
-        type: 'system',
-        message: 'AI Trading Bot stopped',
-        status: 'completed',
-        metadata: {
-          action: 'stop',
-          timestamp: new Date().toISOString()
-        }
-      })
+      if (!response.ok) {
+        throw new Error('Failed to stop bot activity simulation')
+      }
 
       setState(prev => ({ ...prev, isSimulating: false }))
       fetchBotActivity()
 
     } catch (err) {
+      console.error('Failed to stop bot activity:', err)
       setState(prev => ({
         ...prev,
         error: err instanceof Error ? err.message : 'Failed to stop AI bot'

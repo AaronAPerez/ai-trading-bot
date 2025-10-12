@@ -9,6 +9,9 @@
 export class AlpacaClient {
   private baseUrl: string
   private isDemoMode: boolean
+  getMarketData: any
+  placeOrder: any
+  getOrderStatus: any
 
   constructor() {
     this.baseUrl = '/api/alpaca'

@@ -58,8 +58,8 @@ export function usePositions() {
       }
       return await response.json()
     },
-    refetchInterval: 10000, // Refetch every 10 seconds
-    staleTime: 5000,
+    refetchInterval: 20000, // Refetch every 20 seconds (reduced from 10s to prevent rate limiting)
+    staleTime: 10000,
   })
 }
 
@@ -76,8 +76,8 @@ export function useOrders() {
       }
       return await response.json()
     },
-    refetchInterval: 5000, // Refetch every 5 seconds
-    staleTime: 2000,
+    refetchInterval: 15000, // Refetch every 15 seconds (reduced from 5s to prevent rate limiting)
+    staleTime: 10000,
   })
 }
 

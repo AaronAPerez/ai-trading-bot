@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { createClient } from '@/lib/supabase/client'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +14,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = createClient()
 
     // Calculate date range
     const endDate = new Date()

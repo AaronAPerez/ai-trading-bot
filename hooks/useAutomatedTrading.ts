@@ -39,7 +39,7 @@ export const useAutomatedTrading = () => {
 
       return response.json()
     },
-    refetchInterval: 5000, // Refresh every 5 seconds
+    refetchInterval: 15000, // Refresh every 15 seconds (reduced from 5s to prevent rate limiting)
     refetchIntervalInBackground: true,
     staleTime: 3000
   })
@@ -68,7 +68,7 @@ export const useAutomatedTrading = () => {
 
       return response.json()
     },
-    refetchInterval: botStatus.isRunning ? 3000 : false, // Only refresh when bot is running
+    refetchInterval: botStatus.isRunning ? 10000 : false, // Only refresh when bot is running (reduced from 3s to prevent rate limiting)
     enabled: botStatus.isRunning
   })
 
@@ -341,7 +341,7 @@ export const useOrderMonitoring = (orderId?: string) => {
       return response.json()
     },
     enabled: !!orderId,
-    refetchInterval: 2000, // Check every 2 seconds
+    refetchInterval: 10000, // Check every 10 seconds (reduced from 2s to prevent rate limiting)
     staleTime: 1000
   })
 
