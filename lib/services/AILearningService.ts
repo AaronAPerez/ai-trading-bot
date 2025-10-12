@@ -42,6 +42,12 @@ export class AILearningService {
       return
     }
 
+    // CRITICAL: Learning service with Supabase integration can only run server-side
+    if (typeof window !== 'undefined') {
+      console.log('⚠️ AI Learning Service can only run on server-side. Skipping client-side initialization.')
+      return
+    }
+
     console.log('🚀 Starting 24/7 AI Learning Service...')
 
     try {
@@ -89,8 +95,10 @@ export class AILearningService {
       this.sentimentInterval = undefined
     }
 
-    // Save final learning state
-    await this.saveLearningDataToSupabase()
+    // Save final learning state (only on server-side)
+    if (typeof window === 'undefined') {
+      await this.saveLearningDataToSupabase()
+    }
 
     console.log('✅ AI Learning Service stopped')
   }

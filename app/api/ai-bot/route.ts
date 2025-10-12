@@ -8,7 +8,10 @@
  * @location src/app/api/ai-bot/route.ts
  */
 
+import React from 'react'
 import { NextRequest, NextResponse } from 'next/server'
+import { alpacaClient } from '@/lib/alpaca/unified-client'
+import { getTradingMode } from '@/lib/config/trading-mode'
 
 // ===============================================
 // INTERFACES & TYPES
@@ -86,7 +89,7 @@ let orderExecutionEnabled = true
 const autoExecutionConfig = {
   minConfidenceForOrder: 60, // LOWERED from 70% to 60%
   maxPositionSize: 5000, // Maximum $5000 per position
-  orderCooldown: 300000, // 5 minutes (prevent buying same asset too frequently)
+  orderCooldown: 30000, // 30 seconds (REDUCED from 5 minutes)
   dailyOrderLimit: 100, // Maximum 100 orders per day
   riskPerTrade: 0.05, // 5% of portfolio per trade
   minOrderValue: 1, // LOWERED from $5 to $1 for testing with low buying power
@@ -115,27 +118,14 @@ const orderExecutionMetrics = {
 // ===============================================
 
 async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: string): Promise<number> {
-  console.log(`💰 Enhanced position sizing for ${symbol}: confidence=${confidence}%`)
+  const tradingMode = getTradingMode()
+  console.log(`💰 Enhanced position sizing for ${symbol}: confidence=${confidence}% (${tradingMode.toUpperCase()} mode)`)
 
   try {
     const isCrypto = symbol.includes('/') || /[-](USD|USDT|USDC)$/i.test(symbol)
 
-    // Get current buying power from Alpaca account
-    const alpacaUrl = process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
-    const accountResponse = await fetch(`${alpacaUrl}/v2/account`, {
-      headers: {
-        'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
-        'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!accountResponse.ok) {
-      console.log('⚠️ Could not fetch buying power, using conservative fallback')
-      return Math.min(25, autoExecutionConfig.maxPositionSize) // Conservative fallback
-    }
-
-    const account = await accountResponse.json()
+    // Get current buying power from Alpaca account using unified client
+    const account = await alpacaClient.getAccount()
 
     // For crypto, use cash (available USD in crypto wallet), for stocks use buying_power
     let availableFunds = 0
@@ -176,30 +166,30 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
       }
     }
 
-    if (availableFunds < 25) {
-      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $25 required)`)
+    if (availableFunds < 10) {
+      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $10 required)`)
       return 0 // Not enough to trade
     }
 
     // Enhanced position sizing with conservative limits (from quick_fix_patch)
-    const maxPositionPercent = 0.10 // Maximum 10% of available funds
-    const basePositionPercent = 0.03 // Base 3% of available funds
+    const maxPositionPercent = 0.15 // Maximum 15% of available funds (increased for small balances)
+    const basePositionPercent = 0.05 // Base 5% of available funds (increased from 3%)
 
     // Confidence-based adjustment (only above 60%)
-    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * 0.07 // Up to 7% bonus
+    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * 0.10 // Up to 10% bonus
     const positionPercent = Math.min(basePositionPercent + confidenceBonus, maxPositionPercent)
 
     // Calculate position size
     let positionSize = availableFunds * positionPercent
 
-    // Apply strict limits
-    const minOrderSize = 25 // Minimum $25
-    const maxOrderSize = Math.min(200, availableFunds * 0.2) // Max $200 or 20% of available funds
+    // Dynamic minimum based on available funds (more flexible for small balances)
+    const minOrderSize = availableFunds < 100 ? 10 : 25 // $10 min for small balances, $25 for larger
+    const maxOrderSize = Math.min(200, availableFunds * 0.25) // Max $200 or 25% of available funds
 
     positionSize = Math.max(minOrderSize, Math.min(positionSize, maxOrderSize))
 
-    // CRITICAL: Never exceed 20% of available funds
-    positionSize = Math.min(positionSize, availableFunds * 0.20)
+    // CRITICAL: Never exceed 25% of available funds (for diversification)
+    positionSize = Math.min(positionSize, availableFunds * 0.25)
 
     // Round to cents
     positionSize = Math.round(positionSize * 100) / 100
@@ -322,47 +312,37 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     // Check 8: Check existing positions for BUY/SELL validation
     try {
-      const alpacaUrl = process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
-      const positionsResponse = await fetch(`${alpacaUrl}/v2/positions`, {
-        headers: {
-          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
-          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
+      const positions = await alpacaClient.getPositions()
+      const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
+
+      if (recommendation.toUpperCase() === 'SELL') {
+        // For SELL: Must have existing position (no shorting)
+        if (!existingPosition) {
+          console.log(`❌ Cannot SELL ${symbol} - no existing position (would be shorting)`)
+          return { success: false, reason: 'Cannot sell without existing position (shorting not allowed)' }
         }
-      })
 
-      if (positionsResponse.ok) {
-        const positions = await positionsResponse.json()
-        const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
+        // Check if we have enough quantity to sell
+        const availableQty = parseFloat(existingPosition.qty || existingPosition.qty_available || '0')
+        if (availableQty <= 0) {
+          console.log(`❌ Cannot SELL ${symbol} - no available quantity (qty: ${availableQty})`)
+          return { success: false, reason: 'No shares available to sell' }
+        }
 
-        if (recommendation.toUpperCase() === 'SELL') {
-          // For SELL: Must have existing position (no shorting)
-          if (!existingPosition) {
-            console.log(`❌ Cannot SELL ${symbol} - no existing position (would be shorting)`)
-            return { success: false, reason: 'Cannot sell without existing position (shorting not allowed)' }
+        console.log(`✅ Confirmed existing position in ${symbol}: ${availableQty} shares available, market value: $${existingPosition.market_value}`)
+      } else if (recommendation.toUpperCase() === 'BUY') {
+        // For BUY: Check if we already own this asset
+        if (existingPosition && autoExecutionConfig.preventDuplicatePositions) {
+          const currentValue = parseFloat(existingPosition.market_value || '0')
+          console.log(`❌ Already own ${symbol} (current value: $${currentValue.toFixed(2)})`)
+          console.log(`   Strategy: Diversify into other assets instead of averaging up`)
+          return {
+            success: false,
+            reason: `Already own ${symbol}. Diversifying into other assets to reduce risk.`
           }
-
-          // Check if we have enough quantity to sell
-          const availableQty = parseFloat(existingPosition.qty || existingPosition.qty_available || '0')
-          if (availableQty <= 0) {
-            console.log(`❌ Cannot SELL ${symbol} - no available quantity (qty: ${availableQty})`)
-            return { success: false, reason: 'No shares available to sell' }
-          }
-
-          console.log(`✅ Confirmed existing position in ${symbol}: ${availableQty} shares available, market value: $${existingPosition.market_value}`)
-        } else if (recommendation.toUpperCase() === 'BUY') {
-          // For BUY: Check if we already own this asset
-          if (existingPosition && autoExecutionConfig.preventDuplicatePositions) {
-            const currentValue = parseFloat(existingPosition.market_value || '0')
-            console.log(`❌ Already own ${symbol} (current value: $${currentValue.toFixed(2)})`)
-            console.log(`   Strategy: Diversify into other assets instead of averaging up`)
-            return {
-              success: false,
-              reason: `Already own ${symbol}. Diversifying into other assets to reduce risk.`
-            }
-          }
-          if (existingPosition) {
-            console.log(`⚠️ Already own ${symbol}, but averaging up...`)
-          }
+        }
+        if (existingPosition) {
+          console.log(`⚠️ Already own ${symbol}, but averaging up...`)
         }
       }
     } catch (error) {
@@ -394,13 +374,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     if (recommendation.toUpperCase() === 'SELL') {
       // For SELL: Use 'qty' to sell all shares we own (close position)
       // We already verified position exists in the check above
-      const positionsResponse = await fetch(`${process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'}/v2/positions`, {
-        headers: {
-          'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
-          'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
-        }
-      })
-      const positions = await positionsResponse.json()
+      const positions = await alpacaClient.getPositions()
       const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
       const qtyToSell = parseFloat(existingPosition.qty || '0')
 
@@ -414,20 +388,9 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     console.log('📝 Placing order:', orderData)
 
-    // Execute order via Alpaca API (using correct environment variables)
-    const alpacaUrl = process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
-    const orderResponse = await fetch(`${alpacaUrl}/v2/orders`, {
-      method: 'POST',
-      headers: {
-        'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
-        'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(orderData)
-    })
-
-    if (orderResponse.ok) {
-      const order = await orderResponse.json()
+    // Execute order via Alpaca unified client (automatically uses correct trading mode)
+    try {
+      const order = await alpacaClient.createOrder(orderData)
       console.log('✅ Order placed successfully:', order.id)
 
       // Track successful order
@@ -464,25 +427,18 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
         amount: positionSize,
         confidence
       }
-    } else {
-      const errorText = await orderResponse.text()
-      console.error('❌ Order placement failed:', errorText)
+    } catch (orderError: any) {
+      console.error('❌ Order placement failed:', orderError)
 
       orderExecutionMetrics.failedOrders++
 
       // Parse error for better messaging
-      let errorMessage = errorText
-      try {
-        const errorJson = JSON.parse(errorText)
-        if (errorJson.code === 40310000 && errorJson.message?.includes('insufficient balance for USD')) {
-          errorMessage = 'Insufficient USD balance in crypto wallet. Transfer funds from stock account to crypto wallet in Alpaca dashboard.'
-          console.log('💡 TIP: In Alpaca Paper Trading, you need to transfer USD from your stock account to crypto wallet.')
-          console.log('💡 Go to: Alpaca Dashboard > Crypto Trading > Transfer Funds')
-        } else {
-          errorMessage = errorJson.message || errorText
-        }
-      } catch {
-        // Use raw error text if not JSON
+      let errorMessage = orderError.message || 'Unknown order error'
+
+      if (errorMessage.includes('insufficient balance')) {
+        errorMessage = 'Insufficient USD balance in crypto wallet. Transfer funds from stock account to crypto wallet in Alpaca dashboard.'
+        console.log('💡 TIP: In Alpaca Paper Trading, you need to transfer USD from your stock account to crypto wallet.')
+        console.log('💡 Go to: Alpaca Dashboard > Crypto Trading > Transfer Funds')
       }
 
       return {
@@ -571,24 +527,14 @@ function startBotActivitySimulation() {
       // SMART RECOMMENDATION: Check positions to decide BUY or SELL
       let recommendation = 'BUY' // Default to BUY
       try {
-        const alpacaUrl = process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
-        const positionsResponse = await fetch(`${alpacaUrl}/v2/positions`, {
-          headers: {
-            'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID || '',
-            'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY || '',
-          }
-        })
+        const positions = await alpacaClient.getPositions()
+        const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
 
-        if (positionsResponse.ok) {
-          const positions = await positionsResponse.json()
-          const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
-
-          // If we have a position, 50% chance to SELL, otherwise always BUY
-          if (existingPosition) {
-            recommendation = Math.random() > 0.5 ? 'SELL' : 'BUY'
-          }
-          // If no position, keep as BUY (can't sell what we don't own)
+        // If we have a position, 50% chance to SELL, otherwise always BUY
+        if (existingPosition) {
+          recommendation = Math.random() > 0.5 ? 'SELL' : 'BUY'
         }
+        // If no position, keep as BUY (can't sell what we don't own)
       } catch (error) {
         console.error('Error checking positions for recommendation:', error)
         // On error, default to BUY (safer than risking a SELL without position)
@@ -763,7 +709,8 @@ export async function GET(request: NextRequest) {
           environment: {
             hasApiKey: !!process.env.APCA_API_KEY_ID,
             hasSecretKey: !!process.env.APCA_API_SECRET_KEY,
-            baseUrl: process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
+            tradingMode: getTradingMode(),
+            baseUrl: getTradingMode() === 'live' ? 'https://api.alpaca.markets' : 'https://paper-api.alpaca.markets'
           }
         },
         timestamp: new Date().toISOString()

@@ -102,6 +102,14 @@ export default function DashboardPage() {
 
   const quickActions = [
     {
+      title: 'Hedge Fund Engine',
+      description: 'Professional trading engine',
+      href: '/dashboard/hedge-fund',
+      icon: Wallet,
+      gradient: 'from-indigo-500 to-indigo-600',
+      hoverGradient: 'hover:from-indigo-600 hover:to-indigo-700'
+    },
+    {
       title: 'AI Trading Bot',
       description: 'Start automated trading',
       href: '/',

@@ -1,27 +1,23 @@
 
 import { withRateLimit } from '../api/rate-limiter-middleware'
 import { APIErrors } from '../api/error-handler'
+import { getAlpacaBaseUrl } from '../config/trading-mode'
 
 /**
  * Unified Alpaca API client with rate limiting and error handling
  * Replaces inconsistent API calls across the codebase
  */
 export class UnifiedAlpacaClient {
-  private baseUrl: string
   private headers: HeadersInit
 
   constructor() {
     // Validate environment variables
     const apiKey = process.env.APCA_API_KEY_ID
     const secretKey = process.env.APCA_API_SECRET_KEY
-    
+
     if (!apiKey || !secretKey) {
       throw new Error('Missing Alpaca API credentials. Check APCA_API_KEY_ID and APCA_API_SECRET_KEY')
     }
-
-    this.baseUrl = process.env.NEXT_PUBLIC_TRADING_MODE === 'live'
-      ? 'https://api.alpaca.markets'
-      : 'https://paper-api.alpaca.markets'
 
     this.headers = {
       'APCA-API-KEY-ID': apiKey,
@@ -29,7 +25,11 @@ export class UnifiedAlpacaClient {
       'Content-Type': 'application/json',
     }
 
-    console.log(`✅ Alpaca client initialized: ${this.baseUrl}`)
+    console.log(`✅ Alpaca client initialized`)
+  }
+
+  private getBaseUrl(): string {
+    return getAlpacaBaseUrl()
   }
 
   /**
@@ -44,7 +44,8 @@ export class UnifiedAlpacaClient {
     return withRateLimit(
       endpoint,
       async () => {
-        const url = `${this.baseUrl}${endpoint}`
+        const baseUrl = this.getBaseUrl()
+        const url = `${baseUrl}${endpoint}`
 
         const response = await fetch(url, {
           ...options,
@@ -396,13 +397,17 @@ export class UnifiedAlpacaClient {
 
     try {
       if (isCrypto) {
-        // Crypto endpoint
+        // Crypto endpoint - Note: Alpaca crypto endpoint may use different base URL
         const response = await this.request<any>(
           `/v1beta3/crypto/us/bars?symbols=${symbol}&${params.toString()}`,
           {},
           'normal'
         )
-        return response?.bars?.[symbol] || []
+        const bars = response?.bars?.[symbol] || []
+        if (bars.length === 0) {
+          console.warn(`⚠️ No bars data returned for crypto ${symbol}`)
+        }
+        return bars
       } else {
         // Stock endpoint
         const response = await this.request<any>(
@@ -414,6 +419,7 @@ export class UnifiedAlpacaClient {
       }
     } catch (error) {
       console.error(`Failed to get bars for ${symbol}:`, error)
+      // Return empty array to avoid breaking the trading cycle
       return []
     }
   }

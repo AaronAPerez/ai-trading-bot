@@ -8,6 +8,7 @@ import { BotConfiguration, BotMetrics } from "@/types/trading"
 import { create } from "zustand"
 import { subscribeWithSelector } from "zustand/middleware"
 import { immer } from "zustand/middleware/immer"
+import { getTradingMode, setTradingMode as setGlobalTradingMode } from "@/lib/config/trading-mode"
 
 interface BotState {
   config: BotConfiguration | null
@@ -23,6 +24,7 @@ interface BotState {
   isInitializing: boolean
   error: string | null
   lastActivity: Date | null
+  tradingMode: 'paper' | 'live'
 }
 
 interface BotActions {
@@ -33,6 +35,7 @@ interface BotActions {
   addActivity: (activity: Omit<BotState['activityLogs'][0], 'id' | 'timestamp'>) => void
   clearLogs: () => void
   setError: (error: string | null) => void
+  setTradingMode: (mode: 'paper' | 'live') => void
   getPerformanceStats: () => {
     totalTrades: number
     winRate: number
@@ -59,7 +62,8 @@ const initialBotState: BotState = {
   engineStatus: 'STOPPED',
   isInitializing: false,
   error: null,
-  lastActivity: null
+  lastActivity: null,
+  tradingMode: getTradingMode()
 }
 
 export const useBotStore = create<BotStore>()(
@@ -186,6 +190,17 @@ export const useBotStore = create<BotStore>()(
               message: `Bot Error: ${error}`
             })
           }
+        }),
+
+      setTradingMode: (mode) =>
+        set((state) => {
+          state.tradingMode = mode
+          setGlobalTradingMode(mode)
+          get().addActivity({
+            type: 'system',
+            message: `Trading mode switched to ${mode.toUpperCase()}`,
+            details: `All trades will now execute on ${mode === 'paper' ? 'paper trading account' : 'LIVE ACCOUNT with real money'}`
+          })
         }),
 
       getPerformanceStats: () => {

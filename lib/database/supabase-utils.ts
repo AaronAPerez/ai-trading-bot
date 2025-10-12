@@ -254,6 +254,13 @@ export class SupabaseService {
 
   async getTradeHistory(userId: string, limit: number = 100, since?: Date) {
     try {
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(userId)) {
+        console.warn(`⚠️ Invalid UUID format for userId: ${userId}. Returning empty array.`)
+        return []
+      }
+
       let query = this._client
         .from('trade_history')
         .select('*')
@@ -277,6 +284,13 @@ export class SupabaseService {
 
   async getAILearningData(userId: string) {
     try {
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(userId)) {
+        console.warn(`⚠️ Invalid UUID format for userId: ${userId}. Returning empty array.`)
+        return []
+      }
+
       const { data, error } = await this._client
         .from('ai_learning_data')
         .select('*')

@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandling } from '@/lib/api/error-handler'
 import { alpacaClient } from '@/lib/alpaca/unified-client'
+import { getTradingMode, getAlpacaBaseUrl } from '@/lib/config/trading-mode'
 import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
 import { supabaseService } from '@/lib/database/supabase-utils'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
 import { detectAssetType } from '@/config/symbols'
 
 // In-memory bot state (in production, use Redis or database)
-let botState = {
+let botState: {
+  isRunning: boolean
+  config: any
+  startTime: Date | null
+  sessionId: string | null
+  interval: NodeJS.Timeout | null
+  inverseMode: boolean // INVERSE MODE: Flip all signals (BUY becomes SELL, SELL becomes BUY)
+} = {
   isRunning: false,
   config: null,
   startTime: null,
   sessionId: null,
-  interval: null
+  interval: null,
+  inverseMode: false // Set to true to profit from consistent losses
 }
 
 // Cache for available assets (refresh every 24 hours)
@@ -34,9 +43,9 @@ async function fetchAvailableStockAssets(): Promise<string[]> {
   }
 
   try {
-    const apiKey = process.env.NEXT_PUBLIC_APCA_API_KEY_ID
-    const apiSecret = process.env.NEXT_PUBLIC_APCA_API_SECRET_KEY
-    const baseUrl = process.env.NEXT_PUBLIC_APCA_API_BASE_URL || 'https://paper-api.alpaca.markets'
+    const apiKey = process.env.APCA_API_KEY_ID
+    const apiSecret = process.env.APCA_API_SECRET_KEY
+    const baseUrl = getAlpacaBaseUrl()
 
     const response = await fetch(`${baseUrl}/v2/assets?asset_class=us_equity&status=active`, {
       headers: {
@@ -92,9 +101,9 @@ async function fetchAvailableCryptoAssets(): Promise<string[]> {
   }
 
   try {
-    const apiKey = process.env.NEXT_PUBLIC_APCA_API_KEY_ID
-    const apiSecret = process.env.NEXT_PUBLIC_APCA_API_SECRET_KEY
-    const baseUrl = process.env.NEXT_PUBLIC_APCA_API_BASE_URL || 'https://paper-api.alpaca.markets'
+    const apiKey = process.env.APCA_API_KEY_ID
+    const apiSecret = process.env.APCA_API_SECRET_KEY
+    const baseUrl = getAlpacaBaseUrl()
 
     const response = await fetch(`${baseUrl}/v2/assets?asset_class=crypto&status=active`, {
       headers: {
@@ -116,7 +125,11 @@ async function fetchAvailableCryptoAssets(): Promise<string[]> {
     const stablecoins = ['USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDP']
 
     const tradableSymbols = assets
-      .filter((asset: any) => asset.tradable && asset.status === 'active')
+      .filter((asset: any) =>
+        asset.tradable &&
+        asset.status === 'active' &&
+        asset.fractionable !== false // Only include assets that support fractional trading
+      )
       .map((asset: any) => asset.symbol)
       .filter((symbol: string) => {
         const baseCurrency = symbol.split('/')[0]
@@ -180,14 +193,34 @@ function getFallbackStockList(): string[] {
 
 /**
  * Fallback crypto list if API fetch fails
+ * Prioritizes lower-priced coins for better affordability with small balances ($50-100)
  */
 function getFallbackCryptoList(): string[] {
   return [
-    'BTC/USD', 'ETH/USD', 'DOGE/USD', 'SHIB/USD', 'ADA/USD', 'SOL/USD',
-    'MATIC/USD', 'AVAX/USD', 'LINK/USD', 'UNI/USD', 'DOT/USD', 'LTC/USD',
-    'BCH/USD', 'XLM/USD', 'ATOM/USD', 'ALGO/USD', 'FTM/USD', 'SAND/USD',
-    'MANA/USD', 'AXS/USD', 'GALA/USD', 'APE/USD', 'CRV/USD', 'SUSHI/USD',
-    'AAVE/USD', 'COMP/USD', 'MKR/USD', 'SNX/USD', 'BAT/USD', 'ENJ/USD'
+    // High Volume (but expensive - use fractional shares)
+    'BTC/USD', 'ETH/USD',
+
+    // Mid-Price Range ($10-200) - Good for $50-100 balance
+    'LTC/USD',    // ~$80-100
+    'BCH/USD',    // ~$100-150
+    'LINK/USD',   // ~$10-20
+    'UNI/USD',    // ~$5-15
+    'AVAX/USD',   // ~$20-40
+    'ATOM/USD',   // ~$5-15
+    'DOT/USD',    // ~$5-10
+    'AAVE/USD',   // ~$100-200
+
+    // Lower Price Range ($0.50-$10) - BEST for small balances
+    'DOGE/USD',   // ~$0.10-0.50
+    'ADA/USD',    // ~$0.30-0.80
+    'XLM/USD',    // ~$0.10-0.20
+    'ALGO/USD',   // ~$0.15-0.40
+    'BAT/USD',    // ~$0.20-0.40
+    'XRP/USD',    // ~$0.50-1.00
+    'TRX/USD',    // ~$0.10-0.20
+
+    // Micro Price Range (<$0.10) - Most affordable
+    'SHIB/USD'    // ~$0.000008-0.00002
   ]
 }
 
@@ -234,6 +267,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
     case 'status':
       return handleGetStatus()
+
+    case 'toggle-inverse':
+      return handleToggleInverse()
 
     default:
       throw new Error(`Unknown action: ${action}`)
@@ -494,7 +530,7 @@ function handleGetStatus() {
 /**
  * Advanced Technical Analysis with Real Market Data
  */
-async function analyzeTechnicalIndicators(symbol: string): Promise<{
+async function analyzeTechnicalIndicators(symbol: string, inverseMode: boolean = false): Promise<{
   signal: string
   confidence: number
   indicators: any
@@ -624,6 +660,13 @@ async function analyzeTechnicalIndicators(symbol: string): Promise<{
     } else {
       signal = 'HOLD'
       confidence = 0.50 + Math.abs(score - 50) / 200 // Low confidence for unclear signals
+    }
+
+    // 🔄 INVERSE MODE: Flip signals if bot is consistently losing
+    if (inverseMode && signal !== 'HOLD') {
+      const originalSignal = signal
+      signal = signal === 'BUY' ? 'SELL' : 'BUY'
+      console.log(`🔄 INVERSE MODE: Flipped ${originalSignal} → ${signal}`)
     }
 
     // Market Condition Assessment
@@ -771,8 +814,11 @@ function startBotLogic(sessionId: string, config: any) {
 
   // Real AI trading logic - runs every 30 seconds
   const interval = setInterval(async () => {
-    if (!botState.isRunning || botState.sessionId !== sessionId) {
+    // CRITICAL: Triple-check bot is actually running before executing ANY trading logic
+    if (!botState.isRunning || botState.sessionId !== sessionId || !botState.startTime) {
+      console.log('⏸️ Trading loop stopped - Bot is not active')
       clearInterval(interval)
+      botState.interval = null
       return
     }
 
@@ -798,7 +844,7 @@ function startBotLogic(sessionId: string, config: any) {
       console.log(`🔍 Trading Mode: ${marketOpen ? 'Stocks + Crypto' : 'Crypto Only - 24/7 Trading'}`)
 
       // 2. Generate AI trading signal with REAL technical analysis
-      const technicalAnalysis = await analyzeTechnicalIndicators(selectedSymbol)
+      const technicalAnalysis = await analyzeTechnicalIndicators(selectedSymbol, botState.inverseMode)
       const signal = technicalAnalysis.signal
       const confidence = technicalAnalysis.confidence
       const minConfidence = config?.riskManagement?.minConfidence || 0.80 // Raised to 80%
@@ -1089,6 +1135,22 @@ function stopBotLogic(sessionId: string) {
 }
 
 /**
+ * Handle toggle inverse mode
+ */
+function handleToggleInverse() {
+  botState.inverseMode = !botState.inverseMode
+  console.log(`🔄 Inverse Mode ${botState.inverseMode ? 'ENABLED' : 'DISABLED'}`)
+
+  return NextResponse.json({
+    success: true,
+    message: `Inverse mode ${botState.inverseMode ? 'enabled' : 'disabled'}`,
+    data: {
+      inverseMode: botState.inverseMode
+    }
+  })
+}
+
+/**
  * GET endpoint for status checks with standardized error handling
  */
 export const GET = withErrorHandling(async () => {
@@ -1098,7 +1160,8 @@ export const GET = withErrorHandling(async () => {
       isRunning: botState.isRunning,
       sessionId: botState.sessionId,
       uptime: botState.startTime ? Date.now() - new Date(botState.startTime).getTime() : 0,
-      status: botState.isRunning ? 'RUNNING' : 'STOPPED'
+      status: botState.isRunning ? 'RUNNING' : 'STOPPED',
+      inverseMode: botState.inverseMode
     },
     timestamp: new Date().toISOString(),
   })

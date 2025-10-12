@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandling } from '@/lib/api/error-handler'
 import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { detectAssetType, getSymbolMetadata } from '@/config/symbols'
+import { getTradingMode } from '@/lib/config/trading-mode'
 
 /**
  * POST /api/trading/execute
  * Execute trades with standardized error handling
+ * Automatically uses global trading mode (paper/live)
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const { order, mode = 'paper' } = await request.json()
+  const { order } = await request.json()
+
+  // Use global trading mode instead of parameter
+  const mode = getTradingMode()
+
+  console.log(`🔄 Executing trade in ${mode.toUpperCase()} mode: ${order.symbol} ${order.side}`)
 
   // Enhanced order validation
   if (!order || !order.symbol || !order.side || !order.quantity) {
