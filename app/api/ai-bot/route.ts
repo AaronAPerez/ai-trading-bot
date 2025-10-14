@@ -89,13 +89,13 @@ let orderExecutionEnabled = true
 // DYNAMIC POSITION LIMITS BASED ON ACCOUNT SIZE
 // ===============================================
 function getMaxPositionsForAccount(equity: number): number {
-  if (equity < 500) return 3        // $100-500: Focus on 3 positions
-  if (equity < 1000) return 5       // $500-1K: 5 positions
-  if (equity < 2000) return 10      // $1K-2K: 10 positions
-  if (equity < 5000) return 15      // $2K-5K: 15 positions
-  if (equity < 10000) return 25     // $5K-10K: 25 positions
-  if (equity < 25000) return 35     // $10K-25K: 35 positions
-  return 50                         // $25K+: 50 positions max
+  if (equity < 500) return 8        // $100-500: 8 positions (increased from 3)
+  if (equity < 1000) return 12      // $500-1K: 12 positions (increased from 5)
+  if (equity < 2000) return 15      // $1K-2K: 15 positions (increased from 10)
+  if (equity < 5000) return 20      // $2K-5K: 20 positions (increased from 15)
+  if (equity < 10000) return 30     // $5K-10K: 30 positions (increased from 25)
+  if (equity < 25000) return 40     // $10K-25K: 40 positions (increased from 35)
+  return 60                         // $25K+: 60 positions max (increased from 50)
 }
 
 // UPDATED CONFIGURATION - More permissive for testing
@@ -365,14 +365,15 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     // Check 6: Validate crypto pairs (Alpaca only supports crypto paired with USD/USDT/USDC)
     // Detect crypto: symbols with / or ending with USD/USDT/USDC (with or without separator)
-    // Examples: BTC/USD, BTCUSD, BTC-USD, AVAXUSD, AVAX/USD, ETH-USD
+    // Examples: BTC/USD, BTCUSD, BTC-USD, AVAXUSD, AVAX/USD, ETH-USD, LINKUSD
     const isCrypto = symbol.includes('/') || /(USD|USDT|USDC)$/i.test(symbol)
 
     console.log(`🔍 Crypto check for ${symbol}: ${isCrypto ? 'CRYPTO' : 'STOCK'}`)
 
     // Block invalid crypto pairs (e.g., BTC/ETH, LINK/BTC - Alpaca doesn't support these)
     if (isCrypto) {
-      const validCryptoPairs = /[-/](USD|USDT|USDC)$/i
+      // Accept symbols with separator (BTC/USD, BTC-USD) OR without separator (BTCUSD, LINKUSD)
+      const validCryptoPairs = /([-/])?(USD|USDT|USDC)$/i
       if (!validCryptoPairs.test(symbol)) {
         console.log(`❌ Invalid crypto pair: ${symbol} - Alpaca only supports pairs with USD/USDT/USDC`)
         return {
@@ -380,6 +381,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
           reason: `Invalid crypto pair: ${symbol}. Only USD, USDT, or USDC pairs are supported.`
         }
       }
+      console.log(`✅ ${symbol} detected as CRYPTO - trades 24/7`)
     }
 
     // Check 7: Market hours for stocks (crypto trades 24/7)
