@@ -85,6 +85,19 @@ let simulationInterval: NodeJS.Timeout | null = null
 
 let orderExecutionEnabled = true
 
+// ===============================================
+// DYNAMIC POSITION LIMITS BASED ON ACCOUNT SIZE
+// ===============================================
+function getMaxPositionsForAccount(equity: number): number {
+  if (equity < 500) return 3        // $100-500: Focus on 3 positions
+  if (equity < 1000) return 5       // $500-1K: 5 positions
+  if (equity < 2000) return 10      // $1K-2K: 10 positions
+  if (equity < 5000) return 15      // $2K-5K: 15 positions
+  if (equity < 10000) return 25     // $5K-10K: 25 positions
+  if (equity < 25000) return 35     // $10K-25K: 35 positions
+  return 50                         // $25K+: 50 positions max
+}
+
 // UPDATED CONFIGURATION - More permissive for testing
 const autoExecutionConfig = {
   minConfidenceForOrder: 60, // LOWERED from 70% to 60%
@@ -97,7 +110,13 @@ const autoExecutionConfig = {
   marketHoursOnly: false, // Allow 24/7 trading
   cryptoTradingEnabled: true, // Enable crypto trading
   enableDebugLogging: true, // Enhanced debugging
-  preventDuplicatePositions: true // Don't buy more of what we already own (unless selling)
+  preventDuplicatePositions: false, // CHANGED: Allow portfolio rotation - sell losers, add to winners
+  enablePortfolioRotation: true, // NEW: Enable intelligent position management
+  takeProfitThreshold: 0.10, // NEW: Take profit at 10% gain
+  stopLossThreshold: -0.05, // NEW: Stop loss at 5% loss
+  maxOpenPositions: 10, // DEFAULT: 10 positions (dynamically adjusted by getMaxPositionsForAccount)
+  rebalanceOnLowCash: true, // NEW: Sell positions when cash < 10% of equity
+  useDynamicPositionLimits: true // NEW: Auto-adjust position limit based on account size
 }
 
 const recentOrders: Set<string> = new Set()
@@ -122,7 +141,8 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
   console.log(`💰 Enhanced position sizing for ${symbol}: confidence=${confidence}% (${tradingMode.toUpperCase()} mode)`)
 
   try {
-    const isCrypto = symbol.includes('/') || /[-](USD|USDT|USDC)$/i.test(symbol)
+    // Detect crypto: symbols with / or ending with USD/USDT/USDC (BTC/USD, BTCUSD, AVAXUSD, etc.)
+    const isCrypto = symbol.includes('/') || /(USD|USDT|USDC)$/i.test(symbol)
 
     // Get current buying power from Alpaca account using unified client
     const account = await alpacaClient.getAccount()
@@ -205,6 +225,87 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
 }
 
 // ===============================================
+// PORTFOLIO MANAGEMENT FUNCTIONS
+// ===============================================
+
+/**
+ * Check if we should sell existing positions to free up cash
+ */
+async function checkPortfolioRebalancing(): Promise<{ shouldRebalance: boolean; positionsToSell: string[] }> {
+  try {
+    const account = await alpacaClient.getAccount()
+    const positions = await alpacaClient.getPositions()
+
+    const cash = parseFloat(account.cash || '0')
+    const equity = parseFloat(account.equity || '0')
+    const cashPercent = equity > 0 ? cash / equity : 0
+
+    console.log(`💰 Portfolio Check: Cash=$${cash.toFixed(2)} (${(cashPercent * 100).toFixed(1)}% of $${equity.toFixed(2)} equity)`)
+
+    const positionsToSell: string[] = []
+
+    // Strategy 1: If cash < 10% of equity, sell losing positions
+    if (autoExecutionConfig.rebalanceOnLowCash && cashPercent < 0.10) {
+      console.log(`⚠️ Low cash alert: ${(cashPercent * 100).toFixed(1)}% < 10% threshold`)
+
+      // Find losing positions to sell
+      for (const pos of positions) {
+        const unrealizedPL = parseFloat(pos.unrealized_pl || pos.unrealized_plpc || '0')
+        const unrealizedPLPercent = parseFloat(pos.unrealized_plpc || '0')
+
+        // Sell if loss exceeds stop-loss threshold
+        if (unrealizedPLPercent < autoExecutionConfig.stopLossThreshold) {
+          console.log(`🔴 Stop-loss triggered: ${pos.symbol} down ${(unrealizedPLPercent * 100).toFixed(2)}%`)
+          positionsToSell.push(pos.symbol)
+        }
+      }
+    }
+
+    // Strategy 2: Take profit on winners
+    for (const pos of positions) {
+      const unrealizedPLPercent = parseFloat(pos.unrealized_plpc || '0')
+
+      if (unrealizedPLPercent > autoExecutionConfig.takeProfitThreshold) {
+        console.log(`🟢 Take-profit opportunity: ${pos.symbol} up ${(unrealizedPLPercent * 100).toFixed(2)}%`)
+        positionsToSell.push(pos.symbol)
+      }
+    }
+
+    // Strategy 3: Limit max open positions (dynamically adjusted by account size)
+    const maxPositions = autoExecutionConfig.useDynamicPositionLimits
+      ? getMaxPositionsForAccount(equity)
+      : autoExecutionConfig.maxOpenPositions
+
+    if (positions.length >= maxPositions) {
+      console.log(`⚠️ Max positions reached: ${positions.length}/${maxPositions} (equity: $${equity.toFixed(2)})`)
+
+      // Sell worst performing position to make room
+      const worstPosition = positions.reduce((worst, current) => {
+        const worstPL = parseFloat(worst.unrealized_plpc || '0')
+        const currentPL = parseFloat(current.unrealized_plpc || '0')
+        return currentPL < worstPL ? current : worst
+      })
+
+      if (!positionsToSell.includes(worstPosition.symbol)) {
+        console.log(`📉 Selling worst performer: ${worstPosition.symbol} (P/L: ${(parseFloat(worstPosition.unrealized_plpc || '0') * 100).toFixed(2)}%)`)
+        positionsToSell.push(worstPosition.symbol)
+      }
+    } else {
+      console.log(`✅ Position capacity: ${positions.length}/${maxPositions} (room for ${maxPositions - positions.length} more)`)
+    }
+
+    return {
+      shouldRebalance: positionsToSell.length > 0,
+      positionsToSell: Array.from(new Set(positionsToSell)) // Remove duplicates
+    }
+
+  } catch (error) {
+    console.error('❌ Portfolio rebalancing check failed:', error)
+    return { shouldRebalance: false, positionsToSell: [] }
+  }
+}
+
+// ===============================================
 // ENHANCED ORDER EXECUTION FUNCTION
 // ===============================================
 
@@ -263,9 +364,9 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     }
 
     // Check 6: Validate crypto pairs (Alpaca only supports crypto paired with USD/USDT/USDC)
-    // Detect crypto: ONLY symbols with / or - followed by USD/USDT/USDC
-    // DO NOT use ticker-based detection as some stock ETFs have same tickers (e.g., ETH = Grayscale ETF)
-    const isCrypto = symbol.includes('/') || /[-](USD|USDT|USDC)$/i.test(symbol)
+    // Detect crypto: symbols with / or ending with USD/USDT/USDC (with or without separator)
+    // Examples: BTC/USD, BTCUSD, BTC-USD, AVAXUSD, AVAX/USD, ETH-USD
+    const isCrypto = symbol.includes('/') || /(USD|USDT|USDC)$/i.test(symbol)
 
     console.log(`🔍 Crypto check for ${symbol}: ${isCrypto ? 'CRYPTO' : 'STOCK'}`)
 
@@ -331,18 +432,33 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
         console.log(`✅ Confirmed existing position in ${symbol}: ${availableQty} shares available, market value: $${existingPosition.market_value}`)
       } else if (recommendation.toUpperCase() === 'BUY') {
-        // For BUY: Check if we already own this asset
-        if (existingPosition && autoExecutionConfig.preventDuplicatePositions) {
-          const currentValue = parseFloat(existingPosition.market_value || '0')
-          console.log(`❌ Already own ${symbol} (current value: $${currentValue.toFixed(2)})`)
-          console.log(`   Strategy: Diversify into other assets instead of averaging up`)
-          return {
-            success: false,
-            reason: `Already own ${symbol}. Diversifying into other assets to reduce risk.`
-          }
-        }
+        // For BUY: Portfolio rotation logic
         if (existingPosition) {
-          console.log(`⚠️ Already own ${symbol}, but averaging up...`)
+          if (autoExecutionConfig.preventDuplicatePositions) {
+            // Old behavior: block duplicate positions
+            const currentValue = parseFloat(existingPosition.market_value || '0')
+            console.log(`❌ Already own ${symbol} (current value: $${currentValue.toFixed(2)})`)
+            console.log(`   Strategy: Diversify into other assets instead of averaging up`)
+            return {
+              success: false,
+              reason: `Already own ${symbol}. Diversifying into other assets to reduce risk.`
+            }
+          } else {
+            // New behavior: allow position rotation - check if we should add or replace
+            const unrealizedPLPercent = parseFloat(existingPosition.unrealized_plpc || '0')
+            console.log(`⚖️ Position rotation check: ${symbol} P/L=${(unrealizedPLPercent * 100).toFixed(2)}%`)
+
+            // If existing position is losing significantly, don't add more
+            if (unrealizedPLPercent < autoExecutionConfig.stopLossThreshold * 0.5) {
+              console.log(`❌ Existing position losing badly - won't average down`)
+              return {
+                success: false,
+                reason: `Existing position in ${symbol} losing ${(unrealizedPLPercent * 100).toFixed(2)}% - avoiding averaging down`
+              }
+            }
+
+            console.log(`✅ Portfolio rotation: Adding to ${symbol} position (managed risk)`)
+          }
         }
       }
     } catch (error) {
@@ -497,7 +613,30 @@ function startBotActivitySimulation() {
     if (!isSimulatingActivity) return
 
     try {
-      // Check if market is open
+      // STEP 1: Check portfolio rebalancing first (sell losers, take profits)
+      if (autoExecutionConfig.enablePortfolioRotation) {
+        const rebalanceCheck = await checkPortfolioRebalancing()
+
+        if (rebalanceCheck.shouldRebalance) {
+          console.log(`🔄 Portfolio rebalancing needed: ${rebalanceCheck.positionsToSell.length} positions to sell`)
+
+          for (const symbolToSell of rebalanceCheck.positionsToSell) {
+            try {
+              const sellResult = await executeOrder(symbolToSell, 95, 'SELL') // High confidence for rebalancing
+              if (sellResult.success) {
+                console.log(`✅ Rebalancing: Sold ${symbolToSell}`)
+              }
+            } catch (error) {
+              console.error(`❌ Failed to sell ${symbolToSell} during rebalancing:`, error)
+            }
+          }
+
+          // Skip new buy signal if we just rebalanced
+          return
+        }
+      }
+
+      // STEP 2: Check if market is open
       const now = new Date()
       const etTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }))
       const hour = etTime.getHours()

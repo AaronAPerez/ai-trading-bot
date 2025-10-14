@@ -823,6 +823,69 @@ function startBotLogic(sessionId: string, config: any) {
     }
 
     try {
+      // 0. PORTFOLIO REBALANCING: Check if we should sell positions first
+      try {
+        const account = await alpacaClient.getAccount()
+        const positions = await alpacaClient.getPositions()
+
+        const cash = parseFloat(account.cash || '0')
+        const equity = parseFloat(account.equity || '0')
+        const cashPercent = equity > 0 ? cash / equity : 0
+
+        console.log(`💼 Portfolio: ${positions.length} positions, Cash=${(cashPercent * 100).toFixed(1)}% of equity`)
+
+        // Sell positions when cash is low OR to take profits/stop losses
+        const positionsToSell: string[] = []
+
+        // Check each position for exit conditions
+        for (const pos of positions) {
+          const unrealizedPLPercent = parseFloat(pos.unrealized_plpc || '0')
+
+          // Take profit at 10% gain
+          if (unrealizedPLPercent > 0.10) {
+            console.log(`🟢 Take profit: ${pos.symbol} up ${(unrealizedPLPercent * 100).toFixed(2)}%`)
+            positionsToSell.push(pos.symbol)
+          }
+
+          // Stop loss at 5% loss
+          else if (unrealizedPLPercent < -0.05) {
+            console.log(`🔴 Stop loss: ${pos.symbol} down ${(unrealizedPLPercent * 100).toFixed(2)}%`)
+            positionsToSell.push(pos.symbol)
+          }
+
+          // If cash is low (<10%), sell worst position to free up capital
+          else if (cashPercent < 0.10 && positions.length > 0) {
+            const worstPos = positions.reduce((worst, curr) =>
+              parseFloat(curr.unrealized_plpc || '0') < parseFloat(worst.unrealized_plpc || '0') ? curr : worst
+            )
+            if (worstPos.symbol === pos.symbol) {
+              console.log(`💰 Low cash: Selling worst performer ${pos.symbol} to free capital`)
+              positionsToSell.push(pos.symbol)
+            }
+          }
+        }
+
+        // Execute sells
+        if (positionsToSell.length > 0) {
+          console.log(`🔄 Rebalancing: Selling ${positionsToSell.length} positions`)
+          for (const symbolToSell of positionsToSell) {
+            try {
+              await executeTradeViaAlpaca(userId, symbolToSell, 'SELL', 0.95, sessionId)
+            } catch (sellError) {
+              console.error(`❌ Failed to sell ${symbolToSell}:`, sellError)
+            }
+          }
+
+          // Skip new buys this cycle to let sells settle
+          console.log(`⏭️ Skipping new buys this cycle - letting sells settle`)
+          return
+        }
+
+      } catch (rebalanceError) {
+        console.warn('⚠️ Portfolio rebalancing check failed:', rebalanceError)
+        // Continue with normal trading even if rebalancing fails
+      }
+
       // 1. AI Market Analysis - Fetch ALL available assets from Alpaca
       const marketOpen = isMarketHours()
 

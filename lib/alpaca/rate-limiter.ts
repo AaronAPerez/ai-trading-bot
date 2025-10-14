@@ -239,11 +239,11 @@ export class AlpacaRateLimiter {
   }
 
   /**
-   * Check if cached response is still valid (within 2 seconds)
+   * Check if cached response is still valid (within 10 seconds)
    */
   private getCachedResponse<T>(cacheKey: string): T | null {
     const cached = this.requestCache.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < 2000) {
+    if (cached && Date.now() - cached.timestamp < 10000) {
       return cached.data
     }
     return null
@@ -260,7 +260,7 @@ export class AlpacaRateLimiter {
   ): Promise<T> {
     const cacheKey = this.getCacheKey(endpoint, params)
 
-    // Check cache first (prevents duplicate API calls within 2 seconds)
+    // Check cache first (prevents duplicate API calls within 10 seconds)
     const cached = this.getCachedResponse<T>(cacheKey)
     if (cached !== null) {
       console.log(`[Cache] Using cached response for ${cacheKey}`)
@@ -288,7 +288,7 @@ export class AlpacaRateLimiter {
         if (this.requestCache.size > 100) {
           const now = Date.now()
           for (const [key, value] of this.requestCache.entries()) {
-            if (now - value.timestamp > 2000) {
+            if (now - value.timestamp > 10000) {
               this.requestCache.delete(key)
             }
           }

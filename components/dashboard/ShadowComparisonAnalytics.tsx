@@ -14,7 +14,9 @@ export default function ShadowComparisonAnalytics({ portfolioId }: ShadowCompari
       const res = await fetch(`/api/shadow-trading?action=compare&portfolioId=${portfolioId}`)
       return res.json()
     },
-    refetchInterval: 10000
+    refetchInterval: 60000, // 1 minute (reduced from 10s)
+    retry: 1,
+    staleTime: 30000
   })
 
   if (isLoading) {

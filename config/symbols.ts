@@ -607,9 +607,14 @@ export function getSymbolsByCategory(category: string): string[] {
 
 /**
  * Detect asset type from symbol format
+ * Supports multiple formats: BTC/USD, BTC-USD, BTCUSD, AVAXUSD, etc.
  */
 export function detectAssetType(symbol: string): 'stock' | 'crypto' {
-  return symbol.includes('-USD') || symbol.includes('-') ? 'crypto' : 'stock'
+  // Check for common crypto patterns:
+  // 1. Contains slash: BTC/USD, ETH/USD
+  // 2. Contains hyphen with USD: BTC-USD, ETH-USD
+  // 3. Ends with USD/USDT/USDC (no separator): BTCUSD, AVAXUSD, LINKUSD
+  return symbol.includes('/') || symbol.includes('-USD') || /(USD|USDT|USDC)$/i.test(symbol) ? 'crypto' : 'stock'
 }
 
 /**

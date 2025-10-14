@@ -18,6 +18,7 @@ import { useAILearningManager } from "@/hooks/useAILearningManager"
 import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
 import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
 import LiveTradesDisplay from "../trading/LiveTradesDisplay"
+import LiveTradingProcess from "../trading/LiveTradingProcess"
 import MarketStatusDisplay from "../market/MarketStatusDisplay"
 import { useTradeWebSocketListener } from "@/hooks/useTradeWebSocketListener"
 
@@ -138,8 +139,8 @@ export default function AITradingDashboard() {
 
 
   // Only poll Alpaca data when AI bot is active to reduce unnecessary API calls
-  const account = useAlpacaAccount(persistentBotState.isRunning ? 5000 : undefined)
-  const positions = useAlpacaPositions(persistentBotState.isRunning ? 15000 : undefined)
+  const account = useAlpacaAccount(persistentBotState.isRunning ? 15000 : undefined)
+  const positions = useAlpacaPositions(persistentBotState.isRunning ? 30000 : undefined)
 
   const aiActivity = useAIBotActivity({
     refreshInterval: persistentBotState.isRunning ? 5000 : 30000, // Slower when inactive
@@ -210,11 +211,23 @@ export default function AITradingDashboard() {
   const { data: orders, isLoading } = useQuery({
     queryKey: ['alpacaOrders'],
     queryFn: async () => {
-      const res = await fetch('/api/alpaca/orders?limit=20')
-      const json = await res.json()
-      return json.orders
+      try {
+        const res = await fetch('/api/alpaca/orders?limit=20')
+        if (!res.ok) {
+          console.warn('Failed to fetch orders:', res.status)
+          return []
+        }
+        const json = await res.json()
+        return json.orders || []
+      } catch (error) {
+        console.error('Error fetching orders:', error)
+        return []
+      }
     },
-    refetchInterval: persistentBotState.isRunning ? 30000 : false
+    refetchInterval: persistentBotState.isRunning ? 60000 : false,
+    retry: 1,
+    retryDelay: 5000,
+    staleTime: 10000
   })
 
 
@@ -568,10 +581,18 @@ export default function AITradingDashboard() {
         </div>
       </div>
 
-      {/* Portfolio Header */}
+      {/* Portfolio Header with Live Orders Feed */}
       <div className="bg-gray-900/40 rounded-lg p-6 border border-gray-700/50">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white">Your Portfolio</h2>
+          <div className="flex items-center space-x-3">
+            <h2 className="text-xl font-bold text-white">Your Portfolio</h2>
+            {persistentBotState.isRunning && (
+              <div className="flex items-center space-x-2 bg-green-900/30 px-3 py-1 rounded-full border border-green-500/30">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="text-xs text-green-400 font-medium">Live Trading</span>
+              </div>
+            )}
+          </div>
           <div className="flex items-center space-x-2">
             <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">1D</button>
             <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">1M</button>
@@ -652,7 +673,7 @@ export default function AITradingDashboard() {
             )}
           </div>
         </div>
-        <div>
+        {/* <div>
           <h4 className="text-sm text-gray-400 mb-1">Invested Amount</h4>
           <div className="text-lg font-bold text-white">
             {account.isLoading ? (
@@ -661,7 +682,7 @@ export default function AITradingDashboard() {
               `$${parseFloat(account.data?.buying_power || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             )}
           </div>
-        </div>
+        </div> */}
 
         <div>
           <h4 className="text-sm text-gray-400 mb-1">Invested Amount</h4>
@@ -696,6 +717,105 @@ export default function AITradingDashboard() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Live Orders Feed - Compact View */}
+      <div className="mt-6 border-t border-gray-700 pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Recent Orders</h3>
+              <p className="text-xs text-gray-400">Live order execution feed</p>
+            </div>
+          </div>
+          {persistentBotState.isRunning && (
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+              <span className="text-xs text-blue-400">Live</span>
+            </div>
+          )}
+        </div>
+
+        {/* Compact Live Orders Display */}
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-400 border-t-transparent"></div>
+            </div>
+          ) : !orders || orders.length === 0 ? (
+            <div className="text-center py-6 text-gray-400 text-sm">
+              <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p>No recent orders</p>
+              <p className="text-xs text-gray-500 mt-1">Orders will appear here when bot executes trades</p>
+            </div>
+          ) : (
+            orders.slice(0, 5).map((order: any) => (
+              <div
+                key={order.id}
+                className="flex items-center justify-between p-3 bg-gray-800/40 rounded-lg border border-gray-700/50 hover:border-gray-600/50 transition-all"
+              >
+                <div className="flex items-center space-x-3 flex-1">
+                  <div className={`w-2 h-2 rounded-full ${
+                    order.status === 'filled' ? 'bg-green-400' :
+                    order.status === 'canceled' ? 'bg-red-400' :
+                    'bg-yellow-400 animate-pulse'
+                  }`}></div>
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-semibold text-white">{order.symbol}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                        order.side === 'buy'
+                          ? 'bg-green-900/30 text-green-400'
+                          : 'bg-red-900/30 text-red-400'
+                      }`}>
+                        {order.side?.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {parseFloat(order.filled_qty || order.qty || '0').toFixed(4)} @ ${parseFloat(order.filled_avg_price || '0').toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`text-xs font-medium ${
+                    order.status === 'filled' ? 'text-green-400' :
+                    order.status === 'canceled' ? 'text-red-400' :
+                    'text-yellow-400'
+                  }`}>
+                    {order.status?.toUpperCase()}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(order.updated_at || order.created_at).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {orders && orders.length > 5 && (
+          <div className="mt-3 text-center">
+            <button
+              onClick={() => {
+                // Scroll to full orders table
+                document.querySelector('[aria-label="Recent orders section"]')?.scrollIntoView({ behavior: 'smooth' })
+              }}
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              View all {orders.length} orders →
+            </button>
+          </div>
+        )}
       </div>
     </div>
 {/* Advanced Charts Section */ }
@@ -739,7 +859,10 @@ export default function AITradingDashboard() {
   </div>
 
   {/* Recent Orders Table */ }
-  <div className="bg-gradient-to-r from-gray-800/50 to-purple-900/30 rounded-xl p-6 border border-gray-700/50">
+  <div
+    className="bg-gradient-to-r from-gray-800/50 to-purple-900/30 rounded-xl p-6 border border-gray-700/50"
+    aria-label="Recent orders section"
+  >
     <RecentOrdersTable
       refreshInterval={persistentBotState.isRunning ? 10000 : 30000}
       initialLimit={20}
@@ -764,7 +887,33 @@ export default function AITradingDashboard() {
               <EngineActivityPanel />
             </section>
 
-  {/* 🔥 MAIN FOCUS: Live Trading Activity - Full Width Showcase */ }
+  {/* 🔥 MAIN SHOWCASE: Live Buy/Sell Process Visualization */ }
+  <div className="bg-gradient-to-r from-purple-900/30 via-blue-900/30 to-green-900/30 rounded-xl p-6 border-2 border-blue-500/40 shadow-2xl">
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center space-x-3">
+        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center animate-pulse">
+          <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-white">Live Buy/Sell Process</h2>
+          <p className="text-sm text-gray-400">Real-time trade execution with step-by-step visualization</p>
+        </div>
+      </div>
+      {persistentBotState.isRunning && (
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 bg-blue-900/40 px-4 py-2 rounded-lg border border-blue-500/40">
+            <div className="w-3 h-3 bg-blue-400 rounded-full animate-ping"></div>
+            <span className="text-sm text-blue-300 font-semibold">AI Trading Live</span>
+          </div>
+        </div>
+      )}
+    </div>
+    <LiveTradingProcess />
+  </div>
+
+  {/* Live Trading Activity - Compact View */ }
   <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-2xl">
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center space-x-3">
@@ -774,8 +923,8 @@ export default function AITradingDashboard() {
           </svg>
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-white">Live Trading Activity</h2>
-          <p className="text-sm text-gray-400">Real-time orders & AI activity from Alpaca API</p>
+          <h2 className="text-2xl font-bold text-white">Order History</h2>
+          <p className="text-sm text-gray-400">Recent orders from Alpaca API</p>
         </div>
       </div>
       {persistentBotState.isRunning && (
