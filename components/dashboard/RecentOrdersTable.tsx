@@ -77,10 +77,15 @@ export default function RecentOrdersTable({ refreshInterval = 30000, initialLimi
     queryKey: ['alpacaOrders'],
     queryFn: async () => {
       const res = await fetch('/api/alpaca/orders?limit=100&status=all')
+      if (!res.ok) {
+        throw new Error('Failed to fetch orders')
+      }
       const json = await res.json()
-      return json.orders || []
+      // API returns data in json.data, not json.orders
+      return Array.isArray(json.data) ? json.data : []
     },
-    refetchInterval: refreshInterval
+    refetchInterval: refreshInterval,
+    staleTime: 2000
   })
 
   if (error) {

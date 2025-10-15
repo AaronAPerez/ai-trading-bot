@@ -30,8 +30,7 @@ import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
 import LiveAIActivity from './LiveAIActivity'
 import { useQuery } from '@tanstack/react-query'
 import PortfolioPositionsTable from './PortfolioPositionsTable'
-import MultiStrategyComparison from './MultiStrategyComparison'
-import StrategyAutoSwitcher from './StrategyAutoSwitcher'
+import StrategyPerformanceDashboard from './StrategyPerformanceDashboard'
 import EngineActivityPanel from './EngineActivityPanel'
 import HedgeFundAnalyticsPanel from './HedgeFundAnalyticsPanel'
 import StrategyGuidancePanel from './StrategyGuidancePanel'
@@ -212,22 +211,23 @@ export default function AITradingDashboard() {
     queryKey: ['alpacaOrders'],
     queryFn: async () => {
       try {
-        const res = await fetch('/api/alpaca/orders?limit=20')
+        const res = await fetch('/api/alpaca/orders?limit=20&status=all')
         if (!res.ok) {
           console.warn('Failed to fetch orders:', res.status)
           return []
         }
         const json = await res.json()
-        return json.orders || []
+        // API returns data in json.data, not json.orders
+        return Array.isArray(json.data) ? json.data : []
       } catch (error) {
         console.error('Error fetching orders:', error)
         return []
       }
     },
-    refetchInterval: persistentBotState.isRunning ? 60000 : false,
+    refetchInterval: persistentBotState.isRunning ? 10000 : false, // Faster refresh - 10s instead of 60s
     retry: 1,
     retryDelay: 5000,
-    staleTime: 10000
+    staleTime: 5000 // Shorter stale time for more real-time updates
   })
 
 
@@ -720,6 +720,15 @@ export default function AITradingDashboard() {
       </div>
     </div>
 
+      {/* Live Portfolio Balance */ }
+      <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
+        <LiveBalanceDisplay
+          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+          showChangeIndicators={true}
+        />
+
+      </div>
+
     {/* 🎯 MAIN SHOWCASE: Portfolio Positions Table */}
     <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-xl">
       <PortfolioPositionsTable
@@ -849,7 +858,7 @@ export default function AITradingDashboard() {
     <RiskMetricsChart height={400} showPositionRisks={true} />
 
     {/* Price Charts for Top Positions */}
-    {positions.data && positions.data.length > 0 && (
+    {/* {positions.data && positions.data.length > 0 && (
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {(positions.data as AlpacaPosition[]).slice(0, 4).map((position) => (
           <PriceChart
@@ -862,7 +871,7 @@ export default function AITradingDashboard() {
           />
         ))}
       </div>
-    )}
+    )} */}
   </div>
   {/* 📊 Full Recent Orders Table */}
   <div
@@ -876,25 +885,25 @@ export default function AITradingDashboard() {
   </div>
 
   {/* Live Portfolio Balance */ }
-      <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
+      {/* <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
         <LiveBalanceDisplay
           refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
           showChangeIndicators={true}
         />
 
-      </div>
+      </div> */}
 
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <HedgeFundAnalyticsPanel />
               <StrategyGuidancePanel />
-            </section>
+            </section> */}
       
-            <section>
+            {/* <section>
               <EngineActivityPanel />
-            </section>
+            </section> */}
 
   {/* 🔥 MAIN SHOWCASE: Live Buy/Sell Process Visualization */ }
-  <div className="bg-gradient-to-r from-purple-900/30 via-blue-900/30 to-green-900/30 rounded-xl p-6 border-2 border-blue-500/40 shadow-2xl">
+  {/* <div className="bg-gradient-to-r from-purple-900/30 via-blue-900/30 to-green-900/30 rounded-xl p-6 border-2 border-blue-500/40 shadow-2xl">
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center space-x-3">
         <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center animate-pulse">
@@ -917,10 +926,10 @@ export default function AITradingDashboard() {
       )}
     </div>
     <LiveTradingProcess />
-  </div>
+  </div> */}
 
   {/* Live Trading Activity - Compact View */ }
-  <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-2xl">
+  {/* <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-2xl">
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center space-x-3">
         <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
@@ -941,14 +950,14 @@ export default function AITradingDashboard() {
       )}
     </div>
     <LiveTradesDisplay />
-  </div>
+  </div> */}
 
 
 
-  {/* AI Progress and Learning Overview */ }
-  <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-2 gap-6">
+  {/* {/* AI Progress and Learning Overview */ }
+  {/* <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-2 gap-6"> */}
     {/* AI Learning Progress - Real-time Data */}
-    <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
+      {/*  <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 rounded-xl p-6 border border-purple-700/50">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
           <Brain className="w-5 h-5 text-purple-400" />
@@ -1039,13 +1048,13 @@ export default function AITradingDashboard() {
           </div>
         </div>
       </div>
-    </div>
+    </div> */}
 
 
 
 
     {/* AI Performance Metrics - Real-time Alpaca Data */}
-    <div className="bg-gradient-to-br from-green-900/50 to-emerald-900/50 rounded-xl p-6 border border-green-700/50">
+    {/* <div className="bg-gradient-to-br from-green-900/50 to-emerald-900/50 rounded-xl p-6 border border-green-700/50">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
           <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1082,11 +1091,11 @@ export default function AITradingDashboard() {
 
 
       </div>
-    </div>
+    </div> */}
 
     {/* Live Activity Feed - Real-time Console Capture */}
-    <LiveAIActivity />
-  </div>
+    {/* <LiveAIActivity /> */}
+  {/* </div> */}
 
 
 
@@ -1121,23 +1130,33 @@ export default function AITradingDashboard() {
     />
   </div>
 
-  {/* Strategy Auto-Switcher */ }
-  <StrategyAutoSwitcher
+  {/* 🎯 AI-Powered Strategy Performance Dashboard */ }
+  <StrategyPerformanceDashboard
     botIsActive={persistentBotState.isRunning}
-    onStrategyChange={(strategyId) => {
-      console.log(`🔄 Strategy changed to: ${strategyId}`)
+    autoSwitch={true}
+    onStrategyChange={async (strategyId, inverseMode) => {
+      console.log(`🔄 Auto-switching to strategy: ${strategyId}, Inverse: ${inverseMode}`)
+
+      // Toggle inverse mode via bot-control API
+      try {
+        const response = await fetch('/api/ai/bot-control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'toggle-inverse' })
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log(`✅ Inverse mode ${result.data.inverseMode ? 'enabled' : 'disabled'}`)
+        }
+      } catch (error) {
+        console.error('Failed to toggle inverse mode:', error)
+      }
     }}
   />
 
-  {/* Multi-Strategy Performance Comparison */ }
-  <MultiStrategyComparison
-    symbol=""
-    autoAnalyze={persistentBotState.isRunning}
-    refreshInterval={30000}
-  />
-
   {/* Market Data */ }
-  <div className="bg-gradient-to-r from-gray-800/40 to-blue-900/20 rounded-xl p-6 border border-gray-700/50">
+  {/* <div className="bg-gradient-to-r from-gray-800/40 to-blue-900/20 rounded-xl p-6 border border-gray-700/50">
     <div className="flex items-center space-x-2 mb-4">
       <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -1145,7 +1164,7 @@ export default function AITradingDashboard() {
       <h3 className="text-lg font-semibold text-white">Market Overview</h3>
     </div>
     <MarketStatusDisplay />
-  </div>
+  </div> */}
 
 
 
