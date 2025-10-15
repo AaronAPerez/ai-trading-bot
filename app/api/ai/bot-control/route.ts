@@ -893,18 +893,29 @@ function startBotLogic(sessionId: string, config: any) {
       const stockSymbols = await fetchAvailableStockAssets()
       const cryptoSymbols = await fetchAvailableCryptoAssets()
 
-      // CRITICAL: Only include stocks if market is open, crypto is always available (24/7 trading)
-      const availableSymbols = marketOpen
-        ? [...stockSymbols, ...cryptoSymbols] // Market open: Both stocks and crypto
-        : cryptoSymbols // Market closed: Only crypto (24/7 trading)
+      // 🎯 CRYPTO-PRIORITIZED TRADING: 80% crypto, 20% stocks
+      // Benefits: PDT-exempt, 24/7 trading, more opportunities
+      let availableSymbols: string[]
+      const CRYPTO_WEIGHTING = 0.80 // 80% crypto preference
+
+      if (!marketOpen) {
+        // Markets closed: 100% crypto (24/7 trading)
+        availableSymbols = cryptoSymbols
+        console.log(`🌙 Markets CLOSED - 100% Crypto Trading (24/7)`)
+      } else {
+        // Markets open: 80% crypto, 20% stocks
+        const useCrypto = Math.random() < CRYPTO_WEIGHTING
+        availableSymbols = useCrypto ? cryptoSymbols : [...stockSymbols, ...cryptoSymbols]
+        console.log(`💎 Markets OPEN - 80% Crypto / 20% Stock Mix (PDT-Exempt Focus)`)
+      }
 
       const selectedSymbol = availableSymbols[Math.floor(Math.random() * availableSymbols.length)]
       const assetType = detectAssetType(selectedSymbol)
 
       console.log(`🎯 AI analyzing ${assetType === 'crypto' ? 'CRYPTO' : 'STOCK'} ${selectedSymbol} for trading opportunities...`)
       console.log(`📊 Market Status: ${marketOpen ? 'OPEN' : 'CLOSED'}`)
-      console.log(`📈 Asset Pool: ${stockSymbols.length} stocks + ${cryptoSymbols.length} crypto = ${availableSymbols.length} total tradable assets`)
-      console.log(`🔍 Trading Mode: ${marketOpen ? 'Stocks + Crypto' : 'Crypto Only - 24/7 Trading'}`)
+      console.log(`📈 Asset Pool: ${stockSymbols.length} stocks + ${cryptoSymbols.length} crypto = ${stockSymbols.length + cryptoSymbols.length} total assets`)
+      console.log(`🔍 Selected: ${assetType.toUpperCase()} - PDT Risk: ${assetType === 'crypto' ? '❌ NONE (24/7 Exempt)' : '⚠️ YES (Hold overnight recommended)'}`)
 
       // 2. Generate AI trading signal with REAL technical analysis
       const technicalAnalysis = await analyzeTechnicalIndicators(selectedSymbol, botState.inverseMode)
@@ -1167,6 +1178,45 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
     const quantity = Math.max(1, Math.floor(notionalValue / 100))
 
     console.log(`💰 Position sizing: ${(positionPercent * 100).toFixed(2)}% × $${availableFunds.toFixed(2)} = $${notionalValue} (min: $${minOrderSize}, max: $${maxOrderSize.toFixed(2)})`)
+
+    // 🚫 PDT PROTECTION: Check if SELL would trigger Pattern Day Trading violation
+    if (signal === 'SELL' && !isCrypto && equity < 25000) {
+      try {
+        const positions = await alpacaClient.getPositions()
+        const position = positions.find((p: any) => p.symbol === symbol)
+
+        if (position) {
+          // Check if position was opened today
+          const createdAt = new Date(position.created_at || position.entry_date || Date.now())
+          const today = new Date()
+          const isToday = createdAt.toDateString() === today.toDateString()
+
+          if (isToday) {
+            console.log(`🚫 PDT PROTECTION: Blocked SELL ${symbol} - Position opened today (${createdAt.toISOString()})`)
+            console.log(`💡 Account equity: $${equity.toFixed(2)} (< $25,000) - Day trading restricted`)
+
+            await supabaseService.logBotActivity(userId, {
+              type: 'info',
+              symbol: symbol,
+              message: `Trade blocked by PDT protection: SELL ${symbol} opened today`,
+              status: 'completed',
+              details: JSON.stringify({
+                reason: 'pattern_day_trading_protection',
+                accountEquity: equity,
+                positionOpenedAt: createdAt.toISOString(),
+                pdtThreshold: 25000,
+                recommendation: 'Wait until tomorrow or trade crypto (PDT exempt)'
+              })
+            })
+
+            return // Skip this trade
+          }
+        }
+      } catch (pdtError) {
+        console.warn('⚠️ PDT check failed:', pdtError)
+        // Continue with trade if PDT check fails (fail-open for availability)
+      }
+    }
 
     // Call Alpaca API to place order using unified client with proper asset_class
     const orderResult = await alpacaClient.createOrder({

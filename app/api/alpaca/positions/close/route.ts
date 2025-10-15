@@ -8,8 +8,11 @@ import { alpacaClient } from '@/lib/alpaca/unified-client'
  */
 
 export async function POST(request: NextRequest) {
+  let symbol = 'unknown'
+
   try {
-    const { symbol } = await request.json()
+    const body = await request.json()
+    symbol = body.symbol
 
     if (!symbol) {
       return NextResponse.json(
@@ -35,23 +38,43 @@ export async function POST(request: NextRequest) {
     console.error(`❌ Error closing position for ${symbol}:`, {
       message: error.message,
       statusCode: error.statusCode,
-      stack: error.stack
+      stack: error.stack,
+      fullError: JSON.stringify(error, null, 2)
     })
 
     // Provide more helpful error messages
     let userMessage = error.message || 'Failed to close position'
+    let technicalDetails = error.message
 
     if (error.statusCode === 403) {
-      userMessage = 'Unable to close position. This may be a paper trading account limitation or the position may not exist.'
+      // Check for specific 403 error types
+      if (error.message?.includes('pattern day trading') || error.message?.includes('PDT')) {
+        userMessage = `Cannot close ${symbol} - Pattern Day Trading (PDT) protection`
+        technicalDetails = `Alpaca blocks same-day trades (day trading) when account equity < $25,000.\n\n` +
+          `Your account: $${error.accountEquity || '< 25,000'}\n` +
+          `Solution: Wait until tomorrow to close this position, or disable PDT protection in Alpaca settings.`
+      } else if (error.message?.includes('fractional')) {
+        userMessage = `Cannot close ${symbol} - position contains fractional shares`
+        technicalDetails = `Alpaca API doesn't support closing fractional shares. Close manually in dashboard.`
+      } else if (error.message?.includes('not found')) {
+        userMessage = `Position ${symbol} not found or already closed`
+      } else {
+        userMessage = `Alpaca denied closing ${symbol}: ${error.message}`
+        technicalDetails = `API Error Code: ${error.code || 'unknown'}\nTry closing manually in Alpaca dashboard.`
+      }
     } else if (error.statusCode === 404) {
       userMessage = `Position for ${symbol} not found. It may have already been closed.`
+    } else if (error.statusCode === 422) {
+      userMessage = `Invalid request to close ${symbol}: ${error.message}`
     }
 
     return NextResponse.json(
       {
         success: false,
         error: userMessage,
-        details: error.message
+        details: technicalDetails,
+        alpacaError: error.message,
+        statusCode: error.statusCode
       },
       { status: error.statusCode || 500 }
     )

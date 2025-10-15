@@ -89,7 +89,26 @@ export class UnifiedAlpacaClient {
           )
         }
 
-        return response.json()
+        // Handle empty responses (e.g., 204 No Content from DELETE requests)
+        const contentLength = response.headers.get('content-length')
+        const contentType = response.headers.get('content-type')
+
+        // If response has no content or is explicitly 204, return empty object
+        if (
+          response.status === 204 ||
+          contentLength === '0' ||
+          (!contentType?.includes('application/json') && !response.body)
+        ) {
+          return {} as T
+        }
+
+        // Try to parse JSON, but handle empty responses gracefully
+        const text = await response.text()
+        if (!text || text.trim() === '') {
+          return {} as T
+        }
+
+        return JSON.parse(text) as T
       },
       priority,
       params
@@ -239,11 +258,25 @@ export class UnifiedAlpacaClient {
     // URL encode symbol to handle special characters like / in crypto symbols
     const encodedSymbol = encodeURIComponent(symbol)
     const queryString = params ? new URLSearchParams(params as any).toString() : ''
-    return this.request(
-      `/v2/positions/${encodedSymbol}${queryString ? `?${queryString}` : ''}`,
-      { method: 'DELETE' },
-      'high'
-    )
+
+    console.log(`📤 Alpaca API: Closing position for ${symbol} (encoded: ${encodedSymbol})`)
+
+    try {
+      const result = await this.request(
+        `/v2/positions/${encodedSymbol}${queryString ? `?${queryString}` : ''}`,
+        { method: 'DELETE' },
+        'high'
+      )
+      console.log(`✅ Alpaca API: Successfully closed ${symbol}`, result)
+      return result
+    } catch (error: any) {
+      console.error(`❌ Alpaca API: Failed to close ${symbol}`, {
+        statusCode: error.statusCode,
+        message: error.message,
+        rawError: error
+      })
+      throw error
+    }
   }
 
   /**

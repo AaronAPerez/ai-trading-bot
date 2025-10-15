@@ -65,7 +65,18 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
         body: JSON.stringify({ symbol })
       })
 
-      const result = await response.json()
+      // Try to parse JSON, but handle empty responses
+      let result: any = {}
+      const text = await response.text()
+
+      if (text) {
+        try {
+          result = JSON.parse(text)
+        } catch (e) {
+          console.error('Failed to parse response:', text)
+          result = { error: 'Invalid server response' }
+        }
+      }
 
       if (!response.ok) {
         throw new Error(result.error || result.details || 'Failed to close position')
@@ -77,14 +88,26 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
       console.error('Error closing position:', error)
       const errorMessage = error.message || 'Failed to close position'
 
-      // Show user-friendly error
-      if (errorMessage.includes('403') || errorMessage.includes('paper trading')) {
-        alert(`⚠️ Cannot close ${symbol}\n\nAlpaca paper trading may not allow closing positions via API. Try closing it directly in the Alpaca dashboard.`)
-      } else if (errorMessage.includes('404')) {
+      // Show user-friendly error with detailed information
+      if (errorMessage.includes('pattern day trading') || errorMessage.includes('PDT')) {
+        alert(`🚫 Pattern Day Trading Protection\n\n` +
+          `Cannot close ${symbol} today - you opened this position today.\n\n` +
+          `📊 Alpaca enforces SEC rules:\n` +
+          `• Accounts under $25,000 are limited in day trading\n` +
+          `• Same-day buy & sell = day trade\n\n` +
+          `✅ Solutions:\n` +
+          `1. Wait until tomorrow to close (recommended)\n` +
+          `2. Close manually in Alpaca dashboard\n` +
+          `3. Increase account to $25,000+`)
+      } else if (errorMessage.includes('fractional')) {
+        alert(`⚠️ Cannot close ${symbol}\n\nThis position contains fractional shares, which Alpaca's API doesn't support closing.\n\n➡️ Close it manually at: https://app.alpaca.markets/paper/dashboard/overview`)
+      } else if (errorMessage.includes('403') || errorMessage.includes('denied')) {
+        alert(`⚠️ Alpaca API denied the request\n\nError: ${errorMessage}\n\n➡️ Close manually at: https://app.alpaca.markets/paper/dashboard/overview`)
+      } else if (errorMessage.includes('404') || errorMessage.includes('not found')) {
         alert(`⚠️ Position for ${symbol} not found. It may have already been closed.`)
         await refetch() // Refresh to update UI
       } else {
-        alert(`❌ Failed to close ${symbol}: ${errorMessage}`)
+        alert(`❌ Failed to close ${symbol}\n\n${errorMessage}`)
       }
     } finally {
       setLiquidating(null)

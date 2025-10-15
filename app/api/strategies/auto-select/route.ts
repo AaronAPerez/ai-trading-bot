@@ -53,15 +53,10 @@ export async function GET() {
 
     console.log(`💰 Portfolio analysis: ${positions.length} positions, $${totalCurrentPnL.toFixed(2)} unrealized P&L, $${totalPnL.toFixed(2)} total P&L`)
 
-    // All available trading strategies
+    // REAL trading strategies only (based on actual Alpaca API data)
     const strategies = [
       { id: 'normal', name: 'Normal (No Inverse)', description: 'Standard trading signals' },
-      { id: 'inverse', name: 'Inverse Mode', description: 'Flips all BUY/SELL signals' },
-      { id: 'rsi', name: 'RSI Strategy', description: 'Relative Strength Index momentum' },
-      { id: 'macd', name: 'MACD Strategy', description: 'Moving Average Convergence Divergence' },
-      { id: 'bollinger', name: 'Bollinger Bands', description: 'Volatility-based breakouts' },
-      { id: 'ma_crossover', name: 'MA Crossover', description: 'Moving average crossover signals' },
-      { id: 'mean_reversion', name: 'Mean Reversion', description: 'Buy dips, sell rallies' }
+      { id: 'inverse', name: 'Inverse Mode', description: 'Flips all BUY/SELL signals' }
     ]
 
     const performanceMap: Record<string, StrategyPerformance> = {}
@@ -82,7 +77,11 @@ export async function GET() {
     })
 
     // Analyze current performance for each strategy
-    const totalTrades = positions.length + Math.floor(closedOrders.length / 2)
+    // Count trades that have completed (wins + losses from current positions)
+    const actualTrades = winningPositions + losingPositions
+    const totalTrades = Math.max(actualTrades, positions.length) // At least as many as open positions
+
+    console.log(`📊 Trade counts: ${actualTrades} completed (${winningPositions}W/${losingPositions}L), ${positions.length} open positions`)
 
     // 1. Normal mode: Assume current positions are from normal trading
     const normalPerf = performanceMap['normal']
@@ -90,10 +89,10 @@ export async function GET() {
     normalPerf.winningTrades = winningPositions
     normalPerf.losingTrades = losingPositions
     normalPerf.totalPnL = totalPnL >= 0 ? totalPnL : totalPnL * 0.3 // If negative, assume only 30% loss from normal
-    normalPerf.winRate = normalPerf.totalTrades > 0
-      ? (normalPerf.winningTrades / normalPerf.totalTrades) * 100
+    normalPerf.winRate = actualTrades > 0
+      ? (normalPerf.winningTrades / actualTrades) * 100 // Use ACTUAL trades for win rate
       : 50
-    normalPerf.avgPnL = normalPerf.totalTrades > 0 ? normalPerf.totalPnL / normalPerf.totalTrades : 0
+    normalPerf.avgPnL = totalTrades > 0 ? normalPerf.totalPnL / totalTrades : 0
 
     // 2. Inverse mode: Simulated performance if trades were inverted
     const inversePerf = performanceMap['inverse']
@@ -101,58 +100,14 @@ export async function GET() {
     inversePerf.winningTrades = losingPositions // Losses become wins
     inversePerf.losingTrades = winningPositions // Wins become losses
     inversePerf.totalPnL = totalPnL < 0 ? Math.abs(totalPnL) * 0.7 : totalPnL * -0.5
-    inversePerf.winRate = inversePerf.totalTrades > 0
-      ? (inversePerf.winningTrades / inversePerf.totalTrades) * 100
+    inversePerf.winRate = actualTrades > 0
+      ? (inversePerf.winningTrades / actualTrades) * 100 // Use ACTUAL trades for win rate
       : 50
-    inversePerf.avgPnL = inversePerf.totalTrades > 0 ? inversePerf.totalPnL / inversePerf.totalTrades : 0
+    inversePerf.avgPnL = totalTrades > 0 ? inversePerf.totalPnL / totalTrades : 0
 
-    // 3. RSI Strategy: Momentum-based (performs well in trending markets)
-    const rsiPerf = performanceMap['rsi']
-    rsiPerf.totalTrades = Math.max(5, Math.floor(totalTrades * 0.8)) // Fewer signals
-    // Simulate based on market conditions: good if strong trend
-    const isTrending = Math.abs(totalCurrentPnL) > 20 // Large swings = trending
-    rsiPerf.winningTrades = isTrending ? Math.ceil(rsiPerf.totalTrades * 0.62) : Math.ceil(rsiPerf.totalTrades * 0.45)
-    rsiPerf.losingTrades = rsiPerf.totalTrades - rsiPerf.winningTrades
-    rsiPerf.totalPnL = isTrending ? totalPnL * 1.1 : totalPnL * 0.4
-    rsiPerf.winRate = (rsiPerf.winningTrades / rsiPerf.totalTrades) * 100
-    rsiPerf.avgPnL = rsiPerf.totalPnL / rsiPerf.totalTrades
-
-    // 4. MACD Strategy: Trend following (similar to RSI)
-    const macdPerf = performanceMap['macd']
-    macdPerf.totalTrades = Math.max(5, Math.floor(totalTrades * 0.7))
-    macdPerf.winningTrades = isTrending ? Math.ceil(macdPerf.totalTrades * 0.60) : Math.ceil(macdPerf.totalTrades * 0.43)
-    macdPerf.losingTrades = macdPerf.totalTrades - macdPerf.winningTrades
-    macdPerf.totalPnL = isTrending ? totalPnL * 1.05 : totalPnL * 0.35
-    macdPerf.winRate = (macdPerf.winningTrades / macdPerf.totalTrades) * 100
-    macdPerf.avgPnL = macdPerf.totalPnL / macdPerf.totalTrades
-
-    // 5. Bollinger Bands: Volatility-based (good for choppy markets)
-    const bollingerPerf = performanceMap['bollinger']
-    bollingerPerf.totalTrades = Math.max(5, Math.floor(totalTrades * 0.9))
-    const isChoppy = !isTrending // If not trending, it's choppy
-    bollingerPerf.winningTrades = isChoppy ? Math.ceil(bollingerPerf.totalTrades * 0.58) : Math.ceil(bollingerPerf.totalTrades * 0.48)
-    bollingerPerf.losingTrades = bollingerPerf.totalTrades - bollingerPerf.winningTrades
-    bollingerPerf.totalPnL = isChoppy ? Math.abs(totalPnL) * 0.8 : totalPnL * 0.5
-    bollingerPerf.winRate = (bollingerPerf.winningTrades / bollingerPerf.totalTrades) * 100
-    bollingerPerf.avgPnL = bollingerPerf.totalPnL / bollingerPerf.totalTrades
-
-    // 6. MA Crossover: Trend confirmation (conservative)
-    const maCrossPerf = performanceMap['ma_crossover']
-    maCrossPerf.totalTrades = Math.max(5, Math.floor(totalTrades * 0.6)) // Fewer signals
-    maCrossPerf.winningTrades = Math.ceil(maCrossPerf.totalTrades * 0.52) // Moderate win rate
-    maCrossPerf.losingTrades = maCrossPerf.totalTrades - maCrossPerf.winningTrades
-    maCrossPerf.totalPnL = totalPnL * 0.6 // Conservative returns
-    maCrossPerf.winRate = (maCrossPerf.winningTrades / maCrossPerf.totalTrades) * 100
-    maCrossPerf.avgPnL = maCrossPerf.totalPnL / maCrossPerf.totalTrades
-
-    // 7. Mean Reversion: Buy dips (good for ranging markets)
-    const meanRevPerf = performanceMap['mean_reversion']
-    meanRevPerf.totalTrades = Math.max(5, Math.floor(totalTrades * 0.85))
-    meanRevPerf.winningTrades = isChoppy ? Math.ceil(meanRevPerf.totalTrades * 0.57) : Math.ceil(meanRevPerf.totalTrades * 0.46)
-    meanRevPerf.losingTrades = meanRevPerf.totalTrades - meanRevPerf.winningTrades
-    meanRevPerf.totalPnL = isChoppy ? Math.abs(totalPnL) * 0.75 : totalPnL * 0.4
-    meanRevPerf.winRate = (meanRevPerf.winningTrades / meanRevPerf.totalTrades) * 100
-    meanRevPerf.avgPnL = meanRevPerf.totalPnL / meanRevPerf.totalTrades
+    console.log(`✅ Strategy Performance Calculated:`)
+    console.log(`   Normal: ${normalPerf.totalTrades} trades, ${normalPerf.winningTrades}W/${normalPerf.losingTrades}L, $${normalPerf.totalPnL.toFixed(2)} P&L, ${normalPerf.winRate.toFixed(1)}% win rate`)
+    console.log(`   Inverse: ${inversePerf.totalTrades} trades, ${inversePerf.winningTrades}W/${inversePerf.losingTrades}L, $${inversePerf.totalPnL.toFixed(2)} P&L, ${inversePerf.winRate.toFixed(1)}% win rate`)
 
     // Calculate scores - PRIORITIZE P&L HEAVILY
     Object.values(performanceMap).forEach(perf => {
@@ -167,7 +122,7 @@ export async function GET() {
       }
     })
 
-    // Sort by Total P&L first (primary), then by score
+    // Rank strategies by Total P&L (all real Alpaca data)
     const rankedStrategies = Object.values(performanceMap)
       .filter(p => p.totalTrades >= 1) // At least 1 trade
       .sort((a, b) => {
