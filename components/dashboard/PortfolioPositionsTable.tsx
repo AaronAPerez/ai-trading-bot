@@ -26,7 +26,7 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
   const [liquidating, setLiquidating] = useState<string | null>(null)
   const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set())
 
-  const { data: positionsResponse, isLoading, error, refetch } = useAlpacaPositions(refreshInterval)
+  const { data: positions, isLoading, error, refetch } = useAlpacaPositions(refreshInterval)
 
   if (error) {
     return (
@@ -39,7 +39,8 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
     )
   }
 
-  const allPositions = positionsResponse?.data || []
+  // The hook returns the data directly, not wrapped in a data property
+  const allPositions = Array.isArray(positions) ? positions : []
 
   const formatCurrency = (value: number | string) => {
     const num = typeof value === 'string' ? parseFloat(value) : value

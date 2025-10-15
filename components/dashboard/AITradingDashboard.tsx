@@ -829,6 +829,9 @@ export default function AITradingDashboard() {
         )}
       </div>
     </div>
+
+
+    
 {/* Advanced Charts Section */ }
   <div className="space-y-6">
     <div className="flex items-center justify-between">
