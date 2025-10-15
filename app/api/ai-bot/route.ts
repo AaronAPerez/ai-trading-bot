@@ -42,6 +42,7 @@ interface BotMetrics {
   uptime: number
   totalProcessingTime: number
   errorCount: number
+  inverseMode: boolean // Track if inverse mode is enabled
 }
 
 interface OrderExecutionResult {
@@ -72,7 +73,8 @@ let botMetrics: BotMetrics = {
   successRate: 87.5,
   uptime: 0,
   totalProcessingTime: 0,
-  errorCount: 0
+  errorCount: 0,
+  inverseMode: false
 }
 
 let botStartTime = new Date()
@@ -96,6 +98,19 @@ function getMaxPositionsForAccount(equity: number): number {
   if (equity < 10000) return 30     // $5K-10K: 30 positions (increased from 25)
   if (equity < 25000) return 40     // $10K-25K: 40 positions (increased from 35)
   return 60                         // $25K+: 60 positions max (increased from 50)
+}
+
+// ===============================================
+// DYNAMIC DAILY ORDER LIMITS BASED ON ACCOUNT SIZE
+// ===============================================
+function getDailyOrderLimitForAccount(equity: number): number {
+  if (equity < 500) return 50       // $100-500: 50 orders/day (conservative for small accounts)
+  if (equity < 1000) return 75      // $500-1K: 75 orders/day
+  if (equity < 2000) return 100     // $1K-2K: 100 orders/day
+  if (equity < 5000) return 150     // $2K-5K: 150 orders/day
+  if (equity < 10000) return 200    // $5K-10K: 200 orders/day
+  if (equity < 25000) return 300    // $10K-25K: 300 orders/day
+  return 500                        // $25K+: 500 orders/day max
 }
 
 // UPDATED CONFIGURATION - More permissive for testing
@@ -186,35 +201,66 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
       }
     }
 
-    if (availableFunds < 10) {
-      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $10 required)`)
+    if (availableFunds < 5) {
+      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $5 required)`)
       return 0 // Not enough to trade
     }
 
-    // Enhanced position sizing with conservative limits (from quick_fix_patch)
-    const maxPositionPercent = 0.15 // Maximum 15% of available funds (increased for small balances)
-    const basePositionPercent = 0.05 // Base 5% of available funds (increased from 3%)
+    // 🎯 DYNAMIC POSITION SIZING BASED ON AVAILABLE FUNDS
+    let maxPositionPercent: number
+    let basePositionPercent: number
+    let minOrderSize: number
+
+    if (availableFunds < 20) {
+      // 🔴 CRITICAL LOW: < $20 - Ultra conservative (1 small trade max)
+      maxPositionPercent = 0.50  // Max 50% (allows 2 positions minimum)
+      basePositionPercent = 0.40 // Base 40%
+      minOrderSize = 5           // $5 minimum
+      console.log(`🔴 CRITICAL LOW buying power: $${availableFunds.toFixed(2)} - Ultra conservative sizing`)
+    } else if (availableFunds < 50) {
+      // 🟠 VERY LOW: $20-$50 - Very conservative (2-3 trades)
+      maxPositionPercent = 0.35  // Max 35%
+      basePositionPercent = 0.25 // Base 25%
+      minOrderSize = 8           // $8 minimum
+      console.log(`🟠 VERY LOW buying power: $${availableFunds.toFixed(2)} - Very conservative sizing`)
+    } else if (availableFunds < 100) {
+      // 🟡 LOW: $50-$100 - Conservative (3-5 trades)
+      maxPositionPercent = 0.25  // Max 25%
+      basePositionPercent = 0.15 // Base 15%
+      minOrderSize = 10          // $10 minimum
+      console.log(`🟡 LOW buying power: $${availableFunds.toFixed(2)} - Conservative sizing`)
+    } else if (availableFunds < 200) {
+      // 🟢 MODERATE: $100-$200 - Balanced (5-8 trades)
+      maxPositionPercent = 0.15  // Max 15%
+      basePositionPercent = 0.08 // Base 8%
+      minOrderSize = 15          // $15 minimum
+      console.log(`🟢 MODERATE buying power: $${availableFunds.toFixed(2)} - Balanced sizing`)
+    } else {
+      // 🔵 HEALTHY: > $200 - Normal diversification (8+ trades)
+      maxPositionPercent = 0.12  // Max 12%
+      basePositionPercent = 0.05 // Base 5%
+      minOrderSize = 20          // $20 minimum
+      console.log(`🔵 HEALTHY buying power: $${availableFunds.toFixed(2)} - Normal sizing`)
+    }
 
     // Confidence-based adjustment (only above 60%)
-    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * 0.10 // Up to 10% bonus
+    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * (maxPositionPercent - basePositionPercent)
     const positionPercent = Math.min(basePositionPercent + confidenceBonus, maxPositionPercent)
 
     // Calculate position size
     let positionSize = availableFunds * positionPercent
 
-    // Dynamic minimum based on available funds (more flexible for small balances)
-    const minOrderSize = availableFunds < 100 ? 10 : 25 // $10 min for small balances, $25 for larger
-    const maxOrderSize = Math.min(200, availableFunds * 0.25) // Max $200 or 25% of available funds
-
+    // Apply min/max constraints
+    const maxOrderSize = Math.min(200, availableFunds * maxPositionPercent)
     positionSize = Math.max(minOrderSize, Math.min(positionSize, maxOrderSize))
 
-    // CRITICAL: Never exceed 25% of available funds (for diversification)
-    positionSize = Math.min(positionSize, availableFunds * 0.25)
+    // SAFETY: Never exceed max percent (prevents over-leveraging)
+    positionSize = Math.min(positionSize, availableFunds * maxPositionPercent)
 
     // Round to cents
     positionSize = Math.round(positionSize * 100) / 100
 
-    console.log(`💰 Enhanced sizing result: ${(positionPercent * 100).toFixed(2)}% of $${availableFunds.toFixed(2)} = $${positionSize.toFixed(2)} 🛡️ Conservative mode`)
+    console.log(`💰 Position sizing: ${(positionPercent * 100).toFixed(2)}% × $${availableFunds.toFixed(2)} = $${positionSize.toFixed(2)} (min: $${minOrderSize}, max: $${maxOrderSize.toFixed(2)})`)
 
     return positionSize
 
@@ -324,7 +370,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     return { success: false, reason: `Confidence below threshold: ${confidence}%` }
   }
 
-  // Check 3: Daily order limit
+  // Check 3: Dynamic daily order limit based on account equity
   const today = new Date().toDateString()
   if (lastOrderResetDate !== today) {
     dailyOrderCount = 0
@@ -332,10 +378,17 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     console.log('🔄 Daily order count reset')
   }
 
-  if (dailyOrderCount >= autoExecutionConfig.dailyOrderLimit) {
-    console.log(`❌ Daily order limit reached: ${dailyOrderCount}/${autoExecutionConfig.dailyOrderLimit}`)
-    return { success: false, reason: 'Daily order limit reached' }
+  // Get account equity for dynamic order limit
+  const accountInfo = await alpacaClient.getAccount()
+  const equity = parseFloat(accountInfo.equity || '0')
+  const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
+
+  if (dailyOrderCount >= dynamicDailyOrderLimit) {
+    console.log(`❌ Daily order limit reached: ${dailyOrderCount}/${dynamicDailyOrderLimit} (Equity: $${equity.toFixed(2)})`)
+    return { success: false, reason: `Daily order limit reached (${dynamicDailyOrderLimit} orders/day for $${equity.toFixed(0)} account)` }
   }
+
+  console.log(`📊 Daily orders: ${dailyOrderCount}/${dynamicDailyOrderLimit} (${((dailyOrderCount/dynamicDailyOrderLimit)*100).toFixed(1)}% used)`)
 
   // Check 4: Symbol cooldown
   if (recentOrders.has(symbol)) {
@@ -553,11 +606,17 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       // Parse error for better messaging
       let errorMessage = orderError.message || 'Unknown order error'
 
-      if (errorMessage.includes('insufficient balance')) {
+      // Alpaca returns generic 403 for insufficient funds
+      if (orderError.statusCode === 403 || errorMessage.toLowerCase().includes('forbidden') || errorMessage.toLowerCase().includes('access denied')) {
+        errorMessage = 'Insufficient funds - not enough cash available to complete trade'
+        console.log('💡 TIP: Sell some positions to free up cash, or wait for auto-rebalancing')
+      } else if (errorMessage.includes('insufficient balance')) {
         errorMessage = 'Insufficient USD balance in crypto wallet. Transfer funds from stock account to crypto wallet in Alpaca dashboard.'
         console.log('💡 TIP: In Alpaca Paper Trading, you need to transfer USD from your stock account to crypto wallet.')
         console.log('💡 Go to: Alpaca Dashboard > Crypto Trading > Transfer Funds')
       }
+
+      console.log(`❌ Order blocked: ${errorMessage}`)
 
       return {
         success: false,
@@ -651,8 +710,42 @@ function startBotActivitySimulation() {
       const isMarketOpen = isWeekday && isAfterOpen && isBeforeClose
 
       // CRITICAL: Only use stocks if market is open, otherwise only crypto (24/7 trading)
-      const stockSymbols = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD']
-      const cryptoSymbols = ['BTC/USD', 'ETH/USD', 'DOGE/USD', 'SOL/USD', 'MATIC/USD', 'AVAX/USD', 'LINK/USD', 'UNI/USD']
+      // 🚀 EXPANDED TRADING UNIVERSE - More Opportunities
+      const stockSymbols = [
+        // Mega Cap Tech
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
+        // Large Cap Growth
+        'NFLX', 'AMD', 'INTC', 'CRM', 'ADBE', 'ORCL', 'NOW', 'SHOP', 'PLTR',
+        // AI & Semiconductors
+        'AI', 'SMCI', 'MU', 'QCOM', 'AVGO', 'MRVL', 'LRCX',
+        // Financials & Payments
+        'JPM', 'V', 'MA', 'PYPL', 'SQ', 'COIN',
+        // EV & Clean Energy
+        'RIVN', 'LCID', 'NIO', 'ENPH', 'FSLR',
+        // Emerging Growth
+        'SOFI', 'HOOD', 'UPST', 'DKNG', 'UBER', 'LYFT', 'ABNB',
+        // Popular ETFs
+        'SPY', 'QQQ', 'XLK', 'XLF', 'ARKK'
+      ]
+
+      const cryptoSymbols = [
+        // Major Cryptos (Highest Volume)
+        'BTC/USD', 'ETH/USD', 'BNB/USD', 'XRP/USD', 'SOL/USD', 'ADA/USD', 'DOGE/USD',
+        // Layer 1 Blockchains (High Activity)
+        'AVAX/USD', 'DOT/USD', 'MATIC/USD', 'ATOM/USD', 'NEAR/USD', 'ALGO/USD', 'FTM/USD',
+        // DeFi Leaders
+        'UNI/USD', 'LINK/USD', 'AAVE/USD', 'CRV/USD', 'MKR/USD', 'COMP/USD', 'SNX/USD',
+        // New Layer 1s (High Volatility)
+        'SUI/USD', 'APT/USD', 'SEI/USD', 'INJ/USD', 'TIA/USD', 'WLD/USD',
+        // Gaming & NFT (High Volume)
+        'SAND/USD', 'MANA/USD', 'AXS/USD', 'GALA/USD', 'ENJ/USD', 'APE/USD',
+        // Meme Coins (High Volatility for Trading)
+        'SHIB/USD', 'PEPE/USD', 'FLOKI/USD',
+        // Traditional Alts (Stable Volume)
+        'LTC/USD', 'BCH/USD', 'ETC/USD', 'XLM/USD', 'TRX/USD', 'VET/USD',
+        // Layer 2 & Scaling
+        'OP/USD', 'ARB/USD', 'LRC/USD'
+      ]
 
       // Select symbol pool based on market hours
       const availableSymbols = isMarketOpen
@@ -681,7 +774,14 @@ function startBotActivitySimulation() {
         // On error, default to BUY (safer than risking a SELL without position)
       }
 
-      console.log(`🎯 Generated recommendation: ${symbol} ${recommendation} (${confidence.toFixed(1)}%)`)
+      // 🔄 INVERSE MODE: Flip BUY/SELL signals
+      if (botMetrics.inverseMode && recommendation !== 'HOLD') {
+        const originalRec = recommendation
+        recommendation = recommendation === 'BUY' ? 'SELL' : 'BUY'
+        console.log(`🔄 INVERSE MODE: Flipped ${originalRec} → ${recommendation} for ${symbol}`)
+      }
+
+      console.log(`🎯 Generated recommendation: ${symbol} ${recommendation} (${confidence.toFixed(1)}%)${botMetrics.inverseMode ? ' [INVERSE]' : ''}`)
       console.log(`📊 Market: ${isMarketOpen ? 'OPEN' : 'CLOSED'} | Asset: ${assetType} | Trading: ${isMarketOpen ? 'Stocks + Crypto' : 'Crypto Only'}`)
 
       // Update metrics
@@ -807,6 +907,11 @@ export async function GET(request: NextRequest) {
       orderExecutionEnabled = true
       console.log('✅ Order execution enabled')
 
+      // Get dynamic order limit
+      const accountInfo = await alpacaClient.getAccount()
+      const equity = parseFloat(accountInfo.equity || '0')
+      const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
+
       return NextResponse.json({
         success: true,
         message: 'Order execution enabled - Bot will now execute real trades',
@@ -815,7 +920,8 @@ export async function GET(request: NextRequest) {
           config: autoExecutionConfig,
           metrics: orderExecutionMetrics,
           dailyOrderCount,
-          dailyOrderLimit: autoExecutionConfig.dailyOrderLimit
+          dailyOrderLimit: dynamicDailyOrderLimit,
+          accountEquity: equity
         },
         timestamp: new Date().toISOString()
       })
@@ -838,6 +944,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (action === 'execution-status') {
+      // Get dynamic order limit
+      const accountInfo = await alpacaClient.getAccount()
+      const equity = parseFloat(accountInfo.equity || '0')
+      const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
+
       return NextResponse.json({
         success: true,
         orderExecutionStatus: {
@@ -845,7 +956,8 @@ export async function GET(request: NextRequest) {
           config: autoExecutionConfig,
           metrics: orderExecutionMetrics,
           dailyOrderCount,
-          dailyOrderLimit: autoExecutionConfig.dailyOrderLimit,
+          dailyOrderLimit: dynamicDailyOrderLimit,
+          accountEquity: equity,
           recentOrdersCount: recentOrders.size,
           environment: {
             hasApiKey: !!process.env.APCA_API_KEY_ID,
@@ -859,6 +971,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: return current activity and metrics
+    // Get dynamic order limit
+    const accountInfo = await alpacaClient.getAccount()
+    const equity = parseFloat(accountInfo.equity || '0')
+    const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
+
     return NextResponse.json({
       success: true,
       data: {
@@ -871,7 +988,8 @@ export async function GET(request: NextRequest) {
         orderExecution: {
           enabled: orderExecutionEnabled,
           dailyOrderCount,
-          dailyOrderLimit: autoExecutionConfig.dailyOrderLimit,
+          dailyOrderLimit: dynamicDailyOrderLimit,
+          accountEquity: equity,
           metrics: orderExecutionMetrics,
           config: {
             minConfidenceForOrder: autoExecutionConfig.minConfidenceForOrder,
@@ -903,6 +1021,19 @@ export async function POST(request: NextRequest) {
 
     console.log('📝 AI Bot API POST request received', { type, symbol, action })
 
+    // Handle toggle inverse mode
+    if (action === 'toggle-inverse') {
+      botMetrics.inverseMode = !botMetrics.inverseMode
+      console.log(`🔄 Inverse Mode ${botMetrics.inverseMode ? 'ENABLED' : 'DISABLED'} for AI Bot`)
+
+      return NextResponse.json({
+        success: true,
+        message: `Inverse mode ${botMetrics.inverseMode ? 'enabled' : 'disabled'}`,
+        inverseMode: botMetrics.inverseMode,
+        timestamp: new Date().toISOString()
+      })
+    }
+
     // Handle manual order execution test
     if (action === 'test-order') {
       const testSymbol = symbol || 'AAPL'
@@ -910,9 +1041,9 @@ export async function POST(request: NextRequest) {
       const testRecommendation = 'BUY'
 
       console.log('🧪 Testing manual order execution...')
-      
+
       const result = await executeOrder(testSymbol, testConfidence, testRecommendation)
-      
+
       return NextResponse.json({
         success: result.success,
         message: result.success ? 'Test order executed successfully' : 'Test order failed',

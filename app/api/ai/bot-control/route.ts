@@ -1098,18 +1098,75 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
     const account = await alpacaClient.getAccount()
     const buyingPower = parseFloat(account.buying_power || '0')
     const equity = parseFloat(account.equity || '0')
+    const cash = parseFloat(account.cash || '0')
 
-    // Calculate intelligent position size based on confidence and risk
-    // Base allocation: 2-10% of equity depending on confidence
-    const minAllocation = 0.02 // 2% minimum
-    const maxAllocation = 0.10 // 10% maximum
-    const confidenceMultiplier = (confidence - 0.75) / 0.20 // 75% conf = 0, 95% conf = 1
-    const allocation = minAllocation + (maxAllocation - minAllocation) * Math.max(0, Math.min(1, confidenceMultiplier))
+    // Use appropriate available funds based on asset type
+    const availableFunds = isCrypto ? cash : buyingPower
 
-    const notionalValue = Math.floor(equity * allocation)
-    const quantity = Math.max(1, Math.floor(notionalValue / 100)) // Estimate quantity (will use notional for actual order)
+    console.log(`💳 Account Status: Cash=$${cash.toFixed(2)}, Equity=$${equity.toFixed(2)}, Buying Power=$${buyingPower.toFixed(2)}`)
 
-    console.log(`💰 Position Sizing: ${(allocation * 100).toFixed(1)}% allocation = $${notionalValue} (Confidence: ${(confidence * 100).toFixed(1)}%)`)
+    // Check minimum funds
+    if (availableFunds < 5) {
+      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $5 required)`)
+      throw new Error('Insufficient funds - not enough cash to place trade')
+    }
+
+    // 🎯 DYNAMIC POSITION SIZING BASED ON AVAILABLE FUNDS
+    let maxPositionPercent: number
+    let basePositionPercent: number
+    let minOrderSize: number
+
+    if (availableFunds < 20) {
+      // 🔴 CRITICAL LOW: < $20 - Ultra conservative
+      maxPositionPercent = 0.50
+      basePositionPercent = 0.40
+      minOrderSize = 5
+      console.log(`🔴 CRITICAL LOW buying power: $${availableFunds.toFixed(2)} - Ultra conservative sizing`)
+    } else if (availableFunds < 50) {
+      // 🟠 VERY LOW: $20-$50 - Very conservative
+      maxPositionPercent = 0.35
+      basePositionPercent = 0.25
+      minOrderSize = 8
+      console.log(`🟠 VERY LOW buying power: $${availableFunds.toFixed(2)} - Very conservative sizing`)
+    } else if (availableFunds < 100) {
+      // 🟡 LOW: $50-$100 - Conservative
+      maxPositionPercent = 0.25
+      basePositionPercent = 0.15
+      minOrderSize = 10
+      console.log(`🟡 LOW buying power: $${availableFunds.toFixed(2)} - Conservative sizing`)
+    } else if (availableFunds < 200) {
+      // 🟢 MODERATE: $100-$200 - Balanced
+      maxPositionPercent = 0.15
+      basePositionPercent = 0.08
+      minOrderSize = 15
+      console.log(`🟢 MODERATE buying power: $${availableFunds.toFixed(2)} - Balanced sizing`)
+    } else {
+      // 🔵 HEALTHY: > $200 - Normal diversification
+      maxPositionPercent = 0.12
+      basePositionPercent = 0.05
+      minOrderSize = 20
+      console.log(`🔵 HEALTHY buying power: $${availableFunds.toFixed(2)} - Normal sizing`)
+    }
+
+    // Confidence-based adjustment (75% = min, 95% = max)
+    const confidenceMultiplier = Math.max(0, Math.min(1, (confidence - 0.75) / 0.20))
+    const positionPercent = basePositionPercent + (maxPositionPercent - basePositionPercent) * confidenceMultiplier
+
+    // Calculate position size
+    let notionalValue = availableFunds * positionPercent
+
+    // Apply min/max constraints
+    const maxOrderSize = Math.min(200, availableFunds * maxPositionPercent)
+    notionalValue = Math.max(minOrderSize, Math.min(notionalValue, maxOrderSize))
+
+    // SAFETY: Never exceed max percent
+    notionalValue = Math.min(notionalValue, availableFunds * maxPositionPercent)
+
+    // Round to whole dollars
+    notionalValue = Math.floor(notionalValue)
+    const quantity = Math.max(1, Math.floor(notionalValue / 100))
+
+    console.log(`💰 Position sizing: ${(positionPercent * 100).toFixed(2)}% × $${availableFunds.toFixed(2)} = $${notionalValue} (min: $${minOrderSize}, max: $${maxOrderSize.toFixed(2)})`)
 
     // Call Alpaca API to place order using unified client with proper asset_class
     const orderResult = await alpacaClient.createOrder({
@@ -1166,17 +1223,26 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(`❌ Trade execution error:`, error)
+
+    // Parse error for better messaging
+    let errorMessage = error.message || 'Unknown error'
+
+    // Alpaca returns generic 403 for insufficient funds
+    if (error.statusCode === 403 || errorMessage.toLowerCase().includes('forbidden') || errorMessage.toLowerCase().includes('access denied')) {
+      errorMessage = 'Insufficient funds - not enough cash available to complete trade'
+      console.log('💡 TIP: Sell some positions to free up cash, or wait for auto-rebalancing')
+    }
 
     // Log execution error to Supabase
     await supabaseService.logBotActivity(userId, {
       type: 'error',
       symbol: symbol,
-      message: `Trade execution error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `Trade execution error: ${errorMessage}`,
       status: 'failed',
       details: JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         symbol,
         signal,
         sessionId

@@ -1,18 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { AlpacaClient } from '@/lib/alpaca/client'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const alpacaClient = new AlpacaClient({
-      key: process.env.APCA_API_KEY_ID_ID!,
+      key: process.env.APCA_API_KEY_ID!,
       secret: process.env.ALPACA_API_SECRET_KEY!,
       paper: process.env.ALPACA_PAPER === 'true'
     })
 
     const positions = await alpacaClient.getPositions()
-    
+
     // Transform positions to live trades format
-    const liveTrades = positions.map(position => ({
+    const liveTrades = positions.map((position: {
+      symbol: string
+      quantity: number
+      avgBuyPrice: number
+      currentPrice: number
+      marketValue: number
+      unrealizedPnL: number
+      unrealizedPnLPercent: number
+      side: 'long' | 'short'
+    }) => ({
       id: `pos_${position.symbol}_${Date.now()}`,
       symbol: position.symbol,
       action: position.side === 'long' ? 'BUY' : 'SELL',

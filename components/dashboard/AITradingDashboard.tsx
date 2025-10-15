@@ -718,7 +718,18 @@ export default function AITradingDashboard() {
           </div>
         </div>
       </div>
+    </div>
 
+    {/* 🎯 MAIN SHOWCASE: Portfolio Positions Table */}
+    <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-xl">
+      <PortfolioPositionsTable
+        refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+        initialLimit={10}
+      />
+    </div>
+
+    {/* Portfolio Header - Secondary Section */}
+    <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 rounded-2xl p-6 border border-gray-700/50">
       {/* Live Orders Feed - Compact View */}
       <div className="mt-6 border-t border-gray-700 pt-6">
         <div className="flex items-center justify-between mb-4">
@@ -850,21 +861,13 @@ export default function AITradingDashboard() {
       </div>
     )}
   </div>
-  {/* Top Positions Table */ }
-  <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border border-gray-700/50">
-    <PortfolioPositionsTable
-      refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-      initialLimit={10}
-    />
-  </div>
-
-  {/* Recent Orders Table */ }
+  {/* 📊 Full Recent Orders Table */}
   <div
-    className="bg-gradient-to-r from-gray-800/50 to-purple-900/30 rounded-xl p-6 border border-gray-700/50"
+    className="bg-gradient-to-r from-gray-800/50 to-purple-900/30 rounded-xl p-6 border-2 border-purple-500/30 shadow-xl"
     aria-label="Recent orders section"
   >
     <RecentOrdersTable
-      refreshInterval={persistentBotState.isRunning ? 10000 : 30000}
+      refreshInterval={persistentBotState.isRunning ? 5000 : 15000}
       initialLimit={20}
     />
   </div>

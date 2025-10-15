@@ -183,7 +183,13 @@ export default function RecentOrdersTable({ refreshInterval = 30000, initialLimi
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">Recent Orders</h2>
+        <div className="flex items-center space-x-3">
+          <h2 className="text-xl font-bold text-white">Live Order Execution Feed</h2>
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <span className="text-xs text-green-400 font-medium">LIVE</span>
+          </div>
+        </div>
         <div className="flex items-center space-x-3">
           {/* View All Button */}
           <button className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
