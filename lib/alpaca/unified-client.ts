@@ -236,9 +236,11 @@ export class UnifiedAlpacaClient {
     qty?: number
     percentage?: number
   }) {
+    // URL encode symbol to handle special characters like / in crypto symbols
+    const encodedSymbol = encodeURIComponent(symbol)
     const queryString = params ? new URLSearchParams(params as any).toString() : ''
     return this.request(
-      `/v2/positions/${symbol}${queryString ? `?${queryString}` : ''}`,
+      `/v2/positions/${encodedSymbol}${queryString ? `?${queryString}` : ''}`,
       { method: 'DELETE' },
       'high'
     )

@@ -8,15 +8,19 @@ interface StrategyPerformanceDashboardProps {
   botIsActive: boolean
   onStrategyChange?: (strategyId: string, inverseMode: boolean) => void
   autoSwitch?: boolean
+  inverseMode?: boolean // Current inverse mode state
 }
 
 export default function StrategyPerformanceDashboard({
   botIsActive,
   onStrategyChange,
-  autoSwitch = true
+  autoSwitch = true,
+  inverseMode = false
 }: StrategyPerformanceDashboardProps) {
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(autoSwitch)
-  const [currentStrategyId, setCurrentStrategyId] = useState<string>('normal')
+
+  // Determine current active strategy based on inverseMode prop
+  const currentStrategyId = inverseMode ? 'inverse' : 'normal'
 
   // Fetch strategy performance data
   const { data, isLoading, error, refetch } = useQuery({
@@ -39,12 +43,11 @@ export default function StrategyPerformanceDashboard({
     if (autoSwitchEnabled && bestStrategy && botIsActive) {
       if (bestStrategy.strategyId !== currentStrategyId) {
         console.log(`🔄 Auto-switching to best strategy: ${bestStrategy.strategyName}`)
-        setCurrentStrategyId(bestStrategy.strategyId)
 
         // Notify parent component
         if (onStrategyChange) {
-          const inverseMode = bestStrategy.strategyId === 'inverse'
-          onStrategyChange(bestStrategy.strategyId, inverseMode)
+          const shouldEnableInverse = bestStrategy.strategyId === 'inverse'
+          onStrategyChange(bestStrategy.strategyId, shouldEnableInverse)
         }
       }
     }
@@ -129,7 +132,7 @@ export default function StrategyPerformanceDashboard({
                     <div className="text-2xl font-bold text-white">{bestStrategy.strategyName}</div>
                   </div>
                 </div>
-                {autoSwitchEnabled && (
+                {bestStrategy.strategyId === currentStrategyId && (
                   <div className="flex items-center space-x-2 bg-green-500/20 px-3 py-1.5 rounded-lg">
                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                     <span className="text-xs text-green-400 font-semibold">ACTIVE</span>
@@ -216,7 +219,12 @@ export default function StrategyPerformanceDashboard({
                         <div className="flex-1">
                           <div className="flex items-center space-x-2">
                             <span className="font-semibold text-white">{strategy.strategyName}</span>
-                            {strategy.strategyId === bestStrategy?.strategyId && (
+                            {strategy.strategyId === currentStrategyId && (
+                              <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">
+                                ACTIVE
+                              </span>
+                            )}
+                            {strategy.strategyId === bestStrategy?.strategyId && strategy.strategyId !== currentStrategyId && (
                               <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full font-medium">
                                 BEST
                               </span>

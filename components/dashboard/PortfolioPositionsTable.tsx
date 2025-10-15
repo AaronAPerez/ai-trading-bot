@@ -65,13 +65,27 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
         body: JSON.stringify({ symbol })
       })
 
-      if (!response.ok) throw new Error('Failed to close position')
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || result.details || 'Failed to close position')
+      }
 
       await refetch()
-      alert(`Successfully closed position for ${symbol}`)
-    } catch (error) {
+      alert(`✅ Successfully closed position for ${symbol}`)
+    } catch (error: any) {
       console.error('Error closing position:', error)
-      alert(`Failed to close position: ${error.message}`)
+      const errorMessage = error.message || 'Failed to close position'
+
+      // Show user-friendly error
+      if (errorMessage.includes('403') || errorMessage.includes('paper trading')) {
+        alert(`⚠️ Cannot close ${symbol}\n\nAlpaca paper trading may not allow closing positions via API. Try closing it directly in the Alpaca dashboard.`)
+      } else if (errorMessage.includes('404')) {
+        alert(`⚠️ Position for ${symbol} not found. It may have already been closed.`)
+        await refetch() // Refresh to update UI
+      } else {
+        alert(`❌ Failed to close ${symbol}: ${errorMessage}`)
+      }
     } finally {
       setLiquidating(null)
     }
