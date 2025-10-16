@@ -10,8 +10,13 @@
 
 import React from 'react'
 import { NextRequest, NextResponse } from 'next/server'
-import { alpacaClient } from '@/lib/alpaca/unified-client'
 import { getTradingMode } from '@/lib/config/trading-mode'
+
+// Lazy-load alpacaClient to avoid build-time initialization
+function getAlpacaClient() {
+  const { alpacaClient } = require('@/lib/alpaca/unified-client')
+  return alpacaClient
+}
 
 // ===============================================
 // INTERFACES & TYPES
@@ -160,7 +165,7 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
     const isCrypto = symbol.includes('/') || /(USD|USDT|USDC)$/i.test(symbol)
 
     // Get current buying power from Alpaca account using unified client
-    const account = await alpacaClient.getAccount()
+    const account = await getAlpacaClient().getAccount()
 
     // For crypto, use cash (available USD in crypto wallet), for stocks use buying_power
     let availableFunds = 0
@@ -279,6 +284,7 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
  */
 async function checkPortfolioRebalancing(): Promise<{ shouldRebalance: boolean; positionsToSell: string[] }> {
   try {
+    const alpacaClient = getAlpacaClient()
     const account = await alpacaClient.getAccount()
     const positions = await alpacaClient.getPositions()
 
@@ -379,7 +385,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
   }
 
   // Get account equity for dynamic order limit
-  const accountInfo = await alpacaClient.getAccount()
+  const accountInfo = await getAlpacaClient().getAccount()
   const equity = parseFloat(accountInfo.equity || '0')
   const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
 
@@ -468,7 +474,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     // Check 8: Check existing positions for BUY/SELL validation
     try {
-      const positions = await alpacaClient.getPositions()
+      const positions = await getAlpacaClient().getPositions()
       const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
 
       if (recommendation.toUpperCase() === 'SELL') {
@@ -545,7 +551,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     if (recommendation.toUpperCase() === 'SELL') {
       // For SELL: Use 'qty' to sell all shares we own (close position)
       // We already verified position exists in the check above
-      const positions = await alpacaClient.getPositions()
+      const positions = await getAlpacaClient().getPositions()
       const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
       const qtyToSell = parseFloat(existingPosition.qty || '0')
 
@@ -561,7 +567,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     // Execute order via Alpaca unified client (automatically uses correct trading mode)
     try {
-      const order = await alpacaClient.createOrder(orderData)
+      const order = await getAlpacaClient().createOrder(orderData)
       console.log('✅ Order placed successfully:', order.id)
 
       // Track successful order
@@ -761,7 +767,7 @@ function startBotActivitySimulation() {
       // SMART RECOMMENDATION: Check positions to decide BUY or SELL
       let recommendation = 'BUY' // Default to BUY
       try {
-        const positions = await alpacaClient.getPositions()
+        const positions = await getAlpacaClient().getPositions()
         const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
 
         // If we have a position, 50% chance to SELL, otherwise always BUY
@@ -908,7 +914,7 @@ export async function GET(request: NextRequest) {
       console.log('✅ Order execution enabled')
 
       // Get dynamic order limit
-      const accountInfo = await alpacaClient.getAccount()
+      const accountInfo = await getAlpacaClient().getAccount()
       const equity = parseFloat(accountInfo.equity || '0')
       const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
 
@@ -945,7 +951,7 @@ export async function GET(request: NextRequest) {
 
     if (action === 'execution-status') {
       // Get dynamic order limit
-      const accountInfo = await alpacaClient.getAccount()
+      const accountInfo = await getAlpacaClient().getAccount()
       const equity = parseFloat(accountInfo.equity || '0')
       const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
 
@@ -972,7 +978,7 @@ export async function GET(request: NextRequest) {
 
     // Default: return current activity and metrics
     // Get dynamic order limit
-    const accountInfo = await alpacaClient.getAccount()
+    const accountInfo = await getAlpacaClient().getAccount()
     const equity = parseFloat(accountInfo.equity || '0')
     const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
 
