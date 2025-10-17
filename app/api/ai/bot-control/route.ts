@@ -1276,18 +1276,48 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
         const { getGlobalStrategyEngine } = await import('@/lib/strategies/GlobalStrategyEngine')
         const engine = getGlobalStrategyEngine()
 
-        // Calculate P&L (use 0 for now, will be updated when position closes)
+        // Calculate P&L by checking the filled order details
         let pnl = 0
+
         if (signal === 'SELL') {
-          // Try to get unrealized P&L from position
+          // For SELL orders, wait briefly for order to fill, then get actual P&L from Alpaca
           try {
-            const positions = await alpacaClient.getPositions()
-            const position = positions.find((p: any) => p.symbol === symbol)
-            if (position) {
-              pnl = parseFloat(position.unrealized_pl || '0')
+            // Wait 2 seconds for order to fill
+            await new Promise(resolve => setTimeout(resolve, 2000))
+
+            // Get the filled order details from Alpaca
+            const orderDetails = await alpacaClient.getOrder(orderResult.id || orderResult.orderId)
+
+            if (orderDetails && orderDetails.filled_avg_price) {
+              // Try to find the original BUY order for this position
+              const allOrders = await alpacaClient.getOrders({
+                status: 'filled',
+                symbols: symbol,
+                limit: 100
+              })
+
+              // Find matching BUY order
+              const buyOrder = allOrders.find((o: any) =>
+                o.symbol === symbol &&
+                o.side === 'buy' &&
+                o.status === 'filled' &&
+                new Date(o.filled_at) < new Date(orderDetails.filled_at || orderDetails.created_at)
+              )
+
+              if (buyOrder && buyOrder.filled_avg_price) {
+                // Calculate actual P&L: (sell_price - buy_price) * quantity
+                const buyPrice = parseFloat(buyOrder.filled_avg_price)
+                const sellPrice = parseFloat(orderDetails.filled_avg_price)
+                const qty = parseFloat(orderDetails.filled_qty || orderDetails.qty || quantity.toString())
+                pnl = (sellPrice - buyPrice) * qty
+
+                console.log(`💰 Calculated P&L: Buy@$${buyPrice.toFixed(2)} → Sell@$${sellPrice.toFixed(2)} × ${qty} = $${pnl.toFixed(2)}`)
+              } else {
+                console.log('⚠️ Could not find matching BUY order for P&L calculation')
+              }
             }
           } catch (err) {
-            console.log('⚠️ Could not fetch P&L for closed position')
+            console.log('⚠️ Could not calculate P&L from order details:', err)
           }
         }
 

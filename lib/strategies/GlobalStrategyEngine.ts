@@ -24,7 +24,7 @@ export function getGlobalStrategyEngine(): AdaptiveStrategyEngine {
       minTradesBeforeSwitch: 5,
       poorPerformanceThreshold: 0.25,
       testingEnabled: true,
-      testTradesRequired: 7,
+      testTradesRequired: 5,  // 5 trades to validate (faster testing)
       positionSizing: {
         minTestSize: 5,
         maxTestSize: 10,

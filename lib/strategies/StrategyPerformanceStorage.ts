@@ -133,7 +133,7 @@ export async function loadAllStrategyPerformances(): Promise<StrategyPerformance
       lastTradeTime: row.last_trade_time ? new Date(row.last_trade_time) : null,
       testingMode: row.testing_mode !== false,
       testTradesCompleted: row.test_trades_completed || 0,
-      testTradesRequired: row.test_trades_required || 7,
+      testTradesRequired: row.test_trades_required || 5,
       testPnL: row.test_pnl || 0,
       testWinRate: row.test_win_rate || 0,
       testPassed: row.test_passed
@@ -241,7 +241,7 @@ export async function loadStrategyPerformanceHistory(
       lastTradeTime: row.last_trade_time ? new Date(row.last_trade_time) : null,
       testingMode: row.testing_mode !== false,
       testTradesCompleted: row.test_trades_completed || 0,
-      testTradesRequired: row.test_trades_required || 7,
+      testTradesRequired: row.test_trades_required || 5,
       testPnL: row.test_pnl || 0,
       testWinRate: row.test_win_rate || 0,
       testPassed: row.test_passed
@@ -304,7 +304,7 @@ export async function loadStrategyPerformanceHistoryByDateRange(
       lastTradeTime: row.last_trade_time ? new Date(row.last_trade_time) : null,
       testingMode: row.testing_mode !== false,
       testTradesCompleted: row.test_trades_completed || 0,
-      testTradesRequired: row.test_trades_required || 7,
+      testTradesRequired: row.test_trades_required || 5,
       testPnL: row.test_pnl || 0,
       testWinRate: row.test_win_rate || 0,
       testPassed: row.test_passed

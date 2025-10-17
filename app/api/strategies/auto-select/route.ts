@@ -68,7 +68,7 @@ export async function GET() {
           lastTradeTime: null,
           testingMode: true,
           testTradesCompleted: 0,
-          testTradesRequired: 7,
+          testTradesRequired: 5,
           testPnL: 0,
           testWinRate: 0,
           testPassed: null
@@ -132,8 +132,9 @@ export async function GET() {
       winRate: bestStrategy.winRate.toFixed(1) + '%',
       totalPnL: '$' + bestStrategy.totalPnL.toFixed(2),
       trades: bestStrategy.totalTrades,
-      testing: bestStrategy.testingMode ? `${bestStrategy.testTradesCompleted}/${7}` : 'Complete',
-      passed: bestStrategy.testPassed === null ? 'Pending' : bestStrategy.testPassed ? 'Yes' : 'No'
+      testing: bestStrategy.testingMode ? `${bestStrategy.testTradesCompleted}/${5}` : 'Complete',
+      passed: bestStrategy.testPassed === null ? 'Pending' : bestStrategy.testPassed ? 'Yes' : 'No',
+      testRequired: 5
     })
 
     if (currentStrategy) {
@@ -162,7 +163,7 @@ export async function GET() {
 
     // If strategy is in testing mode
     if (bestStrategy.testingMode) {
-      recommendation.reason = `TESTING MODE: ${bestStrategy.testTradesCompleted}/${7} test trades completed. Using small position sizes ($5-$10) to validate profitability before scaling up.`
+      recommendation.reason = `TESTING MODE: ${bestStrategy.testTradesCompleted}/${5} test trades completed. Using small position sizes ($5-$10) to validate profitability before scaling up.`
       recommendation.confidence = 50
     }
 

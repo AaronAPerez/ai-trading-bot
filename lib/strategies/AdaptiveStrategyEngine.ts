@@ -107,7 +107,7 @@ export class AdaptiveStrategyEngine {
       switchCooldownMs: 5 * 60 * 1000,   // 5 minutes
 
       testingEnabled: true,
-      testTradesRequired: 7,              // 5-10 trades to validate
+      testTradesRequired: 5,              // 5 trades to validate (faster testing)
       testPassWinRate: 0.40,             // 40% win rate to pass
       testPassProfitMin: 0,              // At least break-even
 

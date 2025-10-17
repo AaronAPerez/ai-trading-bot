@@ -460,5 +460,19 @@ export class UnifiedAlpacaClient {
   }
 }
 
-// Singleton instance
-export const alpacaClient = new UnifiedAlpacaClient()
+// Lazy-loaded singleton instance to avoid initialization during build
+let _alpacaClient: UnifiedAlpacaClient | null = null
+
+export function getAlpacaClient(): UnifiedAlpacaClient {
+  if (!_alpacaClient) {
+    _alpacaClient = new UnifiedAlpacaClient()
+  }
+  return _alpacaClient
+}
+
+// Legacy export for backward compatibility - use getAlpacaClient() instead
+export const alpacaClient = new Proxy({} as UnifiedAlpacaClient, {
+  get(target, prop) {
+    return getAlpacaClient()[prop as keyof UnifiedAlpacaClient]
+  }
+})

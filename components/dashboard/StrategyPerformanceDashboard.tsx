@@ -4,6 +4,21 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, TrendingDown, Target, Zap, BarChart3, RefreshCw, AlertCircle } from 'lucide-react'
 
+interface Strategy {
+  strategyId: string
+  strategyName: string
+  totalTrades: number
+  winningTrades: number
+  losingTrades: number
+  totalPnL: number
+  winRate: number
+  avgPnL: number
+  score: number
+  testingMode?: boolean
+  testTradesCompleted?: number
+  testPassed?: boolean | null
+}
+
 interface StrategyPerformanceDashboardProps {
   botIsActive: boolean
   onStrategyChange?: (strategyId: string, inverseMode: boolean) => void
@@ -192,12 +207,12 @@ export default function StrategyPerformanceDashboard({
                 <BarChart3 className="w-5 h-5 text-purple-400" />
                 <h4 className="text-lg font-semibold text-white">Strategy Comparison</h4>
                 <span className="text-xs text-gray-400">
-                  (Last 24 hours, min. 5 trades)
+                  (Testing: 5 trades required)
                 </span>
               </div>
 
               <div className="space-y-3">
-                {allStrategies.map((strategy: any, index: number) => (
+                {allStrategies.map((strategy: Strategy, index: number) => (
                   <div
                     key={strategy.strategyId}
                     className={`p-4 rounded-lg border transition-all ${
