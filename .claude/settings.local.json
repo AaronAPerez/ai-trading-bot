@@ -37,7 +37,10 @@
       "Bash(supabase:*)",
       "Bash(scoop update:*)",
       "Bash(docker:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(del \"app\\api\\test-multi-strategy\\route.ts\")",
+      "Bash(find:*)",
+      "Bash(npm run supabase:test:*)"
     ],
     "deny": [],
     "ask": []

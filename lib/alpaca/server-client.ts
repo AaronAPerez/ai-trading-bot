@@ -40,6 +40,14 @@ export class AlpacaServerClient {
           paperMode
         })
 
+        // Validate API keys exist BEFORE initializing Alpaca SDK
+        if (!apiKey || !secretKey) {
+          console.warn('⚠️ Alpaca API credentials not found - client will be unavailable')
+          console.warn('   Set APCA_API_KEY_ID and APCA_API_SECRET_KEY environment variables')
+          this.client = null
+          return
+        }
+
         // Updated to modern Alpaca SDK initialization pattern
         this.client = new Alpaca({
           key: apiKey,
