@@ -737,5 +737,7 @@ export class TradingEngineManager {
   }
 }
 
-// Export default instance for convenience
-export const tradingEngineFactory = TradingEngineFactory.getInstance()
+// Export getter function for lazy initialization (prevents build-time errors)
+export function getTradingEngineFactory(): TradingEngineFactory {
+  return TradingEngineFactory.getInstance()
+}
