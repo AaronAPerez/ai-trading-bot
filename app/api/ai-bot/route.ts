@@ -8,14 +8,23 @@
  * @location src/app/api/ai-bot/route.ts
  */
 
-import React from 'react'
 import { NextRequest, NextResponse } from 'next/server'
+import type { UnifiedAlpacaClient } from '@/lib/alpaca/unified-client'
 import { getTradingMode } from '@/lib/config/trading-mode'
+import { getGlobalStrategyEngine } from '@/lib/strategies/GlobalStrategyEngine'
 
 // Lazy-load alpacaClient to avoid build-time initialization
-function getAlpacaClient() {
-  const { alpacaClient } = require('@/lib/alpaca/unified-client')
-  return alpacaClient
+// Using dynamic import to prevent initialization during build
+
+let alpacaClientInstance: UnifiedAlpacaClient | null = null
+
+function getAlpacaClient(): UnifiedAlpacaClient {
+  if (!alpacaClientInstance) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { alpacaClient } = require('@/lib/alpaca/unified-client')
+    alpacaClientInstance = alpacaClient
+  }
+  return alpacaClientInstance
 }
 
 // ===============================================
@@ -66,7 +75,7 @@ interface OrderExecutionResult {
 // ===============================================
 
 let botActivityLogs: BotActivityLog[] = []
-let botMetrics: BotMetrics = {
+const botMetrics: BotMetrics = {
   symbolsScanned: 0,
   analysisCompleted: 0,
   recommendationsGenerated: 0,
@@ -82,7 +91,7 @@ let botMetrics: BotMetrics = {
   inverseMode: false
 }
 
-let botStartTime = new Date()
+const botStartTime = new Date()
 let isSimulatingActivity = false
 let simulationInterval: NodeJS.Timeout | null = null
 
@@ -596,6 +605,42 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
         status: 'completed'
       })
 
+      // 📊 RECORD TRADE TO STRATEGY ENGINE IMMEDIATELY
+      // We'll use a simplified approach: record as a completed trade with estimated P&L
+      // This allows the dashboard to update in real-time
+      try {
+        const engine = getGlobalStrategyEngine()
+
+        // For BUY orders: record as a trade with 0 P&L initially (will update when sold)
+        // For SELL orders: calculate actual P&L from position
+        let estimatedPnL = 0
+
+        if (recommendation === 'SELL') {
+          // Try to get actual P&L from the position that was sold
+          try {
+            const positions = await getAlpacaClient().getPositions()
+            const closedPosition = positions.find((p: any) => p.symbol === symbol)
+            if (closedPosition) {
+              estimatedPnL = parseFloat(closedPosition.unrealized_pl || '0')
+            }
+          } catch (err) {
+            console.log('⚠️ Could not fetch position P&L, using 0')
+          }
+        }
+
+        // Use the strategy ID that generated this signal (from outer scope)
+        // Note: usedStrategyId is captured from the signal generation above
+        const strategyId = typeof usedStrategyId !== 'undefined' ? usedStrategyId : 'normal'
+
+        // Record the trade
+        engine.recordTrade(strategyId, estimatedPnL, symbol)
+
+        const strategyName = engine.getAllPerformances().find(p => p.strategyId === strategyId)?.strategyName || 'Normal'
+        console.log(`📊 Recorded trade to ${strategyName} strategy: ${symbol} P&L=$${estimatedPnL.toFixed(2)}`)
+      } catch (trackError) {
+        console.error('⚠️ Failed to record trade to engine:', trackError)
+      }
+
       return {
         success: true,
         orderId: order.id,
@@ -734,23 +779,22 @@ function startBotActivitySimulation() {
         'SPY', 'QQQ', 'XLK', 'XLF', 'ARKK'
       ]
 
+      // ✅ VERIFIED ALPACA-SUPPORTED CRYPTO PAIRS ONLY
+      // These are confirmed to work on Alpaca Paper Trading
       const cryptoSymbols = [
-        // Major Cryptos (Highest Volume)
-        'BTC/USD', 'ETH/USD', 'BNB/USD', 'XRP/USD', 'SOL/USD', 'ADA/USD', 'DOGE/USD',
-        // Layer 1 Blockchains (High Activity)
-        'AVAX/USD', 'DOT/USD', 'MATIC/USD', 'ATOM/USD', 'NEAR/USD', 'ALGO/USD', 'FTM/USD',
-        // DeFi Leaders
-        'UNI/USD', 'LINK/USD', 'AAVE/USD', 'CRV/USD', 'MKR/USD', 'COMP/USD', 'SNX/USD',
-        // New Layer 1s (High Volatility)
-        'SUI/USD', 'APT/USD', 'SEI/USD', 'INJ/USD', 'TIA/USD', 'WLD/USD',
-        // Gaming & NFT (High Volume)
-        'SAND/USD', 'MANA/USD', 'AXS/USD', 'GALA/USD', 'ENJ/USD', 'APE/USD',
-        // Meme Coins (High Volatility for Trading)
-        'SHIB/USD', 'PEPE/USD', 'FLOKI/USD',
-        // Traditional Alts (Stable Volume)
-        'LTC/USD', 'BCH/USD', 'ETC/USD', 'XLM/USD', 'TRX/USD', 'VET/USD',
-        // Layer 2 & Scaling
-        'OP/USD', 'ARB/USD', 'LRC/USD'
+        // Top 10 by Volume (Always Available)
+        'BTC/USD', 'ETH/USD', 'LTC/USD', 'BCH/USD', 'DOGE/USD',
+        'SHIB/USD', 'AVAX/USD', 'UNI/USD', 'LINK/USD',
+
+        // Altcoins (High Volume)
+        'AAVE/USD', 'ALGO/USD', 'BAT/USD', 'COMP/USD', 'CRV/USD',
+        'DOT/USD', 'GRT/USD', 'MKR/USD', 'SUSHI/USD', 'YFI/USD',
+
+        // Newer Additions
+        'MATIC/USD', 'FIL/USD', 'XTZ/USD',
+
+        // Note: Remove /USD suffix as Alpaca may use different format
+        // Alpaca accepts: BTC/USD, BTCUSD, or BTC-USD depending on endpoint
       ]
 
       // Select symbol pool based on market hours
@@ -761,33 +805,70 @@ function startBotActivitySimulation() {
       const symbol = availableSymbols[Math.floor(Math.random() * availableSymbols.length)]
       const assetType = symbol.includes('/') ? 'CRYPTO' : 'STOCK'
 
-      // More realistic confidence range (50-95%)
-      const confidence = 50 + Math.random() * 45
+      // 🤖 AI STRATEGY ENGINE: Generate intelligent signal using adaptive strategies
+      let recommendation = 'BUY'
+      let confidence = 60
+      let positionSize = 0
+      let usedStrategyId = 'normal' // Track which strategy generated this signal
+
+      try {
+        // Fetch market data for strategy analysis
+        const marketData = await getAlpacaClient().getBars(symbol, {
+          timeframe: '1Day',
+          limit: 100
+        })
+
+        if (marketData && marketData.length > 20) {
+          // Generate signal using Global AdaptiveStrategyEngine
+          const engine = getGlobalStrategyEngine()
+          const signal = await engine.generateSignal(symbol, marketData as any)
+
+          if (signal) {
+            recommendation = signal.action
+            confidence = signal.confidence
+            positionSize = signal.positionSize
+            usedStrategyId = signal.strategyId // Store which strategy was used
+
+            console.log(`🤖 AI Strategy: ${signal.strategyName}`)
+            console.log(`   Signal: ${signal.action} | Confidence: ${confidence}% | Size: $${positionSize.toFixed(2)}`)
+            console.log(`   Testing: ${signal.performance.testingMode ? 'YES' : 'NO'} | Win Rate: ${signal.performance.winRate.toFixed(1)}%`)
+          } else {
+            // Fallback to random signal
+            confidence = 50 + Math.random() * 45
+            console.log(`⚠️ No strategy signal available, using fallback`)
+          }
+        } else {
+          console.log(`⚠️ Insufficient market data for ${symbol}, using fallback`)
+          confidence = 50 + Math.random() * 45
+        }
+      } catch (error: any) {
+        // Skip this symbol if it's not supported
+        if (error.message?.includes('not found') || error.message?.includes('endpoint not found')) {
+          console.log(`⏭️ Skipping ${symbol} - not supported by Alpaca`)
+          return // Skip this cycle and try another symbol next time
+        }
+        console.error('Error generating AI strategy signal:', error)
+        confidence = 50 + Math.random() * 45
+      }
 
       // SMART RECOMMENDATION: Check positions to decide BUY or SELL
-      let recommendation = 'BUY' // Default to BUY
       try {
         const positions = await getAlpacaClient().getPositions()
         const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
 
-        // If we have a position, 50% chance to SELL, otherwise always BUY
-        if (existingPosition) {
+        // If we have a position and signal is BUY, maybe SELL instead
+        if (existingPosition && recommendation === 'BUY') {
           recommendation = Math.random() > 0.5 ? 'SELL' : 'BUY'
         }
-        // If no position, keep as BUY (can't sell what we don't own)
+        // If signal is SELL but no position, change to BUY
+        if (!existingPosition && recommendation === 'SELL') {
+          recommendation = 'BUY'
+        }
       } catch (error) {
         console.error('Error checking positions for recommendation:', error)
-        // On error, default to BUY (safer than risking a SELL without position)
       }
 
-      // 🔄 INVERSE MODE: Flip BUY/SELL signals
-      if (botMetrics.inverseMode && recommendation !== 'HOLD') {
-        const originalRec = recommendation
-        recommendation = recommendation === 'BUY' ? 'SELL' : 'BUY'
-        console.log(`🔄 INVERSE MODE: Flipped ${originalRec} → ${recommendation} for ${symbol}`)
-      }
-
-      console.log(`🎯 Generated recommendation: ${symbol} ${recommendation} (${confidence.toFixed(1)}%)${botMetrics.inverseMode ? ' [INVERSE]' : ''}`)
+      console.log(`🎯 Final recommendation: ${symbol} ${recommendation} (${confidence.toFixed(1)}%)`)
       console.log(`📊 Market: ${isMarketOpen ? 'OPEN' : 'CLOSED'} | Asset: ${assetType} | Trading: ${isMarketOpen ? 'Stocks + Crypto' : 'Crypto Only'}`)
 
       // Update metrics

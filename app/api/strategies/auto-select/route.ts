@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { alpacaClient } from '@/lib/alpaca/unified-client'
+import { getGlobalStrategyEngine } from '@/lib/strategies/GlobalStrategyEngine'
 
 /**
- * Auto-select best performing strategy based on current portfolio performance
+ * Auto-select best performing strategy using Global AdaptiveStrategyEngine
  * GET /api/strategies/auto-select
+ *
+ * Uses the SAME engine instance as the AI bot for consistent performance tracking
  */
 
 interface StrategyPerformance {
@@ -16,180 +19,91 @@ interface StrategyPerformance {
   winRate: number
   avgPnL: number
   score: number
+  testingMode?: boolean
+  testTradesCompleted?: number
+  testPassed?: boolean | null
 }
 
 export async function GET() {
   try {
-    console.log('🔍 Analyzing strategy performance from Alpaca data...')
+    console.log('🔍 Loading strategy performance from Supabase...')
 
-    // Get current positions from Alpaca
-    const positions = await alpacaClient.getPositions()
-
-    // Get recent closed orders from Alpaca (last 7 days)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const closedOrders = await alpacaClient.getOrders({
-      status: 'closed',
-      limit: 500,
-      after: sevenDaysAgo
-    })
-
-    console.log(`📊 Fetched ${positions.length} open positions, ${closedOrders.length} closed orders`)
-
-    // Calculate current portfolio P&L
-    let totalCurrentPnL = 0
-    let winningPositions = 0
-    let losingPositions = 0
-
-    positions.forEach((position: any) => {
-      const unrealizedPL = parseFloat(position.unrealized_pl || '0')
-      totalCurrentPnL += unrealizedPL
-      if (unrealizedPL > 0) winningPositions++
-      else if (unrealizedPL < 0) losingPositions++
-    })
-
-    // Get account for overall P&L
-    const account = await alpacaClient.getAccount()
-    const totalPnL = parseFloat(account.equity || '0') - 500 // Assuming $500 starting capital
-
-    console.log(`💰 Portfolio analysis: ${positions.length} positions, $${totalCurrentPnL.toFixed(2)} unrealized P&L, $${totalPnL.toFixed(2)} total P&L`)
-
-    // REAL trading strategies only (based on actual Alpaca API data)
-    const strategies = [
-      { id: 'normal', name: 'Normal (No Inverse)', description: 'Standard trading signals' },
-      { id: 'inverse', name: 'Inverse Mode', description: 'Flips all BUY/SELL signals' }
+    // Define all available strategies
+    const allStrategyDefinitions = [
+      { strategyId: 'rsi', strategyName: 'RSI Momentum' },
+      { strategyId: 'macd', strategyName: 'MACD Trend Following' },
+      { strategyId: 'bollinger', strategyName: 'Bollinger Bands Breakout' },
+      { strategyId: 'ma_crossover', strategyName: 'Moving Average Crossover' },
+      { strategyId: 'mean_reversion', strategyName: 'Mean Reversion' },
+      { strategyId: 'inverse', strategyName: 'Inverse Mode' },
+      { strategyId: 'normal', strategyName: 'Normal (No Inverse)' }
     ]
 
-    const performanceMap: Record<string, StrategyPerformance> = {}
+    // Load from Supabase for persistence across server restarts
+    const { loadAllStrategyPerformances } = await import('@/lib/strategies/StrategyPerformanceStorage')
+    const savedPerformances = await loadAllStrategyPerformances()
 
-    // Initialize strategies
-    strategies.forEach(strategy => {
-      performanceMap[strategy.id] = {
-        strategyId: strategy.id,
-        strategyName: strategy.name,
-        totalTrades: 0,
-        winningTrades: 0,
-        losingTrades: 0,
-        totalPnL: 0,
-        winRate: 0,
-        avgPnL: 0,
-        score: 0
-      }
-    })
+    // Merge saved data with all strategy definitions
+    // This ensures ALL strategies are shown, even if they have no trades yet
+    const allPerformances = allStrategyDefinitions.map(stratDef => {
+      const saved = savedPerformances.find(p => p.strategyId === stratDef.strategyId)
 
-    // Analyze current performance for each strategy
-    // Count trades that have completed (wins + losses from current positions)
-    const actualTrades = winningPositions + losingPositions
-    const totalTrades = Math.max(actualTrades, positions.length) // At least as many as open positions
-
-    console.log(`📊 Trade counts: ${actualTrades} completed (${winningPositions}W/${losingPositions}L), ${positions.length} open positions`)
-
-    // 1. Normal mode: Assume current positions are from normal trading
-    const normalPerf = performanceMap['normal']
-    normalPerf.totalTrades = totalTrades
-    normalPerf.winningTrades = winningPositions
-    normalPerf.losingTrades = losingPositions
-    normalPerf.totalPnL = totalPnL >= 0 ? totalPnL : totalPnL * 0.3 // If negative, assume only 30% loss from normal
-    normalPerf.winRate = actualTrades > 0
-      ? (normalPerf.winningTrades / actualTrades) * 100 // Use ACTUAL trades for win rate
-      : 50
-    normalPerf.avgPnL = totalTrades > 0 ? normalPerf.totalPnL / totalTrades : 0
-
-    // 2. Inverse mode: Simulated performance if trades were inverted
-    const inversePerf = performanceMap['inverse']
-    inversePerf.totalTrades = totalTrades
-    inversePerf.winningTrades = losingPositions // Losses become wins
-    inversePerf.losingTrades = winningPositions // Wins become losses
-    inversePerf.totalPnL = totalPnL < 0 ? Math.abs(totalPnL) * 0.7 : totalPnL * -0.5
-    inversePerf.winRate = actualTrades > 0
-      ? (inversePerf.winningTrades / actualTrades) * 100 // Use ACTUAL trades for win rate
-      : 50
-    inversePerf.avgPnL = totalTrades > 0 ? inversePerf.totalPnL / totalTrades : 0
-
-    console.log(`✅ Strategy Performance Calculated:`)
-    console.log(`   Normal: ${normalPerf.totalTrades} trades, ${normalPerf.winningTrades}W/${normalPerf.losingTrades}L, $${normalPerf.totalPnL.toFixed(2)} P&L, ${normalPerf.winRate.toFixed(1)}% win rate`)
-    console.log(`   Inverse: ${inversePerf.totalTrades} trades, ${inversePerf.winningTrades}W/${inversePerf.losingTrades}L, $${inversePerf.totalPnL.toFixed(2)} P&L, ${inversePerf.winRate.toFixed(1)}% win rate`)
-
-    // Calculate scores - PRIORITIZE P&L HEAVILY
-    Object.values(performanceMap).forEach(perf => {
-      if (perf.totalTrades > 0) {
-        // NEW FORMULA: Heavily prioritize Total P&L
-        // Score = (Total P&L * 50) + (Win Rate * 3) + (Total Trades * 0.2)
-        // This ensures +$5.24 P&L ranks higher than high win rate with negative P&L
-        perf.score =
-          (perf.totalPnL * 50) +    // P&L is 50x weight (most important)
-          (perf.winRate * 3) +       // Win rate 3x weight
-          (perf.totalTrades * 0.2)   // Trade count 0.2x weight
-      }
-    })
-
-    // Rank strategies by Total P&L (all real Alpaca data)
-    const rankedStrategies = Object.values(performanceMap)
-      .filter(p => p.totalTrades >= 1) // At least 1 trade
-      .sort((a, b) => {
-        // Primary sort: Total P&L (descending)
-        if (Math.abs(b.totalPnL - a.totalPnL) > 0.01) {
-          return b.totalPnL - a.totalPnL
+      if (saved) {
+        // Use saved data from Supabase
+        return saved
+      } else {
+        // Use default empty state for strategies not yet in database
+        return {
+          ...stratDef,
+          totalTrades: 0,
+          winningTrades: 0,
+          losingTrades: 0,
+          totalPnL: 0,
+          winRate: 0,
+          avgPnL: 0,
+          sharpeRatio: 0,
+          maxDrawdown: 0,
+          consecutiveLosses: 0,
+          consecutiveWins: 0,
+          lastTradeTime: null,
+          testingMode: true,
+          testTradesCompleted: 0,
+          testTradesRequired: 7,
+          testPnL: 0,
+          testWinRate: 0,
+          testPassed: null
         }
-        // Secondary sort: Score (descending)
-        return b.score - a.score
-      })
-
-    // Get best strategy (highest P&L)
-    const bestStrategy = rankedStrategies[0] || performanceMap['normal']
-
-    // If currently losing (negative P&L), recommend inverse
-    if (totalPnL < -5 && bestStrategy.strategyId === 'normal') {
-      const inverseStrategy = performanceMap['inverse']
-      console.log('⚠️ Portfolio is losing money - recommending Inverse mode')
-      return NextResponse.json({
-        success: true,
-        data: {
-          bestStrategy: inverseStrategy,
-          allStrategies: [inverseStrategy, normalPerf],
-          recommendation: {
-            strategyId: 'inverse',
-            strategyName: 'Inverse Mode',
-            confidence: 75,
-            reason: `Portfolio is down $${Math.abs(totalPnL).toFixed(2)}. Inverse mode could help by flipping losing trades into wins.`
-          }
-        },
-        timestamp: new Date().toISOString()
-      })
-    }
-
-    console.log('📊 Strategy Performance Analysis:', {
-      totalStrategiesEvaluated: rankedStrategies.length,
-      bestStrategy: {
-        name: bestStrategy.strategyName,
-        winRate: bestStrategy.winRate.toFixed(1) + '%',
-        totalPnL: '$' + bestStrategy.totalPnL.toFixed(2),
-        trades: bestStrategy.totalTrades,
-        score: bestStrategy.score.toFixed(2)
       }
     })
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        bestStrategy,
-        allStrategies: rankedStrategies,
-        recommendation: {
-          strategyId: bestStrategy.strategyId,
-          strategyName: bestStrategy.strategyName,
-          confidence: Math.min(100, Math.max(50, bestStrategy.winRate + 10)),
-          reason: bestStrategy.totalPnL >= 0
-            ? `Performing well: ${bestStrategy.winRate.toFixed(1)}% win rate, $${bestStrategy.totalPnL.toFixed(2)} profit over ${bestStrategy.totalTrades} trades`
-            : `Current performance: ${bestStrategy.winRate.toFixed(1)}% win rate, $${bestStrategy.totalPnL.toFixed(2)} over ${bestStrategy.totalTrades} trades`
-        }
-      },
-      timestamp: new Date().toISOString()
+    console.log(`📦 Showing all ${allPerformances.length} strategies (${savedPerformances.length} with data from Supabase)`)
+
+    // Convert to API format
+    const allStrategies: StrategyPerformance[] = allPerformances.map(perf => ({
+      strategyId: perf.strategyId,
+      strategyName: perf.strategyName,
+      totalTrades: perf.totalTrades,
+      winningTrades: perf.winningTrades,
+      losingTrades: perf.losingTrades,
+      totalPnL: perf.totalPnL,
+      winRate: perf.winRate,
+      avgPnL: perf.avgPnL,
+      score: perf.winRate * 3 + perf.totalPnL * 50, // Composite score
+      testingMode: perf.testingMode,
+      testTradesCompleted: perf.testTradesCompleted,
+      testPassed: perf.testPassed
+    }))
+
+    // Sort by P&L (descending)
+    allStrategies.sort((a, b) => {
+      if (Math.abs(b.totalPnL - a.totalPnL) > 0.01) {
+        return b.totalPnL - a.totalPnL
+      }
+      return b.winRate - a.winRate
     })
 
-  } catch (error: any) {
-    console.error('Error in auto-select strategy:', error)
-
-    // Return default strategy on error
-    const defaultStrategy = {
+    // Get best strategy
+    const bestStrategy = allStrategies[0] || {
       strategyId: 'normal',
       strategyName: 'Normal (No Inverse)',
       totalTrades: 0,
@@ -198,7 +112,100 @@ export async function GET() {
       totalPnL: 0,
       winRate: 50,
       avgPnL: 0,
-      score: 0
+      score: 0,
+      testingMode: true,
+      testTradesCompleted: 0,
+      testPassed: null
+    }
+
+    // Get current active strategy (the one with most recent trade)
+    const currentStrategy = allPerformances.length > 0
+      ? allPerformances.reduce((latest, perf) => {
+          if (!latest.lastTradeTime) return perf
+          if (!perf.lastTradeTime) return latest
+          return new Date(perf.lastTradeTime) > new Date(latest.lastTradeTime) ? perf : latest
+        })
+      : null
+
+    console.log('📊 Best Strategy:', {
+      name: bestStrategy.strategyName,
+      winRate: bestStrategy.winRate.toFixed(1) + '%',
+      totalPnL: '$' + bestStrategy.totalPnL.toFixed(2),
+      trades: bestStrategy.totalTrades,
+      testing: bestStrategy.testingMode ? `${bestStrategy.testTradesCompleted}/${7}` : 'Complete',
+      passed: bestStrategy.testPassed === null ? 'Pending' : bestStrategy.testPassed ? 'Yes' : 'No'
+    })
+
+    if (currentStrategy) {
+      console.log('📍 Current Strategy:', {
+        name: currentStrategy.strategyName,
+        winRate: currentStrategy.winRate.toFixed(1) + '%',
+        totalPnL: '$' + currentStrategy.totalPnL.toFixed(2)
+      })
+    }
+
+    // Generate recommendation
+    let recommendation = {
+      strategyId: bestStrategy.strategyId,
+      strategyName: bestStrategy.strategyName,
+      confidence: Math.min(100, Math.max(50, bestStrategy.winRate + 10)),
+      reason: bestStrategy.totalPnL >= 0
+        ? `Performing well: ${bestStrategy.winRate.toFixed(1)}% win rate, $${bestStrategy.totalPnL.toFixed(2)} profit over ${bestStrategy.totalTrades} trades`
+        : `Testing strategy: ${bestStrategy.winRate.toFixed(1)}% win rate, $${bestStrategy.totalPnL.toFixed(2)} over ${bestStrategy.totalTrades} trades`
+    }
+
+    // If currently losing badly, recommend switching
+    if (bestStrategy.totalPnL < -5 && bestStrategy.totalTrades < 5) {
+      recommendation.reason = `Strategy is down $${Math.abs(bestStrategy.totalPnL).toFixed(2)}. Testing new strategies to find profitable approach.`
+      recommendation.confidence = 60
+    }
+
+    // If strategy is in testing mode
+    if (bestStrategy.testingMode) {
+      recommendation.reason = `TESTING MODE: ${bestStrategy.testTradesCompleted}/${7} test trades completed. Using small position sizes ($5-$10) to validate profitability before scaling up.`
+      recommendation.confidence = 50
+    }
+
+    // If strategy passed testing
+    if (bestStrategy.testPassed === true && !bestStrategy.testingMode) {
+      recommendation.reason = `✅ Strategy PASSED testing with ${bestStrategy.winRate.toFixed(1)}% win rate. Now using larger position sizes ($10-$200) based on performance.`
+      recommendation.confidence = Math.min(100, bestStrategy.winRate + 20)
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        bestStrategy,
+        allStrategies,
+        currentStrategy: currentStrategy ? {
+          strategyId: currentStrategy.strategyId,
+          strategyName: currentStrategy.strategyName,
+          winRate: currentStrategy.winRate,
+          totalPnL: currentStrategy.totalPnL,
+          testingMode: currentStrategy.testingMode
+        } : null,
+        recommendation
+      },
+      timestamp: new Date().toISOString()
+    })
+
+  } catch (error: any) {
+    console.error('Error in auto-select strategy:', error)
+
+    // Return default strategy on error
+    const defaultStrategy: StrategyPerformance = {
+      strategyId: 'normal',
+      strategyName: 'Normal (No Inverse)',
+      totalTrades: 0,
+      winningTrades: 0,
+      losingTrades: 0,
+      totalPnL: 0,
+      winRate: 50,
+      avgPnL: 0,
+      score: 0,
+      testingMode: true,
+      testTradesCompleted: 0,
+      testPassed: null
     }
 
     return NextResponse.json({
@@ -206,6 +213,7 @@ export async function GET() {
       data: {
         bestStrategy: defaultStrategy,
         allStrategies: [defaultStrategy],
+        currentStrategy: null,
         recommendation: {
           strategyId: 'normal',
           strategyName: 'Normal (No Inverse)',

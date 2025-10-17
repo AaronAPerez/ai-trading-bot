@@ -581,145 +581,6 @@ export default function AITradingDashboard() {
         </div>
       </div>
 
-      {/* Portfolio Header with Live Orders Feed */}
-      {/* <div className="bg-gray-900/40 rounded-lg p-6 border border-gray-700/50"> */}
-        {/* <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-3">
-            <h2 className="text-xl font-bold text-white">Your Portfolio</h2>
-            {persistentBotState.isRunning && (
-              <div className="flex items-center space-x-2 bg-green-900/30 px-3 py-1 rounded-full border border-green-500/30">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-xs text-green-400 font-medium">Live Trading</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center space-x-2">
-            <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">1D</button>
-            <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">1M</button>
-            <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">1Y</button>
-            <button className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded">All</button>
-          </div>
-        </div> */}
-
-
-
-
-
-
-        {/* Main Portfolio Value */}
-        {/* <div className="mb-6">
-          <div className="text-4xl font-bold text-white mb-2">
-            {account.isLoading ? (
-              <div className="animate-pulse bg-gray-600 h-10 w-48 rounded"></div>
-            ) : (
-              `$${parseFloat(account.data?.equity || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-            )}
-          </div>
-          <div className={`flex items-center space-x-2 ${dayPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {!account.isLoading && ( */}
-              {/* <> */}
-                {/* <div className="space-y-2">
-
-                  <div className="flex items-center justify-between">
-
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Total P&L</span>
-                    <div className="flex items-center space-x-1">
-                      <span className={`font-bold ${realTimeMetrics.metrics.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                        }`}>
-                        {realTimeMetrics.isLoading ? (
-                          <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
-                        ) : (
-                          `${realTimeMetrics.metrics.totalPnL >= 0 ? '+' : ''}$${realTimeMetrics.metrics.totalPnL.toFixed(2)}`
-                        )}
-                      </span>
-                      {Math.abs(realTimeMetrics.metrics.totalPnL) > 100 && (
-                        <span className="text-xs">{realTimeMetrics.metrics.totalPnL >= 0 ? '📈' : '📉'}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Daily P&L</span>
-                    <div className="flex items-center space-x-1">
-                      <span className={`font-bold ${realTimeMetrics.metrics.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                        }`}>
-                        {realTimeMetrics.isLoading ? (
-                          <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
-                        ) : (
-                          `${realTimeMetrics.metrics.dailyPnL >= 0 ? '+' : ''}$${realTimeMetrics.metrics.dailyPnL.toFixed(2)}`
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div> */}
-
-                {/* <span className="text-sm text-gray-400">
-                  {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} PDT
-                </span>
-              </> */}
-        {/* //     )}
-        //   </div>
-        // </div> */}
-
-        {/* Portfolio Stats Grid */}
-        {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <h4 className="text-sm text-gray-400 mb-1">Buying Power</h4>
-            <div className="text-lg font-bold text-white">
-              {account.isLoading ? (
-                <div className="animate-pulse bg-gray-600 h-6 w-24 rounded"></div>
-              ) : (
-                `$${parseFloat(account.data?.buying_power || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              )}
-            </div>
-          </div>
-          <div>
-            <h4 className="text-sm text-gray-400 mb-1">Invested Amount</h4>
-            <div className="text-lg font-bold text-white">
-              {account.isLoading ? (
-                <div className="animate-pulse bg-gray-600 h-6 w-24 rounded"></div>
-              ) : (
-                `$${parseFloat(account.data?.buying_power || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-sm text-gray-400 mb-1">Invested Amount</h4>
-            <div className="text-lg font-bold text-white">
-
-              <div className="flex items-center space-x-1">
-                <span className="font-bold text-blue-400">
-                  {realTimeMetrics.isLoading ? (
-                    <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
-                  ) : (
-                    `$${realTimeMetrics.metrics.investedAmount.toFixed(2)}`
-                  )}
-                </span>
-                {realTimeMetrics.metrics.positionCount > 0 && (
-                  <span className="text-xs text-gray-400">({realTimeMetrics.metrics.positionCount} pos)</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-
-
-
-
-          <div>
-            <h4 className="text-sm text-gray-400 mb-1">Open Positions</h4>
-            <div className="text-lg font-bold text-white">
-              {positions.isLoading ? (
-                <div className="animate-pulse bg-gray-600 h-6 w-12 rounded"></div>
-              ) : (
-                positions.data?.length || 0
-              )}
-            </div>
-          </div>
-        </div> */}
-      {/* </div> */}
 
       {/* Live Portfolio Balance */}
       <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
@@ -739,6 +600,41 @@ export default function AITradingDashboard() {
       </div>
 
 
+            {/* 🎯 AI-Powered Strategy Performance Dashboard */}
+      <StrategyPerformanceDashboard
+        botIsActive={persistentBotState.isRunning}
+        autoSwitch={true}
+        inverseMode={inverseMode}
+        onStrategyChange={async (strategyId, shouldEnableInverse) => {
+          console.log(`🔄 Auto-switching to strategy: ${strategyId}, Should Enable Inverse: ${shouldEnableInverse}`)
+
+          // Only toggle if the state needs to change
+          if (shouldEnableInverse !== inverseMode) {
+            try {
+              const response = await fetch('/api/ai/bot-control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'toggle-inverse' })
+              })
+
+              if (response.ok) {
+                const result = await response.json()
+                const newInverseState = result.data.inverseMode
+
+                // Update local state to sync with backend
+                setInverseMode(newInverseState)
+                localStorage.setItem('ai-inverse-mode', newInverseState.toString())
+
+                console.log(`✅ Inverse mode ${newInverseState ? 'ENABLED' : 'DISABLED'} - Synced with Strategy Performance`)
+              }
+            } catch (error) {
+              console.error('Failed to toggle inverse mode:', error)
+            }
+          } else {
+            console.log(`ℹ️ Inverse mode already in correct state: ${inverseMode ? 'ON' : 'OFF'}`)
+          }
+        }}
+      />
 
 
       {/* Advanced Charts Section */}
@@ -818,41 +714,6 @@ export default function AITradingDashboard() {
         />
       </div>
 
-      {/* 🎯 AI-Powered Strategy Performance Dashboard */}
-      <StrategyPerformanceDashboard
-        botIsActive={persistentBotState.isRunning}
-        autoSwitch={true}
-        inverseMode={inverseMode}
-        onStrategyChange={async (strategyId, shouldEnableInverse) => {
-          console.log(`🔄 Auto-switching to strategy: ${strategyId}, Should Enable Inverse: ${shouldEnableInverse}`)
-
-          // Only toggle if the state needs to change
-          if (shouldEnableInverse !== inverseMode) {
-            try {
-              const response = await fetch('/api/ai/bot-control', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'toggle-inverse' })
-              })
-
-              if (response.ok) {
-                const result = await response.json()
-                const newInverseState = result.data.inverseMode
-
-                // Update local state to sync with backend
-                setInverseMode(newInverseState)
-                localStorage.setItem('ai-inverse-mode', newInverseState.toString())
-
-                console.log(`✅ Inverse mode ${newInverseState ? 'ENABLED' : 'DISABLED'} - Synced with Strategy Performance`)
-              }
-            } catch (error) {
-              console.error('Failed to toggle inverse mode:', error)
-            }
-          } else {
-            console.log(`ℹ️ Inverse mode already in correct state: ${inverseMode ? 'ON' : 'OFF'}`)
-          }
-        }}
-      />
 
 
 

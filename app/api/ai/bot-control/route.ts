@@ -1271,6 +1271,38 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
       console.log(`💾 Trade saved to Supabase: ${signal} ${quantity} ${symbol} @ $${estimatedPrice.toFixed(2)}`)
 
+      // 📊 RECORD TRADE TO ADAPTIVE STRATEGY ENGINE
+      try {
+        const { getGlobalStrategyEngine } = await import('@/lib/strategies/GlobalStrategyEngine')
+        const engine = getGlobalStrategyEngine()
+
+        // Calculate P&L (use 0 for now, will be updated when position closes)
+        let pnl = 0
+        if (signal === 'SELL') {
+          // Try to get unrealized P&L from position
+          try {
+            const positions = await alpacaClient.getPositions()
+            const position = positions.find((p: any) => p.symbol === symbol)
+            if (position) {
+              pnl = parseFloat(position.unrealized_pl || '0')
+            }
+          } catch (err) {
+            console.log('⚠️ Could not fetch P&L for closed position')
+          }
+        }
+
+        // Get current strategy
+        const currentStrategy = engine.getCurrentStrategy()
+        const strategyId = currentStrategy?.strategyId || 'normal'
+
+        // Record the trade
+        engine.recordTrade(strategyId, pnl, symbol)
+
+        console.log(`📊 Recorded to ${currentStrategy?.strategyName || 'Normal'} strategy: ${symbol} P&L=$${pnl.toFixed(2)}`)
+      } catch (recordError) {
+        console.error('⚠️ Failed to record to strategy engine:', recordError)
+      }
+
     }
 
   } catch (error: any) {
