@@ -77,10 +77,15 @@ export default function RecentOrdersTable({ refreshInterval = 30000, initialLimi
     queryKey: ['alpacaOrders'],
     queryFn: async () => {
       const res = await fetch('/api/alpaca/orders?limit=100&status=all')
+      if (!res.ok) {
+        throw new Error('Failed to fetch orders')
+      }
       const json = await res.json()
-      return json.orders || []
+      // API returns data in json.data, not json.orders
+      return Array.isArray(json.data) ? json.data : []
     },
-    refetchInterval: refreshInterval
+    refetchInterval: refreshInterval,
+    staleTime: 2000
   })
 
   if (error) {
@@ -183,7 +188,13 @@ export default function RecentOrdersTable({ refreshInterval = 30000, initialLimi
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">Recent Orders</h2>
+        <div className="flex items-center space-x-3">
+          <h2 className="text-xl font-bold text-white">Live Order Execution Feed</h2>
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <span className="text-xs text-green-400 font-medium">LIVE</span>
+          </div>
+        </div>
         <div className="flex items-center space-x-3">
           {/* View All Button */}
           <button className="text-sm text-blue-400 hover:text-blue-300 transition-colors">

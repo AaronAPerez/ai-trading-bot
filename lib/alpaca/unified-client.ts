@@ -89,7 +89,26 @@ export class UnifiedAlpacaClient {
           )
         }
 
-        return response.json()
+        // Handle empty responses (e.g., 204 No Content from DELETE requests)
+        const contentLength = response.headers.get('content-length')
+        const contentType = response.headers.get('content-type')
+
+        // If response has no content or is explicitly 204, return empty object
+        if (
+          response.status === 204 ||
+          contentLength === '0' ||
+          (!contentType?.includes('application/json') && !response.body)
+        ) {
+          return {} as T
+        }
+
+        // Try to parse JSON, but handle empty responses gracefully
+        const text = await response.text()
+        if (!text || text.trim() === '') {
+          return {} as T
+        }
+
+        return JSON.parse(text) as T
       },
       priority,
       params
@@ -236,12 +255,28 @@ export class UnifiedAlpacaClient {
     qty?: number
     percentage?: number
   }) {
+    // URL encode symbol to handle special characters like / in crypto symbols
+    const encodedSymbol = encodeURIComponent(symbol)
     const queryString = params ? new URLSearchParams(params as any).toString() : ''
-    return this.request(
-      `/v2/positions/${symbol}${queryString ? `?${queryString}` : ''}`,
-      { method: 'DELETE' },
-      'high'
-    )
+
+    console.log(`📤 Alpaca API: Closing position for ${symbol} (encoded: ${encodedSymbol})`)
+
+    try {
+      const result = await this.request(
+        `/v2/positions/${encodedSymbol}${queryString ? `?${queryString}` : ''}`,
+        { method: 'DELETE' },
+        'high'
+      )
+      console.log(`✅ Alpaca API: Successfully closed ${symbol}`, result)
+      return result
+    } catch (error: any) {
+      console.error(`❌ Alpaca API: Failed to close ${symbol}`, {
+        statusCode: error.statusCode,
+        message: error.message,
+        rawError: error
+      })
+      throw error
+    }
   }
 
   /**
@@ -425,5 +460,19 @@ export class UnifiedAlpacaClient {
   }
 }
 
-// Singleton instance
-export const alpacaClient = new UnifiedAlpacaClient()
+// Lazy-loaded singleton instance to avoid initialization during build
+let _alpacaClient: UnifiedAlpacaClient | null = null
+
+export function getAlpacaClient(): UnifiedAlpacaClient {
+  if (!_alpacaClient) {
+    _alpacaClient = new UnifiedAlpacaClient()
+  }
+  return _alpacaClient
+}
+
+// Legacy export for backward compatibility - use getAlpacaClient() instead
+export const alpacaClient = new Proxy({} as UnifiedAlpacaClient, {
+  get(target, prop) {
+    return getAlpacaClient()[prop as keyof UnifiedAlpacaClient]
+  }
+})

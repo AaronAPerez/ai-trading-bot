@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useState, useMemo } from 'react'
-import { TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, Search, ChevronLeft, ChevronRight, X, XCircle } from 'lucide-react'
 import { useAlpacaPositions } from '@/hooks/api/useAlpacaData'
 import { AssetLogo } from '@/components/ui/AssetLogo'
 
@@ -22,7 +22,11 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(initialLimit)
 
-  const { data: positionsResponse, isLoading, error, refetch } = useAlpacaPositions(refreshInterval)
+  // Liquidation state
+  const [liquidating, setLiquidating] = useState<string | null>(null)
+  const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set())
+
+  const { data: positions, isLoading, error, refetch } = useAlpacaPositions(refreshInterval)
 
   if (error) {
     return (
@@ -35,7 +39,8 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
     )
   }
 
-  const allPositions = positionsResponse?.data || []
+  // The hook returns the data directly, not wrapped in a data property
+  const allPositions = Array.isArray(positions) ? positions : []
 
   const formatCurrency = (value: number | string) => {
     const num = typeof value === 'string' ? parseFloat(value) : value
@@ -46,6 +51,109 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
     const num = typeof value === 'string' ? parseFloat(value) : value
     const sign = num >= 0 ? '+' : ''
     return `${sign}${num.toFixed(2)}%`
+  }
+
+  // Close single position
+  const closePosition = async (symbol: string) => {
+    if (!confirm(`Close position for ${symbol}?`)) return
+
+    setLiquidating(symbol)
+    try {
+      const response = await fetch('/api/alpaca/positions/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol })
+      })
+
+      // Try to parse JSON, but handle empty responses
+      let result: any = {}
+      const text = await response.text()
+
+      if (text) {
+        try {
+          result = JSON.parse(text)
+        } catch (e) {
+          console.error('Failed to parse response:', text)
+          result = { error: 'Invalid server response' }
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(result.error || result.details || 'Failed to close position')
+      }
+
+      await refetch()
+      alert(`✅ Successfully closed position for ${symbol}`)
+    } catch (error: any) {
+      console.error('Error closing position:', error)
+      const errorMessage = error.message || 'Failed to close position'
+
+      // Show user-friendly error with detailed information
+      if (errorMessage.includes('pattern day trading') || errorMessage.includes('PDT')) {
+        alert(`🚫 Pattern Day Trading Protection\n\n` +
+          `Cannot close ${symbol} today - you opened this position today.\n\n` +
+          `📊 Alpaca enforces SEC rules:\n` +
+          `• Accounts under $25,000 are limited in day trading\n` +
+          `• Same-day buy & sell = day trade\n\n` +
+          `✅ Solutions:\n` +
+          `1. Wait until tomorrow to close (recommended)\n` +
+          `2. Close manually in Alpaca dashboard\n` +
+          `3. Increase account to $25,000+`)
+      } else if (errorMessage.includes('fractional')) {
+        alert(`⚠️ Cannot close ${symbol}\n\nThis position contains fractional shares, which Alpaca's API doesn't support closing.\n\n➡️ Close it manually at: https://app.alpaca.markets/paper/dashboard/overview`)
+      } else if (errorMessage.includes('403') || errorMessage.includes('denied')) {
+        alert(`⚠️ Alpaca API denied the request\n\nError: ${errorMessage}\n\n➡️ Close manually at: https://app.alpaca.markets/paper/dashboard/overview`)
+      } else if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        alert(`⚠️ Position for ${symbol} not found. It may have already been closed.`)
+        await refetch() // Refresh to update UI
+      } else {
+        alert(`❌ Failed to close ${symbol}\n\n${errorMessage}`)
+      }
+    } finally {
+      setLiquidating(null)
+    }
+  }
+
+  // Liquidate all positions
+  const liquidateAll = async () => {
+    if (!confirm(`Are you sure you want to liquidate ALL ${filteredPositions.length} positions? This cannot be undone.`)) return
+
+    setLiquidating('all')
+    try {
+      const response = await fetch('/api/alpaca/positions/close', {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) throw new Error('Failed to liquidate all positions')
+
+      await refetch()
+      alert('Successfully liquidated all positions')
+    } catch (error) {
+      console.error('Error liquidating positions:', error)
+      alert(`Failed to liquidate: ${error.message}`)
+    } finally {
+      setLiquidating(null)
+    }
+  }
+
+  // Toggle position selection
+  const togglePosition = (symbol: string) => {
+    const newSelected = new Set(selectedPositions)
+    if (newSelected.has(symbol)) {
+      newSelected.delete(symbol)
+    } else {
+      newSelected.add(symbol)
+    }
+    setSelectedPositions(newSelected)
+  }
+
+  // Select/deselect all
+  const toggleSelectAll = () => {
+    if (selectedPositions.size === paginatedPositions.length) {
+      setSelectedPositions(new Set())
+    } else {
+      setSelectedPositions(new Set(paginatedPositions.map((p: any) => p.symbol)))
+    }
   }
 
   // Apply all filters and search
@@ -108,8 +216,45 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">Top Positions</h2>
+        <h2 className="text-xl font-bold text-white">Portfolio Positions</h2>
         <div className="flex items-center space-x-3">
+          {/* Liquidate Selected Button */}
+          {selectedPositions.size > 0 && (
+            <button
+              onClick={() => {
+                if (confirm(`Close ${selectedPositions.size} selected positions?`)) {
+                  selectedPositions.forEach(symbol => closePosition(symbol))
+                  setSelectedPositions(new Set())
+                }
+              }}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              Close {selectedPositions.size} Selected
+            </button>
+          )}
+
+          {/* Liquidate All Button */}
+          {filteredPositions.length > 0 && (
+            <button
+              onClick={liquidateAll}
+              disabled={liquidating === 'all'}
+              className="px-4 py-2 bg-red-900/30 hover:bg-red-900/50 border border-red-500/30 hover:border-red-500/50 text-red-400 rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+              title="Close all positions"
+            >
+              {liquidating === 'all' ? (
+                <span className="flex items-center space-x-2">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Liquidating...</span>
+                </span>
+              ) : (
+                <span className="flex items-center space-x-2">
+                  <XCircle className="w-4 h-4" />
+                  <span>Liquidate All</span>
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Refresh Button */}
           <button
             onClick={() => refetch()}
@@ -248,6 +393,14 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
               <thead className="sticky top-0 bg-gray-800/90 backdrop-blur-sm border-b border-gray-700/50 z-10">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={selectedPositions.size === paginatedPositions.length && paginatedPositions.length > 0}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-600 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Asset
                   </th>
                   <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -260,7 +413,13 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
                     Market Value
                   </th>
                   <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Total P/L
+                    Today's P/L ($)
+                  </th>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Total P/L ($)
+                  </th>
+                  <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -272,10 +431,12 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
                   const marketValue = parseFloat(position.market_value || position.marketValue || '0')
                   const unrealizedPL = parseFloat(position.unrealized_pl || position.unrealizedPl || '0')
                   const unrealizedPLPercent = parseFloat(position.unrealized_plpc || position.unrealizedPlpc || '0') * 100
+                  const todayPL = parseFloat(position.change_today || '0')
                   const side = position.side
 
                   const isPositive = unrealizedPL >= 0
                   const isNeutral = unrealizedPL === 0
+                  const isTodayPositive = todayPL >= 0
                   const isCrypto = symbol?.includes('/') ||
                                   /[-](USD|USDT|USDC)$/i.test(symbol) ||
                                   position.asset_class === 'crypto'
@@ -285,6 +446,17 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
                       key={index}
                       className="hover:bg-gray-800/30 transition-colors"
                     >
+                      {/* Checkbox */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedPositions.has(symbol)}
+                          onChange={() => togglePosition(symbol)}
+                          className="rounded border-gray-600 text-blue-600 focus:ring-blue-500"
+                        />
+                      </td>
+
+                      {/* Asset */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center space-x-3">
                           <AssetLogo
@@ -307,21 +479,39 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
                           </div>
                         </div>
                       </td>
+
+                      {/* Price */}
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="text-sm font-medium text-white">
                           {formatCurrency(currentPrice)}
                         </div>
                       </td>
+
+                      {/* Quantity */}
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="text-sm font-medium text-white">
-                          {qty.toLocaleString()}
+                          {qty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}
                         </div>
                       </td>
+
+                      {/* Market Value */}
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="text-sm font-medium text-white">
                           {formatCurrency(marketValue)}
                         </div>
                       </td>
+
+                      {/* Today's P/L */}
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className={`text-sm font-medium ${
+                          todayPL === 0 ? 'text-gray-400' :
+                          isTodayPositive ? 'text-green-400' : 'text-red-400'
+                        }`}>
+                          {formatCurrency(todayPL)}
+                        </div>
+                      </td>
+
+                      {/* Total P/L */}
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end space-x-2">
                           {isNeutral ? (
@@ -346,6 +536,22 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
                             </div>
                           </div>
                         </div>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <button
+                          onClick={() => closePosition(symbol)}
+                          disabled={liquidating === symbol}
+                          className="p-2 bg-red-900/30 hover:bg-red-900/50 border border-red-500/30 hover:border-red-500/50 text-red-400 rounded transition-colors disabled:opacity-50"
+                          title="Close position"
+                        >
+                          {liquidating === symbol ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <X className="w-4 h-4" />
+                          )}
+                        </button>
                       </td>
                     </tr>
                   )

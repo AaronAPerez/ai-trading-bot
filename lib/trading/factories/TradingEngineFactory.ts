@@ -681,16 +681,25 @@ class TradingEngineBuilder implements EngineBuilder {
 // ===============================================
 
 export class TradingEngineManager {
+  private static _factory: TradingEngineFactory | null = null
+
+  // Lazy getter for factory (prevents build-time initialization)
+  private static getFactory(): TradingEngineFactory {
+    if (!this._factory) {
+      this._factory = TradingEngineFactory.getInstance()
+    }
+    return this._factory
+  }
+
   static getActiveEngine() {
     throw new Error('Method not implemented.')
   }
-  private static factory = TradingEngineFactory.getInstance()
 
   /**
    * Create a new trading engine
    */
   public static async create(options: EngineCreationOptions): Promise<string> {
-    const instance = await this.factory.createEngine(options)
+    const instance = await this.getFactory().createEngine(options)
     return instance.id
   }
 
@@ -698,44 +707,46 @@ export class TradingEngineManager {
    * Start an engine
    */
   public static async start(engineId: string): Promise<void> {
-    await this.factory.startEngine(engineId)
+    await this.getFactory().startEngine(engineId)
   }
 
   /**
    * Stop an engine
    */
   public static async stop(engineId: string): Promise<void> {
-    await this.factory.stopEngine(engineId)
+    await this.getFactory().stopEngine(engineId)
   }
 
   /**
    * Get engine status
    */
   public static getStatus(engineId: string): EngineInstance | null {
-    return this.factory.getEngine(engineId)
+    return this.getFactory().getEngine(engineId)
   }
 
   /**
    * Get all engines
    */
   public static getAllEngines(): EngineInstance[] {
-    return this.factory.getAllEngines()
+    return this.getFactory().getAllEngines()
   }
 
   /**
    * Get factory statistics
    */
   public static getStats() {
-    return this.factory.getFactoryStats()
+    return this.getFactory().getFactoryStats()
   }
 
   /**
    * Shutdown all engines
    */
   public static async shutdown(): Promise<void> {
-    await this.factory.shutdown()
+    await this.getFactory().shutdown()
   }
 }
 
-// Export default instance for convenience
-export const tradingEngineFactory = TradingEngineFactory.getInstance()
+// Export getter function for lazy initialization (prevents build-time errors)
+export function getTradingEngineFactory(): TradingEngineFactory {
+  return TradingEngineFactory.getInstance()
+}

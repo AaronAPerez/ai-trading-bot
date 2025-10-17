@@ -160,7 +160,10 @@ export default function LiveBalanceDisplay({
         {/* <div className={`bg-gray-900/40 rounded-lg p-3 border border-gray-700/50 transition-all duration-300 ${getChangeStyle('totalBalance')}`}> */}
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-gray-400">Balance</span>
-            {isLoading && <div className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin"></div>}
+            {isLoading && 
+            <div className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin">
+              </div>
+            }
           </div>
           <div className="text-lg font-bold text-white">
             {isLoading ? (
@@ -340,7 +343,7 @@ export default function LiveBalanceDisplay({
       </div>
 
       {/* Additional Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-gray-800/50 rounded-lg p-3">
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-400">Cash Available</span>
@@ -353,7 +356,7 @@ export default function LiveBalanceDisplay({
             <span className="text-sm font-medium text-white">{formatCurrency(currentMetrics.portfolioValue)}</span>
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
   )
 }

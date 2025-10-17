@@ -10,7 +10,9 @@ export default function HedgeFundAnalyticsPanel() {
       if (!res.ok) throw new Error('Failed to fetch analytics')
       return await res.json()
     },
-    refetchInterval: 15000
+    refetchInterval: 60000, // 1 minute (reduced from 15s)
+    retry: 1,
+    staleTime: 30000
   })
 
   if (error) return <div className="text-red-400">Error loading analytics</div>

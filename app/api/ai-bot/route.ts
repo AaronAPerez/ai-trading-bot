@@ -8,10 +8,24 @@
  * @location src/app/api/ai-bot/route.ts
  */
 
-import React from 'react'
 import { NextRequest, NextResponse } from 'next/server'
-import { alpacaClient } from '@/lib/alpaca/unified-client'
+import type { UnifiedAlpacaClient } from '@/lib/alpaca/unified-client'
 import { getTradingMode } from '@/lib/config/trading-mode'
+import { getGlobalStrategyEngine } from '@/lib/strategies/GlobalStrategyEngine'
+
+// Lazy-load alpacaClient to avoid build-time initialization
+// Using dynamic import to prevent initialization during build
+
+let alpacaClientInstance: UnifiedAlpacaClient | null = null
+
+function getAlpacaClient(): UnifiedAlpacaClient {
+  if (!alpacaClientInstance) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { alpacaClient } = require('@/lib/alpaca/unified-client')
+    alpacaClientInstance = alpacaClient
+  }
+  return alpacaClientInstance
+}
 
 // ===============================================
 // INTERFACES & TYPES
@@ -42,6 +56,7 @@ interface BotMetrics {
   uptime: number
   totalProcessingTime: number
   errorCount: number
+  inverseMode: boolean // Track if inverse mode is enabled
 }
 
 interface OrderExecutionResult {
@@ -60,7 +75,7 @@ interface OrderExecutionResult {
 // ===============================================
 
 let botActivityLogs: BotActivityLog[] = []
-let botMetrics: BotMetrics = {
+const botMetrics: BotMetrics = {
   symbolsScanned: 0,
   analysisCompleted: 0,
   recommendationsGenerated: 0,
@@ -72,10 +87,11 @@ let botMetrics: BotMetrics = {
   successRate: 87.5,
   uptime: 0,
   totalProcessingTime: 0,
-  errorCount: 0
+  errorCount: 0,
+  inverseMode: false
 }
 
-let botStartTime = new Date()
+const botStartTime = new Date()
 let isSimulatingActivity = false
 let simulationInterval: NodeJS.Timeout | null = null
 
@@ -84,6 +100,32 @@ let simulationInterval: NodeJS.Timeout | null = null
 // ===============================================
 
 let orderExecutionEnabled = true
+
+// ===============================================
+// DYNAMIC POSITION LIMITS BASED ON ACCOUNT SIZE
+// ===============================================
+function getMaxPositionsForAccount(equity: number): number {
+  if (equity < 500) return 8        // $100-500: 8 positions (increased from 3)
+  if (equity < 1000) return 12      // $500-1K: 12 positions (increased from 5)
+  if (equity < 2000) return 15      // $1K-2K: 15 positions (increased from 10)
+  if (equity < 5000) return 20      // $2K-5K: 20 positions (increased from 15)
+  if (equity < 10000) return 30     // $5K-10K: 30 positions (increased from 25)
+  if (equity < 25000) return 40     // $10K-25K: 40 positions (increased from 35)
+  return 60                         // $25K+: 60 positions max (increased from 50)
+}
+
+// ===============================================
+// DYNAMIC DAILY ORDER LIMITS BASED ON ACCOUNT SIZE
+// ===============================================
+function getDailyOrderLimitForAccount(equity: number): number {
+  if (equity < 500) return 50       // $100-500: 50 orders/day (conservative for small accounts)
+  if (equity < 1000) return 75      // $500-1K: 75 orders/day
+  if (equity < 2000) return 100     // $1K-2K: 100 orders/day
+  if (equity < 5000) return 150     // $2K-5K: 150 orders/day
+  if (equity < 10000) return 200    // $5K-10K: 200 orders/day
+  if (equity < 25000) return 300    // $10K-25K: 300 orders/day
+  return 500                        // $25K+: 500 orders/day max
+}
 
 // UPDATED CONFIGURATION - More permissive for testing
 const autoExecutionConfig = {
@@ -97,7 +139,13 @@ const autoExecutionConfig = {
   marketHoursOnly: false, // Allow 24/7 trading
   cryptoTradingEnabled: true, // Enable crypto trading
   enableDebugLogging: true, // Enhanced debugging
-  preventDuplicatePositions: true // Don't buy more of what we already own (unless selling)
+  preventDuplicatePositions: false, // CHANGED: Allow portfolio rotation - sell losers, add to winners
+  enablePortfolioRotation: true, // NEW: Enable intelligent position management
+  takeProfitThreshold: 0.10, // NEW: Take profit at 10% gain
+  stopLossThreshold: -0.05, // NEW: Stop loss at 5% loss
+  maxOpenPositions: 10, // DEFAULT: 10 positions (dynamically adjusted by getMaxPositionsForAccount)
+  rebalanceOnLowCash: true, // NEW: Sell positions when cash < 10% of equity
+  useDynamicPositionLimits: true // NEW: Auto-adjust position limit based on account size
 }
 
 const recentOrders: Set<string> = new Set()
@@ -122,10 +170,11 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
   console.log(`💰 Enhanced position sizing for ${symbol}: confidence=${confidence}% (${tradingMode.toUpperCase()} mode)`)
 
   try {
-    const isCrypto = symbol.includes('/') || /[-](USD|USDT|USDC)$/i.test(symbol)
+    // Detect crypto: symbols with / or ending with USD/USDT/USDC (BTC/USD, BTCUSD, AVAXUSD, etc.)
+    const isCrypto = symbol.includes('/') || /(USD|USDT|USDC)$/i.test(symbol)
 
     // Get current buying power from Alpaca account using unified client
-    const account = await alpacaClient.getAccount()
+    const account = await getAlpacaClient().getAccount()
 
     // For crypto, use cash (available USD in crypto wallet), for stocks use buying_power
     let availableFunds = 0
@@ -166,41 +215,154 @@ async function calculatePositionSizeWithBuyingPower(confidence: number, symbol: 
       }
     }
 
-    if (availableFunds < 10) {
-      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $10 required)`)
+    if (availableFunds < 5) {
+      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $5 required)`)
       return 0 // Not enough to trade
     }
 
-    // Enhanced position sizing with conservative limits (from quick_fix_patch)
-    const maxPositionPercent = 0.15 // Maximum 15% of available funds (increased for small balances)
-    const basePositionPercent = 0.05 // Base 5% of available funds (increased from 3%)
+    // 🎯 DYNAMIC POSITION SIZING BASED ON AVAILABLE FUNDS
+    let maxPositionPercent: number
+    let basePositionPercent: number
+    let minOrderSize: number
+
+    if (availableFunds < 20) {
+      // 🔴 CRITICAL LOW: < $20 - Ultra conservative (1 small trade max)
+      maxPositionPercent = 0.50  // Max 50% (allows 2 positions minimum)
+      basePositionPercent = 0.40 // Base 40%
+      minOrderSize = 5           // $5 minimum
+      console.log(`🔴 CRITICAL LOW buying power: $${availableFunds.toFixed(2)} - Ultra conservative sizing`)
+    } else if (availableFunds < 50) {
+      // 🟠 VERY LOW: $20-$50 - Very conservative (2-3 trades)
+      maxPositionPercent = 0.35  // Max 35%
+      basePositionPercent = 0.25 // Base 25%
+      minOrderSize = 8           // $8 minimum
+      console.log(`🟠 VERY LOW buying power: $${availableFunds.toFixed(2)} - Very conservative sizing`)
+    } else if (availableFunds < 100) {
+      // 🟡 LOW: $50-$100 - Conservative (3-5 trades)
+      maxPositionPercent = 0.25  // Max 25%
+      basePositionPercent = 0.15 // Base 15%
+      minOrderSize = 10          // $10 minimum
+      console.log(`🟡 LOW buying power: $${availableFunds.toFixed(2)} - Conservative sizing`)
+    } else if (availableFunds < 200) {
+      // 🟢 MODERATE: $100-$200 - Balanced (5-8 trades)
+      maxPositionPercent = 0.15  // Max 15%
+      basePositionPercent = 0.08 // Base 8%
+      minOrderSize = 15          // $15 minimum
+      console.log(`🟢 MODERATE buying power: $${availableFunds.toFixed(2)} - Balanced sizing`)
+    } else {
+      // 🔵 HEALTHY: > $200 - Normal diversification (8+ trades)
+      maxPositionPercent = 0.12  // Max 12%
+      basePositionPercent = 0.05 // Base 5%
+      minOrderSize = 20          // $20 minimum
+      console.log(`🔵 HEALTHY buying power: $${availableFunds.toFixed(2)} - Normal sizing`)
+    }
 
     // Confidence-based adjustment (only above 60%)
-    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * 0.10 // Up to 10% bonus
+    const confidenceBonus = Math.max(0, (confidence - 60) / 100) * (maxPositionPercent - basePositionPercent)
     const positionPercent = Math.min(basePositionPercent + confidenceBonus, maxPositionPercent)
 
     // Calculate position size
     let positionSize = availableFunds * positionPercent
 
-    // Dynamic minimum based on available funds (more flexible for small balances)
-    const minOrderSize = availableFunds < 100 ? 10 : 25 // $10 min for small balances, $25 for larger
-    const maxOrderSize = Math.min(200, availableFunds * 0.25) // Max $200 or 25% of available funds
-
+    // Apply min/max constraints
+    const maxOrderSize = Math.min(200, availableFunds * maxPositionPercent)
     positionSize = Math.max(minOrderSize, Math.min(positionSize, maxOrderSize))
 
-    // CRITICAL: Never exceed 25% of available funds (for diversification)
-    positionSize = Math.min(positionSize, availableFunds * 0.25)
+    // SAFETY: Never exceed max percent (prevents over-leveraging)
+    positionSize = Math.min(positionSize, availableFunds * maxPositionPercent)
 
     // Round to cents
     positionSize = Math.round(positionSize * 100) / 100
 
-    console.log(`💰 Enhanced sizing result: ${(positionPercent * 100).toFixed(2)}% of $${availableFunds.toFixed(2)} = $${positionSize.toFixed(2)} 🛡️ Conservative mode`)
+    console.log(`💰 Position sizing: ${(positionPercent * 100).toFixed(2)}% × $${availableFunds.toFixed(2)} = $${positionSize.toFixed(2)} (min: $${minOrderSize}, max: $${maxOrderSize.toFixed(2)})`)
 
     return positionSize
 
   } catch (error) {
     console.error('Error in position sizing:', error)
     return Math.min(25, autoExecutionConfig.maxPositionSize) // Conservative fallback
+  }
+}
+
+// ===============================================
+// PORTFOLIO MANAGEMENT FUNCTIONS
+// ===============================================
+
+/**
+ * Check if we should sell existing positions to free up cash
+ */
+async function checkPortfolioRebalancing(): Promise<{ shouldRebalance: boolean; positionsToSell: string[] }> {
+  try {
+    const alpacaClient = getAlpacaClient()
+    const account = await alpacaClient.getAccount()
+    const positions = await alpacaClient.getPositions()
+
+    const cash = parseFloat(account.cash || '0')
+    const equity = parseFloat(account.equity || '0')
+    const cashPercent = equity > 0 ? cash / equity : 0
+
+    console.log(`💰 Portfolio Check: Cash=$${cash.toFixed(2)} (${(cashPercent * 100).toFixed(1)}% of $${equity.toFixed(2)} equity)`)
+
+    const positionsToSell: string[] = []
+
+    // Strategy 1: If cash < 10% of equity, sell losing positions
+    if (autoExecutionConfig.rebalanceOnLowCash && cashPercent < 0.10) {
+      console.log(`⚠️ Low cash alert: ${(cashPercent * 100).toFixed(1)}% < 10% threshold`)
+
+      // Find losing positions to sell
+      for (const pos of positions) {
+        const unrealizedPL = parseFloat(pos.unrealized_pl || pos.unrealized_plpc || '0')
+        const unrealizedPLPercent = parseFloat(pos.unrealized_plpc || '0')
+
+        // Sell if loss exceeds stop-loss threshold
+        if (unrealizedPLPercent < autoExecutionConfig.stopLossThreshold) {
+          console.log(`🔴 Stop-loss triggered: ${pos.symbol} down ${(unrealizedPLPercent * 100).toFixed(2)}%`)
+          positionsToSell.push(pos.symbol)
+        }
+      }
+    }
+
+    // Strategy 2: Take profit on winners
+    for (const pos of positions) {
+      const unrealizedPLPercent = parseFloat(pos.unrealized_plpc || '0')
+
+      if (unrealizedPLPercent > autoExecutionConfig.takeProfitThreshold) {
+        console.log(`🟢 Take-profit opportunity: ${pos.symbol} up ${(unrealizedPLPercent * 100).toFixed(2)}%`)
+        positionsToSell.push(pos.symbol)
+      }
+    }
+
+    // Strategy 3: Limit max open positions (dynamically adjusted by account size)
+    const maxPositions = autoExecutionConfig.useDynamicPositionLimits
+      ? getMaxPositionsForAccount(equity)
+      : autoExecutionConfig.maxOpenPositions
+
+    if (positions.length >= maxPositions) {
+      console.log(`⚠️ Max positions reached: ${positions.length}/${maxPositions} (equity: $${equity.toFixed(2)})`)
+
+      // Sell worst performing position to make room
+      const worstPosition = positions.reduce((worst, current) => {
+        const worstPL = parseFloat(worst.unrealized_plpc || '0')
+        const currentPL = parseFloat(current.unrealized_plpc || '0')
+        return currentPL < worstPL ? current : worst
+      })
+
+      if (!positionsToSell.includes(worstPosition.symbol)) {
+        console.log(`📉 Selling worst performer: ${worstPosition.symbol} (P/L: ${(parseFloat(worstPosition.unrealized_plpc || '0') * 100).toFixed(2)}%)`)
+        positionsToSell.push(worstPosition.symbol)
+      }
+    } else {
+      console.log(`✅ Position capacity: ${positions.length}/${maxPositions} (room for ${maxPositions - positions.length} more)`)
+    }
+
+    return {
+      shouldRebalance: positionsToSell.length > 0,
+      positionsToSell: Array.from(new Set(positionsToSell)) // Remove duplicates
+    }
+
+  } catch (error) {
+    console.error('❌ Portfolio rebalancing check failed:', error)
+    return { shouldRebalance: false, positionsToSell: [] }
   }
 }
 
@@ -223,7 +385,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     return { success: false, reason: `Confidence below threshold: ${confidence}%` }
   }
 
-  // Check 3: Daily order limit
+  // Check 3: Dynamic daily order limit based on account equity
   const today = new Date().toDateString()
   if (lastOrderResetDate !== today) {
     dailyOrderCount = 0
@@ -231,10 +393,17 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     console.log('🔄 Daily order count reset')
   }
 
-  if (dailyOrderCount >= autoExecutionConfig.dailyOrderLimit) {
-    console.log(`❌ Daily order limit reached: ${dailyOrderCount}/${autoExecutionConfig.dailyOrderLimit}`)
-    return { success: false, reason: 'Daily order limit reached' }
+  // Get account equity for dynamic order limit
+  const accountInfo = await getAlpacaClient().getAccount()
+  const equity = parseFloat(accountInfo.equity || '0')
+  const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
+
+  if (dailyOrderCount >= dynamicDailyOrderLimit) {
+    console.log(`❌ Daily order limit reached: ${dailyOrderCount}/${dynamicDailyOrderLimit} (Equity: $${equity.toFixed(2)})`)
+    return { success: false, reason: `Daily order limit reached (${dynamicDailyOrderLimit} orders/day for $${equity.toFixed(0)} account)` }
   }
+
+  console.log(`📊 Daily orders: ${dailyOrderCount}/${dynamicDailyOrderLimit} (${((dailyOrderCount/dynamicDailyOrderLimit)*100).toFixed(1)}% used)`)
 
   // Check 4: Symbol cooldown
   if (recentOrders.has(symbol)) {
@@ -263,15 +432,16 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     }
 
     // Check 6: Validate crypto pairs (Alpaca only supports crypto paired with USD/USDT/USDC)
-    // Detect crypto: ONLY symbols with / or - followed by USD/USDT/USDC
-    // DO NOT use ticker-based detection as some stock ETFs have same tickers (e.g., ETH = Grayscale ETF)
-    const isCrypto = symbol.includes('/') || /[-](USD|USDT|USDC)$/i.test(symbol)
+    // Detect crypto: symbols with / or ending with USD/USDT/USDC (with or without separator)
+    // Examples: BTC/USD, BTCUSD, BTC-USD, AVAXUSD, AVAX/USD, ETH-USD, LINKUSD
+    const isCrypto = symbol.includes('/') || /(USD|USDT|USDC)$/i.test(symbol)
 
     console.log(`🔍 Crypto check for ${symbol}: ${isCrypto ? 'CRYPTO' : 'STOCK'}`)
 
     // Block invalid crypto pairs (e.g., BTC/ETH, LINK/BTC - Alpaca doesn't support these)
     if (isCrypto) {
-      const validCryptoPairs = /[-/](USD|USDT|USDC)$/i
+      // Accept symbols with separator (BTC/USD, BTC-USD) OR without separator (BTCUSD, LINKUSD)
+      const validCryptoPairs = /([-/])?(USD|USDT|USDC)$/i
       if (!validCryptoPairs.test(symbol)) {
         console.log(`❌ Invalid crypto pair: ${symbol} - Alpaca only supports pairs with USD/USDT/USDC`)
         return {
@@ -279,6 +449,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
           reason: `Invalid crypto pair: ${symbol}. Only USD, USDT, or USDC pairs are supported.`
         }
       }
+      console.log(`✅ ${symbol} detected as CRYPTO - trades 24/7`)
     }
 
     // Check 7: Market hours for stocks (crypto trades 24/7)
@@ -312,7 +483,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     // Check 8: Check existing positions for BUY/SELL validation
     try {
-      const positions = await alpacaClient.getPositions()
+      const positions = await getAlpacaClient().getPositions()
       const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
 
       if (recommendation.toUpperCase() === 'SELL') {
@@ -331,18 +502,33 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
         console.log(`✅ Confirmed existing position in ${symbol}: ${availableQty} shares available, market value: $${existingPosition.market_value}`)
       } else if (recommendation.toUpperCase() === 'BUY') {
-        // For BUY: Check if we already own this asset
-        if (existingPosition && autoExecutionConfig.preventDuplicatePositions) {
-          const currentValue = parseFloat(existingPosition.market_value || '0')
-          console.log(`❌ Already own ${symbol} (current value: $${currentValue.toFixed(2)})`)
-          console.log(`   Strategy: Diversify into other assets instead of averaging up`)
-          return {
-            success: false,
-            reason: `Already own ${symbol}. Diversifying into other assets to reduce risk.`
-          }
-        }
+        // For BUY: Portfolio rotation logic
         if (existingPosition) {
-          console.log(`⚠️ Already own ${symbol}, but averaging up...`)
+          if (autoExecutionConfig.preventDuplicatePositions) {
+            // Old behavior: block duplicate positions
+            const currentValue = parseFloat(existingPosition.market_value || '0')
+            console.log(`❌ Already own ${symbol} (current value: $${currentValue.toFixed(2)})`)
+            console.log(`   Strategy: Diversify into other assets instead of averaging up`)
+            return {
+              success: false,
+              reason: `Already own ${symbol}. Diversifying into other assets to reduce risk.`
+            }
+          } else {
+            // New behavior: allow position rotation - check if we should add or replace
+            const unrealizedPLPercent = parseFloat(existingPosition.unrealized_plpc || '0')
+            console.log(`⚖️ Position rotation check: ${symbol} P/L=${(unrealizedPLPercent * 100).toFixed(2)}%`)
+
+            // If existing position is losing significantly, don't add more
+            if (unrealizedPLPercent < autoExecutionConfig.stopLossThreshold * 0.5) {
+              console.log(`❌ Existing position losing badly - won't average down`)
+              return {
+                success: false,
+                reason: `Existing position in ${symbol} losing ${(unrealizedPLPercent * 100).toFixed(2)}% - avoiding averaging down`
+              }
+            }
+
+            console.log(`✅ Portfolio rotation: Adding to ${symbol} position (managed risk)`)
+          }
         }
       }
     } catch (error) {
@@ -374,7 +560,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
     if (recommendation.toUpperCase() === 'SELL') {
       // For SELL: Use 'qty' to sell all shares we own (close position)
       // We already verified position exists in the check above
-      const positions = await alpacaClient.getPositions()
+      const positions = await getAlpacaClient().getPositions()
       const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
       const qtyToSell = parseFloat(existingPosition.qty || '0')
 
@@ -390,7 +576,7 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
 
     // Execute order via Alpaca unified client (automatically uses correct trading mode)
     try {
-      const order = await alpacaClient.createOrder(orderData)
+      const order = await getAlpacaClient().createOrder(orderData)
       console.log('✅ Order placed successfully:', order.id)
 
       // Track successful order
@@ -419,6 +605,42 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
         status: 'completed'
       })
 
+      // 📊 RECORD TRADE TO STRATEGY ENGINE IMMEDIATELY
+      // We'll use a simplified approach: record as a completed trade with estimated P&L
+      // This allows the dashboard to update in real-time
+      try {
+        const engine = getGlobalStrategyEngine()
+
+        // For BUY orders: record as a trade with 0 P&L initially (will update when sold)
+        // For SELL orders: calculate actual P&L from position
+        let estimatedPnL = 0
+
+        if (recommendation === 'SELL') {
+          // Try to get actual P&L from the position that was sold
+          try {
+            const positions = await getAlpacaClient().getPositions()
+            const closedPosition = positions.find((p: any) => p.symbol === symbol)
+            if (closedPosition) {
+              estimatedPnL = parseFloat(closedPosition.unrealized_pl || '0')
+            }
+          } catch (err) {
+            console.log('⚠️ Could not fetch position P&L, using 0')
+          }
+        }
+
+        // Use the strategy ID that generated this signal (from outer scope)
+        // Note: usedStrategyId is captured from the signal generation above
+        const strategyId = typeof usedStrategyId !== 'undefined' ? usedStrategyId : 'normal'
+
+        // Record the trade
+        engine.recordTrade(strategyId, estimatedPnL, symbol)
+
+        const strategyName = engine.getAllPerformances().find(p => p.strategyId === strategyId)?.strategyName || 'Normal'
+        console.log(`📊 Recorded trade to ${strategyName} strategy: ${symbol} P&L=$${estimatedPnL.toFixed(2)}`)
+      } catch (trackError) {
+        console.error('⚠️ Failed to record trade to engine:', trackError)
+      }
+
       return {
         success: true,
         orderId: order.id,
@@ -435,11 +657,17 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
       // Parse error for better messaging
       let errorMessage = orderError.message || 'Unknown order error'
 
-      if (errorMessage.includes('insufficient balance')) {
+      // Alpaca returns generic 403 for insufficient funds
+      if (orderError.statusCode === 403 || errorMessage.toLowerCase().includes('forbidden') || errorMessage.toLowerCase().includes('access denied')) {
+        errorMessage = 'Insufficient funds - not enough cash available to complete trade'
+        console.log('💡 TIP: Sell some positions to free up cash, or wait for auto-rebalancing')
+      } else if (errorMessage.includes('insufficient balance')) {
         errorMessage = 'Insufficient USD balance in crypto wallet. Transfer funds from stock account to crypto wallet in Alpaca dashboard.'
         console.log('💡 TIP: In Alpaca Paper Trading, you need to transfer USD from your stock account to crypto wallet.')
         console.log('💡 Go to: Alpaca Dashboard > Crypto Trading > Transfer Funds')
       }
+
+      console.log(`❌ Order blocked: ${errorMessage}`)
 
       return {
         success: false,
@@ -497,7 +725,30 @@ function startBotActivitySimulation() {
     if (!isSimulatingActivity) return
 
     try {
-      // Check if market is open
+      // STEP 1: Check portfolio rebalancing first (sell losers, take profits)
+      if (autoExecutionConfig.enablePortfolioRotation) {
+        const rebalanceCheck = await checkPortfolioRebalancing()
+
+        if (rebalanceCheck.shouldRebalance) {
+          console.log(`🔄 Portfolio rebalancing needed: ${rebalanceCheck.positionsToSell.length} positions to sell`)
+
+          for (const symbolToSell of rebalanceCheck.positionsToSell) {
+            try {
+              const sellResult = await executeOrder(symbolToSell, 95, 'SELL') // High confidence for rebalancing
+              if (sellResult.success) {
+                console.log(`✅ Rebalancing: Sold ${symbolToSell}`)
+              }
+            } catch (error) {
+              console.error(`❌ Failed to sell ${symbolToSell} during rebalancing:`, error)
+            }
+          }
+
+          // Skip new buy signal if we just rebalanced
+          return
+        }
+      }
+
+      // STEP 2: Check if market is open
       const now = new Date()
       const etTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }))
       const hour = etTime.getHours()
@@ -510,8 +761,41 @@ function startBotActivitySimulation() {
       const isMarketOpen = isWeekday && isAfterOpen && isBeforeClose
 
       // CRITICAL: Only use stocks if market is open, otherwise only crypto (24/7 trading)
-      const stockSymbols = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD']
-      const cryptoSymbols = ['BTC/USD', 'ETH/USD', 'DOGE/USD', 'SOL/USD', 'MATIC/USD', 'AVAX/USD', 'LINK/USD', 'UNI/USD']
+      // 🚀 EXPANDED TRADING UNIVERSE - More Opportunities
+      const stockSymbols = [
+        // Mega Cap Tech
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
+        // Large Cap Growth
+        'NFLX', 'AMD', 'INTC', 'CRM', 'ADBE', 'ORCL', 'NOW', 'SHOP', 'PLTR',
+        // AI & Semiconductors
+        'AI', 'SMCI', 'MU', 'QCOM', 'AVGO', 'MRVL', 'LRCX',
+        // Financials & Payments
+        'JPM', 'V', 'MA', 'PYPL', 'SQ', 'COIN',
+        // EV & Clean Energy
+        'RIVN', 'LCID', 'NIO', 'ENPH', 'FSLR',
+        // Emerging Growth
+        'SOFI', 'HOOD', 'UPST', 'DKNG', 'UBER', 'LYFT', 'ABNB',
+        // Popular ETFs
+        'SPY', 'QQQ', 'XLK', 'XLF', 'ARKK'
+      ]
+
+      // ✅ VERIFIED ALPACA-SUPPORTED CRYPTO PAIRS ONLY
+      // These are confirmed to work on Alpaca Paper Trading
+      const cryptoSymbols = [
+        // Top 10 by Volume (Always Available)
+        'BTC/USD', 'ETH/USD', 'LTC/USD', 'BCH/USD', 'DOGE/USD',
+        'SHIB/USD', 'AVAX/USD', 'UNI/USD', 'LINK/USD',
+
+        // Altcoins (High Volume)
+        'AAVE/USD', 'ALGO/USD', 'BAT/USD', 'COMP/USD', 'CRV/USD',
+        'DOT/USD', 'GRT/USD', 'MKR/USD', 'SUSHI/USD', 'YFI/USD',
+
+        // Newer Additions
+        'MATIC/USD', 'FIL/USD', 'XTZ/USD',
+
+        // Note: Remove /USD suffix as Alpaca may use different format
+        // Alpaca accepts: BTC/USD, BTCUSD, or BTC-USD depending on endpoint
+      ]
 
       // Select symbol pool based on market hours
       const availableSymbols = isMarketOpen
@@ -521,26 +805,70 @@ function startBotActivitySimulation() {
       const symbol = availableSymbols[Math.floor(Math.random() * availableSymbols.length)]
       const assetType = symbol.includes('/') ? 'CRYPTO' : 'STOCK'
 
-      // More realistic confidence range (50-95%)
-      const confidence = 50 + Math.random() * 45
+      // 🤖 AI STRATEGY ENGINE: Generate intelligent signal using adaptive strategies
+      let recommendation = 'BUY'
+      let confidence = 60
+      let positionSize = 0
+      let usedStrategyId = 'normal' // Track which strategy generated this signal
 
-      // SMART RECOMMENDATION: Check positions to decide BUY or SELL
-      let recommendation = 'BUY' // Default to BUY
       try {
-        const positions = await alpacaClient.getPositions()
-        const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
+        // Fetch market data for strategy analysis
+        const marketData = await getAlpacaClient().getBars(symbol, {
+          timeframe: '1Day',
+          limit: 100
+        })
 
-        // If we have a position, 50% chance to SELL, otherwise always BUY
-        if (existingPosition) {
-          recommendation = Math.random() > 0.5 ? 'SELL' : 'BUY'
+        if (marketData && marketData.length > 20) {
+          // Generate signal using Global AdaptiveStrategyEngine
+          const engine = getGlobalStrategyEngine()
+          const signal = await engine.generateSignal(symbol, marketData as any)
+
+          if (signal) {
+            recommendation = signal.action
+            confidence = signal.confidence
+            positionSize = signal.positionSize
+            usedStrategyId = signal.strategyId // Store which strategy was used
+
+            console.log(`🤖 AI Strategy: ${signal.strategyName}`)
+            console.log(`   Signal: ${signal.action} | Confidence: ${confidence}% | Size: $${positionSize.toFixed(2)}`)
+            console.log(`   Testing: ${signal.performance.testingMode ? 'YES' : 'NO'} | Win Rate: ${signal.performance.winRate.toFixed(1)}%`)
+          } else {
+            // Fallback to random signal
+            confidence = 50 + Math.random() * 45
+            console.log(`⚠️ No strategy signal available, using fallback`)
+          }
+        } else {
+          console.log(`⚠️ Insufficient market data for ${symbol}, using fallback`)
+          confidence = 50 + Math.random() * 45
         }
-        // If no position, keep as BUY (can't sell what we don't own)
-      } catch (error) {
-        console.error('Error checking positions for recommendation:', error)
-        // On error, default to BUY (safer than risking a SELL without position)
+      } catch (error: any) {
+        // Skip this symbol if it's not supported
+        if (error.message?.includes('not found') || error.message?.includes('endpoint not found')) {
+          console.log(`⏭️ Skipping ${symbol} - not supported by Alpaca`)
+          return // Skip this cycle and try another symbol next time
+        }
+        console.error('Error generating AI strategy signal:', error)
+        confidence = 50 + Math.random() * 45
       }
 
-      console.log(`🎯 Generated recommendation: ${symbol} ${recommendation} (${confidence.toFixed(1)}%)`)
+      // SMART RECOMMENDATION: Check positions to decide BUY or SELL
+      try {
+        const positions = await getAlpacaClient().getPositions()
+        const existingPosition = positions.find((pos: any) => pos.symbol === symbol)
+
+        // If we have a position and signal is BUY, maybe SELL instead
+        if (existingPosition && recommendation === 'BUY') {
+          recommendation = Math.random() > 0.5 ? 'SELL' : 'BUY'
+        }
+        // If signal is SELL but no position, change to BUY
+        if (!existingPosition && recommendation === 'SELL') {
+          recommendation = 'BUY'
+        }
+      } catch (error) {
+        console.error('Error checking positions for recommendation:', error)
+      }
+
+      console.log(`🎯 Final recommendation: ${symbol} ${recommendation} (${confidence.toFixed(1)}%)`)
       console.log(`📊 Market: ${isMarketOpen ? 'OPEN' : 'CLOSED'} | Asset: ${assetType} | Trading: ${isMarketOpen ? 'Stocks + Crypto' : 'Crypto Only'}`)
 
       // Update metrics
@@ -666,6 +994,11 @@ export async function GET(request: NextRequest) {
       orderExecutionEnabled = true
       console.log('✅ Order execution enabled')
 
+      // Get dynamic order limit
+      const accountInfo = await getAlpacaClient().getAccount()
+      const equity = parseFloat(accountInfo.equity || '0')
+      const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
+
       return NextResponse.json({
         success: true,
         message: 'Order execution enabled - Bot will now execute real trades',
@@ -674,7 +1007,8 @@ export async function GET(request: NextRequest) {
           config: autoExecutionConfig,
           metrics: orderExecutionMetrics,
           dailyOrderCount,
-          dailyOrderLimit: autoExecutionConfig.dailyOrderLimit
+          dailyOrderLimit: dynamicDailyOrderLimit,
+          accountEquity: equity
         },
         timestamp: new Date().toISOString()
       })
@@ -697,6 +1031,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (action === 'execution-status') {
+      // Get dynamic order limit
+      const accountInfo = await getAlpacaClient().getAccount()
+      const equity = parseFloat(accountInfo.equity || '0')
+      const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
+
       return NextResponse.json({
         success: true,
         orderExecutionStatus: {
@@ -704,7 +1043,8 @@ export async function GET(request: NextRequest) {
           config: autoExecutionConfig,
           metrics: orderExecutionMetrics,
           dailyOrderCount,
-          dailyOrderLimit: autoExecutionConfig.dailyOrderLimit,
+          dailyOrderLimit: dynamicDailyOrderLimit,
+          accountEquity: equity,
           recentOrdersCount: recentOrders.size,
           environment: {
             hasApiKey: !!process.env.APCA_API_KEY_ID,
@@ -718,6 +1058,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: return current activity and metrics
+    // Get dynamic order limit
+    const accountInfo = await getAlpacaClient().getAccount()
+    const equity = parseFloat(accountInfo.equity || '0')
+    const dynamicDailyOrderLimit = getDailyOrderLimitForAccount(equity)
+
     return NextResponse.json({
       success: true,
       data: {
@@ -730,7 +1075,8 @@ export async function GET(request: NextRequest) {
         orderExecution: {
           enabled: orderExecutionEnabled,
           dailyOrderCount,
-          dailyOrderLimit: autoExecutionConfig.dailyOrderLimit,
+          dailyOrderLimit: dynamicDailyOrderLimit,
+          accountEquity: equity,
           metrics: orderExecutionMetrics,
           config: {
             minConfidenceForOrder: autoExecutionConfig.minConfidenceForOrder,
@@ -762,6 +1108,19 @@ export async function POST(request: NextRequest) {
 
     console.log('📝 AI Bot API POST request received', { type, symbol, action })
 
+    // Handle toggle inverse mode
+    if (action === 'toggle-inverse') {
+      botMetrics.inverseMode = !botMetrics.inverseMode
+      console.log(`🔄 Inverse Mode ${botMetrics.inverseMode ? 'ENABLED' : 'DISABLED'} for AI Bot`)
+
+      return NextResponse.json({
+        success: true,
+        message: `Inverse mode ${botMetrics.inverseMode ? 'enabled' : 'disabled'}`,
+        inverseMode: botMetrics.inverseMode,
+        timestamp: new Date().toISOString()
+      })
+    }
+
     // Handle manual order execution test
     if (action === 'test-order') {
       const testSymbol = symbol || 'AAPL'
@@ -769,9 +1128,9 @@ export async function POST(request: NextRequest) {
       const testRecommendation = 'BUY'
 
       console.log('🧪 Testing manual order execution...')
-      
+
       const result = await executeOrder(testSymbol, testConfidence, testRecommendation)
-      
+
       return NextResponse.json({
         success: result.success,
         message: result.success ? 'Test order executed successfully' : 'Test order failed',

@@ -282,46 +282,6 @@ export class SupabaseService {
     }
   }
 
-  async getAILearningData(userId: string) {
-    try {
-      // Validate UUID format
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      if (!uuidRegex.test(userId)) {
-        console.warn(`⚠️ Invalid UUID format for userId: ${userId}. Returning empty array.`)
-        return []
-      }
-
-      const { data, error } = await this._client
-        .from('ai_learning_data')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      return data || []
-    } catch (error) {
-      console.error('Failed to get AI learning data:', error)
-      return []
-    }
-  }
-
-  async getBotMetrics(userId: string) {
-    try {
-      const { data, error } = await this._client
-        .from('bot_metrics')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      if (error) throw error
-      return data || []
-    } catch (error) {
-      console.error('Failed to get bot metrics:', error)
-      return []
-    }
-  }
-
   // Missing methods that bot-control API needs
   async upsertBotMetrics(userId: string, metrics: Partial<Tables['bot_metrics']['Update']>) {
     try {
@@ -352,52 +312,6 @@ export class SupabaseService {
       return data?.[0] || null
     } catch (error) {
       console.warn('Error upserting bot metrics:', error)
-      return null
-    }
-  }
-
-  async logBotActivity(userId: string, activity: {
-    type: string
-    symbol?: string
-    message: string
-    status: string
-    details?: string
-  }) {
-    try {
-      // Use server client to bypass RLS for bot operations
-      const client = this.getServerClient()
-
-      let metadata = null
-      if (activity.details) {
-        try {
-          metadata = JSON.parse(activity.details)
-        } catch {
-          // If JSON parsing fails, leave metadata as null
-          metadata = null
-        }
-      }
-
-      const { data, error } = await client
-        .from('bot_activity_logs')
-        .insert({
-          user_id: userId,
-          timestamp: new Date().toISOString(),
-          type: activity.type,
-          symbol: activity.symbol,
-          message: activity.message,
-          status: activity.status,
-          details: activity.details,
-          metadata: metadata
-        })
-        .select()
-
-      if (error) {
-        console.warn('Failed to log bot activity:', error)
-        return null
-      }
-      return data?.[0] || null
-    } catch (error) {
-      console.warn('Error logging bot activity:', error)
       return null
     }
   }

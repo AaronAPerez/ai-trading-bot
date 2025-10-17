@@ -3,6 +3,7 @@ import { RiskEngine, RiskContext, RiskConfig } from './RiskEngine'
 import { ExecutionRouter, ExecutionContext } from './ExecutionRouter'
 import { AnalyticsEngine, AnalyticsContext } from './AnalyticsEngine'
 import { LearningEngine, LearningContext } from './LearningEngine'
+import { supabaseService } from '@/lib/database/supabase-utils'
 
 export interface HedgeFundEngineConfig {
   userId: string
@@ -109,7 +110,7 @@ export class HedgeFundEngine {
       console.log(`\n2️⃣ Evaluating Risk...`)
       const riskContext: RiskContext = {
         userId: context.userId,
-        config: this.config.riskConfig
+        config: this.config.riskConfig as RiskConfig // RiskEngine merges with defaults
       }
 
       const riskCheck = await this.risk.evaluate(signal, riskContext)
@@ -296,7 +297,7 @@ export class HedgeFundEngine {
   }> {
     try {
       const alpacaTest = await this.execution.testConnection()
-      const supabaseTest = await require('@/lib/database/supabase-utils').supabaseService.testConnection()
+      const supabaseTest = await supabaseService.testConnection()
 
       const alpacaHealthy = alpacaTest.connected && alpacaTest.authenticated
       const supabaseHealthy = supabaseTest

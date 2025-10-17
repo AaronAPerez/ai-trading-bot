@@ -823,6 +823,69 @@ function startBotLogic(sessionId: string, config: any) {
     }
 
     try {
+      // 0. PORTFOLIO REBALANCING: Check if we should sell positions first
+      try {
+        const account = await alpacaClient.getAccount()
+        const positions = await alpacaClient.getPositions()
+
+        const cash = parseFloat(account.cash || '0')
+        const equity = parseFloat(account.equity || '0')
+        const cashPercent = equity > 0 ? cash / equity : 0
+
+        console.log(`💼 Portfolio: ${positions.length} positions, Cash=${(cashPercent * 100).toFixed(1)}% of equity`)
+
+        // Sell positions when cash is low OR to take profits/stop losses
+        const positionsToSell: string[] = []
+
+        // Check each position for exit conditions
+        for (const pos of positions) {
+          const unrealizedPLPercent = parseFloat(pos.unrealized_plpc || '0')
+
+          // Take profit at 10% gain
+          if (unrealizedPLPercent > 0.10) {
+            console.log(`🟢 Take profit: ${pos.symbol} up ${(unrealizedPLPercent * 100).toFixed(2)}%`)
+            positionsToSell.push(pos.symbol)
+          }
+
+          // Stop loss at 5% loss
+          else if (unrealizedPLPercent < -0.05) {
+            console.log(`🔴 Stop loss: ${pos.symbol} down ${(unrealizedPLPercent * 100).toFixed(2)}%`)
+            positionsToSell.push(pos.symbol)
+          }
+
+          // If cash is low (<10%), sell worst position to free up capital
+          else if (cashPercent < 0.10 && positions.length > 0) {
+            const worstPos = positions.reduce((worst, curr) =>
+              parseFloat(curr.unrealized_plpc || '0') < parseFloat(worst.unrealized_plpc || '0') ? curr : worst
+            )
+            if (worstPos.symbol === pos.symbol) {
+              console.log(`💰 Low cash: Selling worst performer ${pos.symbol} to free capital`)
+              positionsToSell.push(pos.symbol)
+            }
+          }
+        }
+
+        // Execute sells
+        if (positionsToSell.length > 0) {
+          console.log(`🔄 Rebalancing: Selling ${positionsToSell.length} positions`)
+          for (const symbolToSell of positionsToSell) {
+            try {
+              await executeTradeViaAlpaca(userId, symbolToSell, 'SELL', 0.95, sessionId)
+            } catch (sellError) {
+              console.error(`❌ Failed to sell ${symbolToSell}:`, sellError)
+            }
+          }
+
+          // Skip new buys this cycle to let sells settle
+          console.log(`⏭️ Skipping new buys this cycle - letting sells settle`)
+          return
+        }
+
+      } catch (rebalanceError) {
+        console.warn('⚠️ Portfolio rebalancing check failed:', rebalanceError)
+        // Continue with normal trading even if rebalancing fails
+      }
+
       // 1. AI Market Analysis - Fetch ALL available assets from Alpaca
       const marketOpen = isMarketHours()
 
@@ -830,18 +893,29 @@ function startBotLogic(sessionId: string, config: any) {
       const stockSymbols = await fetchAvailableStockAssets()
       const cryptoSymbols = await fetchAvailableCryptoAssets()
 
-      // CRITICAL: Only include stocks if market is open, crypto is always available (24/7 trading)
-      const availableSymbols = marketOpen
-        ? [...stockSymbols, ...cryptoSymbols] // Market open: Both stocks and crypto
-        : cryptoSymbols // Market closed: Only crypto (24/7 trading)
+      // 🎯 CRYPTO-PRIORITIZED TRADING: 80% crypto, 20% stocks
+      // Benefits: PDT-exempt, 24/7 trading, more opportunities
+      let availableSymbols: string[]
+      const CRYPTO_WEIGHTING = 0.80 // 80% crypto preference
+
+      if (!marketOpen) {
+        // Markets closed: 100% crypto (24/7 trading)
+        availableSymbols = cryptoSymbols
+        console.log(`🌙 Markets CLOSED - 100% Crypto Trading (24/7)`)
+      } else {
+        // Markets open: 80% crypto, 20% stocks
+        const useCrypto = Math.random() < CRYPTO_WEIGHTING
+        availableSymbols = useCrypto ? cryptoSymbols : [...stockSymbols, ...cryptoSymbols]
+        console.log(`💎 Markets OPEN - 80% Crypto / 20% Stock Mix (PDT-Exempt Focus)`)
+      }
 
       const selectedSymbol = availableSymbols[Math.floor(Math.random() * availableSymbols.length)]
       const assetType = detectAssetType(selectedSymbol)
 
       console.log(`🎯 AI analyzing ${assetType === 'crypto' ? 'CRYPTO' : 'STOCK'} ${selectedSymbol} for trading opportunities...`)
       console.log(`📊 Market Status: ${marketOpen ? 'OPEN' : 'CLOSED'}`)
-      console.log(`📈 Asset Pool: ${stockSymbols.length} stocks + ${cryptoSymbols.length} crypto = ${availableSymbols.length} total tradable assets`)
-      console.log(`🔍 Trading Mode: ${marketOpen ? 'Stocks + Crypto' : 'Crypto Only - 24/7 Trading'}`)
+      console.log(`📈 Asset Pool: ${stockSymbols.length} stocks + ${cryptoSymbols.length} crypto = ${stockSymbols.length + cryptoSymbols.length} total assets`)
+      console.log(`🔍 Selected: ${assetType.toUpperCase()} - PDT Risk: ${assetType === 'crypto' ? '❌ NONE (24/7 Exempt)' : '⚠️ YES (Hold overnight recommended)'}`)
 
       // 2. Generate AI trading signal with REAL technical analysis
       const technicalAnalysis = await analyzeTechnicalIndicators(selectedSymbol, botState.inverseMode)
@@ -1035,18 +1109,114 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
     const account = await alpacaClient.getAccount()
     const buyingPower = parseFloat(account.buying_power || '0')
     const equity = parseFloat(account.equity || '0')
+    const cash = parseFloat(account.cash || '0')
 
-    // Calculate intelligent position size based on confidence and risk
-    // Base allocation: 2-10% of equity depending on confidence
-    const minAllocation = 0.02 // 2% minimum
-    const maxAllocation = 0.10 // 10% maximum
-    const confidenceMultiplier = (confidence - 0.75) / 0.20 // 75% conf = 0, 95% conf = 1
-    const allocation = minAllocation + (maxAllocation - minAllocation) * Math.max(0, Math.min(1, confidenceMultiplier))
+    // Use appropriate available funds based on asset type
+    const availableFunds = isCrypto ? cash : buyingPower
 
-    const notionalValue = Math.floor(equity * allocation)
-    const quantity = Math.max(1, Math.floor(notionalValue / 100)) // Estimate quantity (will use notional for actual order)
+    console.log(`💳 Account Status: Cash=$${cash.toFixed(2)}, Equity=$${equity.toFixed(2)}, Buying Power=$${buyingPower.toFixed(2)}`)
 
-    console.log(`💰 Position Sizing: ${(allocation * 100).toFixed(1)}% allocation = $${notionalValue} (Confidence: ${(confidence * 100).toFixed(1)}%)`)
+    // Check minimum funds
+    if (availableFunds < 5) {
+      console.log(`❌ Insufficient funds: $${availableFunds.toFixed(2)} (minimum $5 required)`)
+      throw new Error('Insufficient funds - not enough cash to place trade')
+    }
+
+    // 🎯 DYNAMIC POSITION SIZING BASED ON AVAILABLE FUNDS
+    let maxPositionPercent: number
+    let basePositionPercent: number
+    let minOrderSize: number
+
+    if (availableFunds < 20) {
+      // 🔴 CRITICAL LOW: < $20 - Ultra conservative
+      maxPositionPercent = 0.50
+      basePositionPercent = 0.40
+      minOrderSize = 5
+      console.log(`🔴 CRITICAL LOW buying power: $${availableFunds.toFixed(2)} - Ultra conservative sizing`)
+    } else if (availableFunds < 50) {
+      // 🟠 VERY LOW: $20-$50 - Very conservative
+      maxPositionPercent = 0.35
+      basePositionPercent = 0.25
+      minOrderSize = 8
+      console.log(`🟠 VERY LOW buying power: $${availableFunds.toFixed(2)} - Very conservative sizing`)
+    } else if (availableFunds < 100) {
+      // 🟡 LOW: $50-$100 - Conservative
+      maxPositionPercent = 0.25
+      basePositionPercent = 0.15
+      minOrderSize = 10
+      console.log(`🟡 LOW buying power: $${availableFunds.toFixed(2)} - Conservative sizing`)
+    } else if (availableFunds < 200) {
+      // 🟢 MODERATE: $100-$200 - Balanced
+      maxPositionPercent = 0.15
+      basePositionPercent = 0.08
+      minOrderSize = 15
+      console.log(`🟢 MODERATE buying power: $${availableFunds.toFixed(2)} - Balanced sizing`)
+    } else {
+      // 🔵 HEALTHY: > $200 - Normal diversification
+      maxPositionPercent = 0.12
+      basePositionPercent = 0.05
+      minOrderSize = 20
+      console.log(`🔵 HEALTHY buying power: $${availableFunds.toFixed(2)} - Normal sizing`)
+    }
+
+    // Confidence-based adjustment (75% = min, 95% = max)
+    const confidenceMultiplier = Math.max(0, Math.min(1, (confidence - 0.75) / 0.20))
+    const positionPercent = basePositionPercent + (maxPositionPercent - basePositionPercent) * confidenceMultiplier
+
+    // Calculate position size
+    let notionalValue = availableFunds * positionPercent
+
+    // Apply min/max constraints
+    const maxOrderSize = Math.min(200, availableFunds * maxPositionPercent)
+    notionalValue = Math.max(minOrderSize, Math.min(notionalValue, maxOrderSize))
+
+    // SAFETY: Never exceed max percent
+    notionalValue = Math.min(notionalValue, availableFunds * maxPositionPercent)
+
+    // Round to whole dollars
+    notionalValue = Math.floor(notionalValue)
+    const quantity = Math.max(1, Math.floor(notionalValue / 100))
+
+    console.log(`💰 Position sizing: ${(positionPercent * 100).toFixed(2)}% × $${availableFunds.toFixed(2)} = $${notionalValue} (min: $${minOrderSize}, max: $${maxOrderSize.toFixed(2)})`)
+
+    // 🚫 PDT PROTECTION: Check if SELL would trigger Pattern Day Trading violation
+    if (signal === 'SELL' && !isCrypto && equity < 25000) {
+      try {
+        const positions = await alpacaClient.getPositions()
+        const position = positions.find((p: any) => p.symbol === symbol)
+
+        if (position) {
+          // Check if position was opened today
+          const createdAt = new Date(position.created_at || position.entry_date || Date.now())
+          const today = new Date()
+          const isToday = createdAt.toDateString() === today.toDateString()
+
+          if (isToday) {
+            console.log(`🚫 PDT PROTECTION: Blocked SELL ${symbol} - Position opened today (${createdAt.toISOString()})`)
+            console.log(`💡 Account equity: $${equity.toFixed(2)} (< $25,000) - Day trading restricted`)
+
+            await supabaseService.logBotActivity(userId, {
+              type: 'info',
+              symbol: symbol,
+              message: `Trade blocked by PDT protection: SELL ${symbol} opened today`,
+              status: 'completed',
+              details: JSON.stringify({
+                reason: 'pattern_day_trading_protection',
+                accountEquity: equity,
+                positionOpenedAt: createdAt.toISOString(),
+                pdtThreshold: 25000,
+                recommendation: 'Wait until tomorrow or trade crypto (PDT exempt)'
+              })
+            })
+
+            return // Skip this trade
+          }
+        }
+      } catch (pdtError) {
+        console.warn('⚠️ PDT check failed:', pdtError)
+        // Continue with trade if PDT check fails (fail-open for availability)
+      }
+    }
 
     // Call Alpaca API to place order using unified client with proper asset_class
     const orderResult = await alpacaClient.createOrder({
@@ -1101,19 +1271,90 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
       console.log(`💾 Trade saved to Supabase: ${signal} ${quantity} ${symbol} @ $${estimatedPrice.toFixed(2)}`)
 
+      // 📊 RECORD TRADE TO ADAPTIVE STRATEGY ENGINE
+      try {
+        const { getGlobalStrategyEngine } = await import('@/lib/strategies/GlobalStrategyEngine')
+        const engine = getGlobalStrategyEngine()
+
+        // Calculate P&L by checking the filled order details
+        let pnl = 0
+
+        if (signal === 'SELL') {
+          // For SELL orders, wait briefly for order to fill, then get actual P&L from Alpaca
+          try {
+            // Wait 2 seconds for order to fill
+            await new Promise(resolve => setTimeout(resolve, 2000))
+
+            // Get the filled order details from Alpaca
+            const orderDetails = await alpacaClient.getOrder(orderResult.id || orderResult.orderId)
+
+            if (orderDetails && orderDetails.filled_avg_price) {
+              // Try to find the original BUY order for this position
+              const allOrders = await alpacaClient.getOrders({
+                status: 'filled',
+                symbols: symbol,
+                limit: 100
+              })
+
+              // Find matching BUY order
+              const buyOrder = allOrders.find((o: any) =>
+                o.symbol === symbol &&
+                o.side === 'buy' &&
+                o.status === 'filled' &&
+                new Date(o.filled_at) < new Date(orderDetails.filled_at || orderDetails.created_at)
+              )
+
+              if (buyOrder && buyOrder.filled_avg_price) {
+                // Calculate actual P&L: (sell_price - buy_price) * quantity
+                const buyPrice = parseFloat(buyOrder.filled_avg_price)
+                const sellPrice = parseFloat(orderDetails.filled_avg_price)
+                const qty = parseFloat(orderDetails.filled_qty || orderDetails.qty || quantity.toString())
+                pnl = (sellPrice - buyPrice) * qty
+
+                console.log(`💰 Calculated P&L: Buy@$${buyPrice.toFixed(2)} → Sell@$${sellPrice.toFixed(2)} × ${qty} = $${pnl.toFixed(2)}`)
+              } else {
+                console.log('⚠️ Could not find matching BUY order for P&L calculation')
+              }
+            }
+          } catch (err) {
+            console.log('⚠️ Could not calculate P&L from order details:', err)
+          }
+        }
+
+        // Get current strategy
+        const currentStrategy = engine.getCurrentStrategy()
+        const strategyId = currentStrategy?.strategyId || 'normal'
+
+        // Record the trade
+        engine.recordTrade(strategyId, pnl, symbol)
+
+        console.log(`📊 Recorded to ${currentStrategy?.strategyName || 'Normal'} strategy: ${symbol} P&L=$${pnl.toFixed(2)}`)
+      } catch (recordError) {
+        console.error('⚠️ Failed to record to strategy engine:', recordError)
+      }
+
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(`❌ Trade execution error:`, error)
+
+    // Parse error for better messaging
+    let errorMessage = error.message || 'Unknown error'
+
+    // Alpaca returns generic 403 for insufficient funds
+    if (error.statusCode === 403 || errorMessage.toLowerCase().includes('forbidden') || errorMessage.toLowerCase().includes('access denied')) {
+      errorMessage = 'Insufficient funds - not enough cash available to complete trade'
+      console.log('💡 TIP: Sell some positions to free up cash, or wait for auto-rebalancing')
+    }
 
     // Log execution error to Supabase
     await supabaseService.logBotActivity(userId, {
       type: 'error',
       symbol: symbol,
-      message: `Trade execution error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `Trade execution error: ${errorMessage}`,
       status: 'failed',
       details: JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         symbol,
         signal,
         sessionId

@@ -27,10 +27,22 @@ export default function ShadowTradingDashboard() {
   const { data: portfoliosData, isLoading } = useQuery({
     queryKey: ['shadowPortfolios'],
     queryFn: async () => {
-      const res = await fetch('/api/shadow-trading?action=list')
-      return res.json()
+      try {
+        const res = await fetch('/api/shadow-trading?action=list')
+        if (!res.ok) {
+          console.warn('Failed to fetch shadow portfolios:', res.status)
+          return { portfolios: [] }
+        }
+        return res.json()
+      } catch (error) {
+        console.error('Error fetching shadow portfolios:', error)
+        return { portfolios: [] }
+      }
     },
-    refetchInterval: 5000 // Refresh every 5 seconds
+    refetchInterval: 30000, // Refresh every 30 seconds (reduced from 5)
+    retry: 1,
+    retryDelay: 10000,
+    staleTime: 15000
   })
 
   // Fetch comparison data
@@ -38,11 +50,23 @@ export default function ShadowTradingDashboard() {
     queryKey: ['shadowComparison', selectedPortfolio],
     queryFn: async () => {
       if (!selectedPortfolio) return null
-      const res = await fetch(`/api/shadow-trading?action=compare&portfolioId=${selectedPortfolio}`)
-      return res.json()
+      try {
+        const res = await fetch(`/api/shadow-trading?action=compare&portfolioId=${selectedPortfolio}`)
+        if (!res.ok) {
+          console.warn('Failed to fetch comparison:', res.status)
+          return null
+        }
+        return res.json()
+      } catch (error) {
+        console.error('Error fetching comparison:', error)
+        return null
+      }
     },
     enabled: !!selectedPortfolio,
-    refetchInterval: 5000
+    refetchInterval: 30000, // Reduced from 5 seconds
+    retry: 1,
+    retryDelay: 10000,
+    staleTime: 15000
   })
 
   // Create shadow portfolio mutation
