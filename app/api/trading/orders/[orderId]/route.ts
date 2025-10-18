@@ -85,7 +85,9 @@ export const DELETE = withErrorHandling(
       console.log(`✅ Order cancelled: ${orderId}`)
 
       // Log to Supabase
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
         type: 'system',
         message: `Order cancelled: ${orderId}`,
         status: 'completed',
@@ -107,7 +109,9 @@ export const DELETE = withErrorHandling(
       console.error(`❌ Failed to cancel order ${orderId}:`, error)
 
       // Log error to Supabase
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
         type: 'error',
         message: `Failed to cancel order ${orderId}: ${
           error instanceof Error ? error.message : 'Unknown error'
