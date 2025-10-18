@@ -1,6 +1,6 @@
-import { RealTimeAITradingEngine, TradingEngineConfig } from '../engines/RealTimeAITradingEngine'
+import { RealTimeAITradingEngine, TradingEngineConfig } from '@/lib/ai/RealTimeAITradingEngine'
 import { AIRecommendationEngine } from '../engines/AIRecommendationEngine'
-import { RiskManagementEngine } from '../engines/RiskManagementEngine'
+import { RiskManagementEngine } from '@/lib/risk/RiskManagementEngine'
 import { AILearningSystem } from '../ml/AILearningSystem'
 import { SentimentAnalyzer } from '../analyzers/SentimentAnalyzer'
 import { TechnicalAnalyzer } from '../analyzers/TechnicalAnalyzer'
@@ -376,6 +376,8 @@ export class TradingEngineFactory {
   private async buildEngine(options: EngineCreationOptions): Promise<RealTimeAITradingEngine> {
     // Create Alpaca client
     const alpacaClient = new AlpacaServerClient()
+    // Adapter cast to satisfy external interfaces expecting AlpacaClient — keep runtime object as AlpacaServerClient
+    const alpacaClientAdapter = alpacaClient as unknown as any
 
     // Create risk management engine
     const riskEngine = new RiskManagementEngine(options.config.risk)
@@ -400,12 +402,14 @@ export class TradingEngineFactory {
 
     const technicalAnalyzer = options.customAnalyzers?.technical || 
       new TechnicalAnalyzer()
-    await technicalAnalyzer.initialize()
+    if (typeof (technicalAnalyzer as any).initialize === 'function') {
+      await (technicalAnalyzer as any).initialize()
+    }
 
     // Create AI recommendation engine
     const recommendationEngine = new AIRecommendationEngine(
       options.config.ai, 
-      alpacaClient
+      alpacaClientAdapter
     )
     await recommendationEngine.initialize()
 
@@ -414,27 +418,33 @@ export class TradingEngineFactory {
       options.config.execution,
       riskEngine,
       learningSystem,
-      alpacaClient
+      alpacaClientAdapter
     )
     await autoTradeExecutor.initialize()
 
-    // Create main trading engine
+    // Create main trading engine: merge component instances into the engine config and pass only 2 args
+    const engineComponents = {
+      recommendationEngine,
+      autoTradeExecutor,
+      riskEngine,
+      learningSystem,
+      sentimentAnalyzer,
+      technicalAnalyzer
+    }
+
+    // Use a type assertion to include runtime-only 'components' without requiring TradingEngineConfig to declare it.
+    const engineConfig = {
+      ...options.config,
+      components: engineComponents
+    } as TradingEngineConfig & { components: typeof engineComponents }
+
     const tradingEngine = new RealTimeAITradingEngine(
-      alpacaClient,
-      options.config,
-      {
-        recommendationEngine,
-        autoTradeExecutor,
-        riskEngine,
-        learningSystem,
-        sentimentAnalyzer,
-        technicalAnalyzer
-      }
+      alpacaClientAdapter,
+      engineConfig
     )
 
     return tradingEngine
   }
-
   private validateEngineConfig(config: TradingEngineConfig): void {
     // Validate AI configuration
     if (!config.ai) {

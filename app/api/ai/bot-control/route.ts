@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandling } from '@/lib/api/error-handler'
 import { alpacaClient } from '@/lib/alpaca/unified-client'
-import { getTradingMode, getAlpacaBaseUrl } from '@/lib/config/trading-mode'
+import {getAlpacaBaseUrl } from '@/lib/config/trading-mode'
 import { getWebSocketServerManager } from '@/lib/websocket/WebSocketServer'
 import { supabaseService } from '@/lib/database/supabase-utils'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
@@ -317,7 +317,8 @@ async function handleStartBot(config: any) {
       config,
       startTime: new Date(),
       sessionId,
-      interval: null
+      interval: null,
+      inverseMode: config.inverseMode || false
     }
 
     // Update bot metrics in Supabase
@@ -329,7 +330,9 @@ async function handleStartBot(config: any) {
       })
 
       // Log bot start activity
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
         type: 'system',
         message: `AI Trading Bot started with session ${sessionId}`,
         status: 'completed',
@@ -417,7 +420,8 @@ async function handleStopBot() {
       config: null,
       startTime: null,
       sessionId: null,
-      interval: null
+      interval: null,
+      inverseMode: false
     }
 
     return NextResponse.json({
@@ -443,7 +447,9 @@ async function handleStopBot() {
       })
 
       // Log bot stop activity
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
         type: 'system',
         message: `AI Trading Bot stopped. Session duration: ${Math.floor(uptime / 1000)}s`,
         status: 'completed',
@@ -463,7 +469,8 @@ async function handleStopBot() {
       config: null,
       startTime: null,
       sessionId: null,
-      interval: null
+      interval: null,
+      inverseMode: false
     }
 
     console.log(`🛑 AI Trading Bot stopped. Session: ${sessionId}, Uptime: ${Math.floor(uptime / 60000)}m`)
@@ -825,8 +832,8 @@ function startBotLogic(sessionId: string, config: any) {
     try {
       // 0. PORTFOLIO REBALANCING: Check if we should sell positions first
       try {
-        const account = await alpacaClient.getAccount()
-        const positions = await alpacaClient.getPositions()
+        const account = await alpacaClient.getAccount() as any
+        const positions = await alpacaClient.getPositions() as any[]
 
         const cash = parseFloat(account.cash || '0')
         const equity = parseFloat(account.equity || '0')
@@ -855,7 +862,7 @@ function startBotLogic(sessionId: string, config: any) {
 
           // If cash is low (<10%), sell worst position to free up capital
           else if (cashPercent < 0.10 && positions.length > 0) {
-            const worstPos = positions.reduce((worst, curr) =>
+            const worstPos = positions.reduce((worst: any, curr: any) =>
               parseFloat(curr.unrealized_plpc || '0') < parseFloat(worst.unrealized_plpc || '0') ? curr : worst
             )
             if (worstPos.symbol === pos.symbol) {
@@ -937,19 +944,21 @@ function startBotLogic(sessionId: string, config: any) {
       }
 
       // 3. Log AI analysis activity to Supabase with technical details
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+        user_id: userId,
         type: 'info',
         symbol: selectedSymbol,
         message: `AI analyzing ${selectedSymbol} | Signal: ${signal} | Confidence: ${(confidence * 100).toFixed(1)}% | RSI: ${technicalAnalysis.indicators.rsi?.toFixed(1) || 'N/A'}`,
         status: 'completed',
-        details: JSON.stringify({
+        timestamp: new Date().toISOString(),
+        metadata: {
           signal,
           confidence,
           sessionId,
           minConfidenceRequired: minConfidence,
           technicalIndicators: technicalAnalysis.indicators,
           marketCondition: technicalAnalysis.marketCondition
-        })
+        }
       })
 
       // 4. Execute trade if confidence is high enough
@@ -964,18 +973,20 @@ function startBotLogic(sessionId: string, config: any) {
           console.log(`💡 Trade recommendation: ${signal} ${selectedSymbol} - Manual execution required`)
 
           // Log recommendation to Supabase
-          await supabaseService.logBotActivity(userId, {
+          await supabaseService.logBotActivity({
+            user_id: userId,
             type: 'recommendation',
             symbol: selectedSymbol,
             message: `AI recommends ${signal} ${selectedSymbol} with ${(confidence * 100).toFixed(1)}% confidence`,
             status: 'completed',
-            details: JSON.stringify({
+            timestamp: new Date().toISOString(),
+            metadata: {
               signal,
               confidence,
               reason: 'ai_analysis',
               sessionId,
               manualExecutionRequired: true
-            })
+            }
           })
         }
       } else {
@@ -1018,7 +1029,9 @@ function startBotLogic(sessionId: string, config: any) {
 
       // Log error to Supabase
       try {
-        await supabaseService.logBotActivity(userId, {
+        await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
           type: 'error',
           message: `AI Trading logic error: ${error instanceof Error ? error.message : 'Unknown error'}`,
           status: 'failed',
@@ -1051,7 +1064,9 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
       console.log(`⏰ BLOCKED: ${signal} ${symbol} - Stock market is closed (stocks only trade Mon-Fri 9:30 AM - 4:00 PM EST)`)
 
       // Log blocked trade to Supabase
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
         type: 'info',
         symbol: symbol,
         message: `Trade blocked: ${signal} ${symbol} - Stock market closed`,
@@ -1080,7 +1095,9 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
       if ((signal === 'BUY' && positionSide === 'LONG') || (signal === 'SELL' && positionSide === 'SHORT')) {
         console.log(`🚫 BLOCKED: ${signal} ${symbol} - Already have ${positionSide} position (qty: ${existingPosition.qty || existingPosition.quantity})`)
 
-        await supabaseService.logBotActivity(userId, {
+        await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
           type: 'info',
           symbol: symbol,
           message: `Trade blocked: ${signal} ${symbol} - Already have ${positionSide} position`,
@@ -1106,7 +1123,7 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
     console.log(`📊 Asset Type: ${assetType} | Market Hours: ${marketOpen ? 'OPEN' : 'CLOSED'} | Can Trade: ${isCrypto ? '24/7' : 'Market Hours Only'}`)
 
     // Get account info for intelligent position sizing
-    const account = await alpacaClient.getAccount()
+    const account = await alpacaClient.getAccount() as any
     const buyingPower = parseFloat(account.buying_power || '0')
     const equity = parseFloat(account.equity || '0')
     const cash = parseFloat(account.cash || '0')
@@ -1195,7 +1212,9 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
             console.log(`🚫 PDT PROTECTION: Blocked SELL ${symbol} - Position opened today (${createdAt.toISOString()})`)
             console.log(`💡 Account equity: $${equity.toFixed(2)} (< $25,000) - Day trading restricted`)
 
-            await supabaseService.logBotActivity(userId, {
+            await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
               type: 'info',
               symbol: symbol,
               message: `Trade blocked by PDT protection: SELL ${symbol} opened today`,
@@ -1239,7 +1258,9 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
       const estimatedValue = quantity * estimatedPrice
 
       // Log successful trade to Supabase
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
         type: 'trade',
         symbol: symbol,
         message: `${signal} ${quantity} shares of ${symbol} - Order placed via Alpaca API (ID: ${orderResult.id || orderResult.orderId})`,
@@ -1273,8 +1294,13 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
       // 📊 RECORD TRADE TO ADAPTIVE STRATEGY ENGINE
       try {
-        const { getGlobalStrategyEngine } = await import('@/lib/strategies/GlobalStrategyEngine')
-        const engine = getGlobalStrategyEngine()
+        const { AdaptiveStrategyEngine } = await import('@/lib/strategies/AdaptiveStrategyEngine')
+        let globalEngine: AdaptiveStrategyEngine | null = null
+        const getEngine = () => {
+          if (!globalEngine) globalEngine = new AdaptiveStrategyEngine()
+          return globalEngine
+        }
+        const engine = getEngine()
 
         // Calculate P&L by checking the filled order details
         let pnl = 0
@@ -1325,8 +1351,8 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
         const currentStrategy = engine.getCurrentStrategy()
         const strategyId = currentStrategy?.strategyId || 'normal'
 
-        // Record the trade
-        engine.recordTrade(strategyId, pnl, symbol)
+        // Record the trade with confidence (default to 70% if not available)
+        engine.recordTrade(strategyId, pnl, symbol, 70, undefined)
 
         console.log(`📊 Recorded to ${currentStrategy?.strategyName || 'Normal'} strategy: ${symbol} P&L=$${pnl.toFixed(2)}`)
       } catch (recordError) {
@@ -1348,7 +1374,9 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
     }
 
     // Log execution error to Supabase
-    await supabaseService.logBotActivity(userId, {
+    await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
       type: 'error',
       symbol: symbol,
       message: `Trade execution error: ${errorMessage}`,
@@ -1515,7 +1543,9 @@ export const GET = withErrorHandling(async () => {
 //       })
 
 //       // Log bot start activity
-//       await supabaseService.logBotActivity(userId, {
+//       await supabaseService.logBotActivity({
+//         user_id: userId,
+//         timestamp: new Date().toISOString(),
 //         type: 'system',
 //         message: `AI Trading Bot started with session ${sessionId}`,
 //         status: 'completed',
@@ -1644,7 +1674,9 @@ export const GET = withErrorHandling(async () => {
 //       })
 
 //       // Log bot stop activity
-//       await supabaseService.logBotActivity(userId, {
+//       await supabaseService.logBotActivity({
+//         user_id: userId,
+//         timestamp: new Date().toISOString(),
 //         type: 'system',
 //         message: `AI Trading Bot stopped. Session duration: ${Math.floor(uptime / 1000)}s`,
 //         status: 'completed',
@@ -1803,7 +1835,9 @@ export const GET = withErrorHandling(async () => {
 //     console.log(`⚡ CRITICAL: Trading will begin in 1 minute...`)
 
 //     // Log bot start with AI engine info
-//     await supabaseService.logBotActivity(userId, {
+//     await supabaseService.logBotActivity({
+//       user_id: userId,
+//       timestamp: new Date().toISOString(),
 //       type: 'system',
 //       message: `AI Trading Engine started with session ${sessionId}`,
 //       status: 'completed',
@@ -1842,7 +1876,9 @@ export const GET = withErrorHandling(async () => {
 //     console.error('❌ Failed to start AI Trading Engine:', error)
 
 //     // Log error to database
-//     await supabaseService.logBotActivity(userId, {
+//     await supabaseService.logBotActivity({
+//       user_id: userId,
+//       timestamp: new Date().toISOString(),
 //       type: 'error',
 //       message: `AI Trading Engine failed to start: ${error instanceof Error ? error.message : 'Unknown error'}`,
 //       status: 'failed',
@@ -1899,7 +1935,9 @@ export const GET = withErrorHandling(async () => {
 //       const minConfidence = config?.riskManagement?.minConfidence || 0.75
 
 //       // 3. Log AI analysis activity to Supabase
-//       await supabaseService.logBotActivity(userId, {
+//       await supabaseService.logBotActivity({
+//         user_id: userId,
+//         timestamp: new Date().toISOString(),
 //         type: 'info',
 //         symbol: selectedSymbol,
 //         message: `AI analyzing ${selectedSymbol} | Confidence: ${(confidence * 100).toFixed(1)}%`,
@@ -1924,7 +1962,9 @@ export const GET = withErrorHandling(async () => {
 //           console.log(`💡 Trade recommendation: ${signal} ${selectedSymbol} - Manual execution required`)
 
 //           // Log recommendation to Supabase
-//           await supabaseService.logBotActivity(userId, {
+//           await supabaseService.logBotActivity({
+//             user_id: userId,
+//             timestamp: new Date().toISOString(),
 //             type: 'recommendation',
 //             symbol: selectedSymbol,
 //             message: `AI recommends ${signal} ${selectedSymbol} with ${(confidence * 100).toFixed(1)}% confidence`,
@@ -1983,7 +2023,9 @@ export const GET = withErrorHandling(async () => {
 
 //       // Log error to Supabase
 //       try {
-//         await supabaseService.logBotActivity(userId, {
+//         await supabaseService.logBotActivity({
+//           user_id: userId,
+//           timestamp: new Date().toISOString(),
 //           type: 'error',
 //           message: `AI Trading logic error: ${error instanceof Error ? error.message : 'Unknown error'}`,
 //           status: 'failed',
@@ -2021,7 +2063,9 @@ export const GET = withErrorHandling(async () => {
 //           console.warn(`⏰ Markets are closed, skipping stock trade for ${symbol} (Crypto trades 24/7)`)
 
 //           // Log to Supabase - FIXED: Use 'completed' instead of 'skipped'
-//           await supabaseService.logBotActivity(userId, {
+//           await supabaseService.logBotActivity({
+//             user_id: userId,
+//             timestamp: new Date().toISOString(),
 //             type: 'info',
 //             symbol: symbol,
 //             message: `Skipped ${signal} trade for ${symbol} - Markets closed, will trade crypto instead`,
@@ -2123,7 +2167,9 @@ export const GET = withErrorHandling(async () => {
 //       console.warn(`⚠️ Skipping trade for ${symbol} - price unavailable`)
 
 //       // Log to Supabase but don't crash the bot
-//       await supabaseService.logBotActivity(userId, {
+//       await supabaseService.logBotActivity({
+//         user_id: userId,
+//         timestamp: new Date().toISOString(),
 //         type: 'error',
 //         symbol: symbol,
 //         message: `Price fetch failed for ${symbol}, trade skipped`,
@@ -2227,7 +2273,9 @@ export const GET = withErrorHandling(async () => {
 //       // 8. Log successful trade to Supabase
 //       const assetType = isCrypto ? 'crypto' : 'stock'
 //       const units = isCrypto ? 'units' : 'shares'
-//       await supabaseService.logBotActivity(userId, {
+//       await supabaseService.logBotActivity({
+//         user_id: userId,
+//         timestamp: new Date().toISOString(),
 //         type: 'trade',
 //         symbol: symbol,
 //         message: `✅ ${signal} ${quantity} ${units} of ${symbol} @ $${currentPrice.toFixed(2)} - ${assetType.toUpperCase()} order placed via Alpaca (ID: ${orderResult.id})`,
@@ -2301,7 +2349,9 @@ export const GET = withErrorHandling(async () => {
 //     console.error(`❌ Trade execution error:`, error)
 
 //     // Log execution error to Supabase
-//     await supabaseService.logBotActivity(userId, {
+//     await supabaseService.logBotActivity({
+//       user_id: userId,
+//       timestamp: new Date().toISOString(),
 //       type: 'error',
 //       symbol: symbol,
 //       message: `❌ Trade execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -2351,7 +2401,9 @@ export const GET = withErrorHandling(async () => {
 //     const userId = getCurrentUserId()
 
 //     // Log bot stop to database
-//     await supabaseService.logBotActivity(userId, {
+//     await supabaseService.logBotActivity({
+//       user_id: userId,
+//       timestamp: new Date().toISOString(),
 //       type: 'system',
 //       message: `AI Trading Engine stopped for session ${sessionId}`,
 //       status: 'completed',

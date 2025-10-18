@@ -17,38 +17,20 @@ import AIInsightsDashboard from "./AIInsightsDashboard"
 import { useAILearningManager } from "@/hooks/useAILearningManager"
 import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
 import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
-import LiveTradesDisplay from "../trading/LiveTradesDisplay"
-import LiveTradingProcess from "../trading/LiveTradingProcess"
-import MarketStatusDisplay from "../market/MarketStatusDisplay"
 import { useTradeWebSocketListener } from "@/hooks/useTradeWebSocketListener"
-
-import { PriceChart } from '../charts/PriceChart'
 import { PortfolioAllocationChart } from '../charts/PortfolioAllocationChart'
 import { PerformanceChart } from '../charts/PerformanceChart'
 import { RiskMetricsChart } from '../charts/RiskMetricsChart'
 import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
-import LiveAIActivity from './LiveAIActivity'
 import { useQuery } from '@tanstack/react-query'
 import PortfolioPositionsTable from './PortfolioPositionsTable'
 import StrategyPerformanceDashboard from './StrategyPerformanceDashboard'
-import EngineActivityPanel from './EngineActivityPanel'
-import HedgeFundAnalyticsPanel from './HedgeFundAnalyticsPanel'
-import StrategyGuidancePanel from './StrategyGuidancePanel'
+import MultiStrategyComparisonPanel from './MultiStrategyComparisonPanel'
+import TradingModeToggle, { TradingMode } from './TradingModeToggle'
 import RecentOrdersTable from './RecentOrdersTable'
 import { useBotStore } from '@/store/slices/botSlice'
 
 // Type definitions
-interface AlpacaPosition {
-  symbol: string
-  qty: number
-  market_value: number
-  current_price: number
-  avg_entry_price: number
-  unrealized_pl: number
-  unrealized_plpc: number
-  side: 'long' | 'short'
-}
-
 interface BotConfig {
   alpaca: {
     baseUrl: string
@@ -86,7 +68,8 @@ interface BotConfig {
 }
 
 // Default bot configuration with auto-execution enabled
-const defaultBotConfig = {
+const defaultBotConfig: BotConfig = {
+  enabled: true,
   alpaca: {
     baseUrl: 'https://paper-api.alpaca.markets',
     apiKey: process.env.NEXT_PUBLIC_APCA_API_KEY_ID || '',
@@ -96,7 +79,7 @@ const defaultBotConfig = {
     maxPositionSize: 10,
     riskLevel: 0.02
   },
-  mode: 'BALANCED' as const,
+  mode: 'BALANCED',
   strategies: [
     { id: 'ml_enhanced', name: 'ML Enhanced', enabled: true, weight: 0.4 },
     { id: 'technical', name: 'Technical Analysis', enabled: true, weight: 0.3 },
@@ -114,6 +97,14 @@ const defaultBotConfig = {
     autoExecute: true, // Enable auto-execution by default
     minConfidenceForOrder: 0.75
   },
+  scheduleSettings: {
+    tradingHours: {
+      start: '09:30',
+      end: '16:00'
+    },
+    excludedDays: ['Saturday', 'Sunday'],
+    cooldownMinutes: 5
+  },
   maxPositionSize: 10,
   stopLossPercent: 5,
   takeProfitPercent: 15,
@@ -123,11 +114,10 @@ const defaultBotConfig = {
 
 export default function AITradingDashboard() {
   const tradingBot = useTradingBot()
-  const autoExecution = useAutoExecution(tradingBot.engine)
   const { tradingMode, setTradingMode } = useBotStore()
 
   // Listen for WebSocket trade events and auto-invalidate React Query cache
-  const { isConnected: wsConnected } = useTradeWebSocketListener()
+  useTradeWebSocketListener()
 
   // Persistent AI bot state
   const [persistentBotState, setPersistentBotState] = useState({
@@ -141,7 +131,7 @@ export default function AITradingDashboard() {
   const account = useAlpacaAccount(persistentBotState.isRunning ? 15000 : undefined)
   const positions = useAlpacaPositions(persistentBotState.isRunning ? 30000 : undefined)
 
-  const aiActivity = useAIBotActivity({
+  useAIBotActivity({
     refreshInterval: persistentBotState.isRunning ? 5000 : 30000, // Slower when inactive
     maxActivities: 8,
     autoStart: persistentBotState.isRunning // Start if was running before
@@ -176,6 +166,15 @@ export default function AITradingDashboard() {
       return saved === 'true'
     }
     return false
+  })
+
+  const [strategyMode, setStrategyMode] = useState<TradingMode>(() => {
+    // Load strategy mode from localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('strategy-mode')
+      return (saved as TradingMode) || 'ai-bot'
+    }
+    return 'ai-bot'
   })
 
   // Real trading monitoring - no simulation
@@ -272,6 +271,13 @@ export default function AITradingDashboard() {
       }).catch(err => console.error('Failed to sync inverse mode to backend:', err))
     }
   }, [])  // Keep empty to only run once on mount to avoid infinite loops
+
+  // Handler for strategy mode changes
+  const handleStrategyModeChange = useCallback((newMode: TradingMode) => {
+    setStrategyMode(newMode)
+    localStorage.setItem('strategy-mode', newMode)
+    console.log(`🔄 Switched to ${newMode === 'ai-bot' ? 'AI Bot' : 'Hedge Fund'} mode`)
+  }, [])
 
   // Save state to localStorage whenever it changes
   useEffect(() => {
@@ -409,19 +415,6 @@ export default function AITradingDashboard() {
   const positions_data = Array.isArray(positions.data) ? positions.data : []
   const totalPnL = positions_data.reduce((total, pos) => total + (parseFloat(pos.unrealized_pl || pos.unrealizedPnL || '0')), 0)
   const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
-
-  // Create proper BotMetrics object
-  const botMetrics = {
-    isRunning: tradingBot.metrics.isRunning || false,
-    uptime: tradingBot.metrics.uptime || 0,
-    tradesExecuted: tradingBot.metrics.tradesExecuted || 0,
-    recommendationsGenerated: tradingBot.metrics.recommendationsGenerated || 0,
-    successRate: tradingBot.metrics.successRate || 0,
-    totalPnL: totalPnL,
-    dailyPnL: dayPnL,
-    riskScore: tradingBot.metrics.riskScore || 0,
-    lastActivity: tradingBot.metrics.lastActivity
-  }
 
   return (
     <div className="space-y-6">
@@ -581,6 +574,7 @@ export default function AITradingDashboard() {
         </div>
       </div>
 
+      
 
       {/* Live Portfolio Balance */}
       <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
@@ -588,24 +582,25 @@ export default function AITradingDashboard() {
           refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
           showChangeIndicators={true}
         />
-
       </div>
 
-      {/* 🎯 MAIN SHOWCASE: Portfolio Positions Table */}
-      <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-xl">
-        <PortfolioPositionsTable
-          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
-          initialLimit={10}
+         {/* 🎯 Strategy Mode Toggle */}
+      <div className="flex justify-center mb-6">
+        <TradingModeToggle
+          currentMode={strategyMode}
+          onModeChange={handleStrategyModeChange}
+          disabled={persistentBotState.isRunning}
         />
       </div>
 
-
-            {/* 🎯 AI-Powered Strategy Performance Dashboard */}
-      <StrategyPerformanceDashboard
-        botIsActive={persistentBotState.isRunning}
-        autoSwitch={true}
-        inverseMode={inverseMode}
-        onStrategyChange={async (strategyId, shouldEnableInverse) => {
+       {/* 🎯 Conditional Strategy Dashboard based on Strategy Mode */}
+      {strategyMode === 'ai-bot' ? (
+        /* AI Bot Mode - Single Best Strategy (AdaptiveStrategyEngine) */
+        <StrategyPerformanceDashboard
+          botIsActive={persistentBotState.isRunning}
+          autoSwitch={true}
+          inverseMode={inverseMode}
+          onStrategyChange={async (strategyId, shouldEnableInverse) => {
           console.log(`🔄 Auto-switching to strategy: ${strategyId}, Should Enable Inverse: ${shouldEnableInverse}`)
 
           // Only toggle if the state needs to change
@@ -634,8 +629,25 @@ export default function AITradingDashboard() {
             console.log(`ℹ️ Inverse mode already in correct state: ${inverseMode ? 'ON' : 'OFF'}`)
           }
         }}
-      />
+        />
+      ) : (
+        /* Hedge Fund Mode - Multi-Strategy Comparison (MultiStrategyEngine) */
+        <MultiStrategyComparisonPanel
+          botIsActive={persistentBotState.isRunning}
+        />
+      )}
 
+      {/* Portfolio Positions Table */}
+      <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-xl">
+        <PortfolioPositionsTable
+          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+          initialLimit={10}
+        />
+      </div>
+
+   
+
+     
 
       {/* Advanced Charts Section */}
       <div className="space-y-6" >

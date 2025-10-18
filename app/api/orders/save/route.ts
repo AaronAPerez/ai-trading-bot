@@ -20,9 +20,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if order already exists
+    // Check if order already exists in trade_history
     const { data: existingOrder } = await supabase
-      .from('orders')
+      .from('trade_history')
       .select('*')
       .eq('order_id', orderData.order_id)
       .single()
@@ -30,13 +30,15 @@ export async function POST(request: NextRequest) {
     if (existingOrder) {
       // Update existing order
       const { data, error } = await supabase
-        .from('orders')
+        .from('trade_history')
         .update({
           status: orderData.status,
-          filled_qty: orderData.filled_qty,
-          filled_avg_price: orderData.filled_avg_price,
-          updated_at: orderData.updated_at,
-          filled_at: orderData.filled_at,
+          quantity: orderData.filled_qty || orderData.qty,
+          price: orderData.filled_avg_price || orderData.limit_price,
+          value: (orderData.filled_avg_price || orderData.limit_price) * (orderData.filled_qty || orderData.qty),
+          timestamp: orderData.filled_at || orderData.updated_at || new Date().toISOString(),
+          pnl: orderData.pnl,
+          fees: orderData.fees
         })
         .eq('order_id', orderData.order_id)
         .select()
@@ -50,28 +52,23 @@ export async function POST(request: NextRequest) {
         data,
       })
     } else {
-      // Insert new order
+      // Insert new order into trade_history
       const { data, error } = await supabase
-        .from('orders')
+        .from('trade_history')
         .insert([{
           order_id: orderData.order_id,
           symbol: orderData.symbol,
           side: orderData.side,
-          type: orderData.type,
-          qty: orderData.qty,
-          notional: orderData.notional,
-          filled_qty: orderData.filled_qty,
-          filled_avg_price: orderData.filled_avg_price,
-          limit_price: orderData.limit_price,
-          stop_price: orderData.stop_price,
+          price: orderData.filled_avg_price || orderData.limit_price || 0,
+          quantity: orderData.filled_qty || orderData.qty || 0,
+          value: (orderData.filled_avg_price || orderData.limit_price || 0) * (orderData.filled_qty || orderData.qty || 0),
           status: orderData.status,
-          time_in_force: orderData.time_in_force,
-          order_class: orderData.order_class,
-          created_at: orderData.created_at,
-          updated_at: orderData.updated_at,
-          submitted_at: orderData.submitted_at,
-          filled_at: orderData.filled_at,
-          extended_hours: orderData.extended_hours,
+          timestamp: orderData.filled_at || orderData.created_at || new Date().toISOString(),
+          strategy: orderData.strategy || null,
+          pnl: orderData.pnl || null,
+          fees: orderData.fees || null,
+          ai_confidence: orderData.ai_confidence || null,
+          user_id: orderData.user_id || '00000000-0000-0000-0000-000000000000'
         }])
         .select()
         .single()

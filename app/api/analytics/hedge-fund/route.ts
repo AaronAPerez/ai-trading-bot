@@ -6,24 +6,28 @@ export async function GET() {
   const userId = getCurrentUserId()
 
   const [winRate, drawdown, strategies, execution, drawdownHistory, confidenceScatter, symbolHeatmap] = await Promise.all([
-    supabaseService.client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabaseService.client as any)
       .from('bot_win_rate_summary')
       .select('*')
       .eq('user_id', userId)
       .single(),
 
-    supabaseService.client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabaseService.client as any)
       .from('bot_drawdown_tracker')
       .select('*')
       .eq('user_id', userId)
       .single(),
 
-    supabaseService.client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabaseService.client as any)
       .from('strategy_performance_summary')
       .select('*')
       .eq('user_id', userId),
 
-    supabaseService.client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabaseService.client as any)
       .from('execution_quality_metrics')
       .select('*')
       .eq('user_id', userId),

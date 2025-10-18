@@ -3,19 +3,22 @@ import { HedgeFundEngine } from './HedgeFundEngine'
 
 export async function runDailyEvaluation(userId: string) {
   const [winRate, drawdown, strategies] = await Promise.all([
-    supabaseService.client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabaseService.client as any)
       .from('bot_win_rate_summary')
       .select('win_rate')
       .eq('user_id', userId)
       .single(),
 
-    supabaseService.client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabaseService.client as any)
       .from('bot_drawdown_tracker')
       .select('drawdown')
       .eq('user_id', userId)
       .single(),
 
-    supabaseService.client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabaseService.client as any)
       .from('strategy_performance_summary')
       .select('*')
       .eq('user_id', userId)

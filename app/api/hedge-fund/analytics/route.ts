@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const signal = engine.getSignalEngine()
     const multiStrategyEngine = signal.getMultiStrategyEngine()
 
-    let strategyComparison = []
+    let strategyComparison = null
     if (multiStrategyEngine) {
       strategyComparison = multiStrategyEngine.getStrategyComparison()
     }
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         totalTrades: performanceMetrics?.totalTrades || 0,
         successRate: performanceMetrics?.successRate || 0,
         totalVolume: performanceMetrics?.totalVolume || 0,
-        strategiesActive: strategyComparison.length
+        strategiesActive: strategyComparison?.strategies?.length || 0
       },
       timestamp: new Date().toISOString()
     })

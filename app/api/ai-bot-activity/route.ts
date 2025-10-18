@@ -121,7 +121,9 @@ function calculateSafePositionSize(confidence: number, availableBuyingPower: num
 async function saveActivityToDatabase(activity: BotActivityLog) {
   try {
     const userId = getCurrentUserId()
-    await supabaseService.logBotActivity(userId, {
+    await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
       type: activity.type,
       symbol: activity.symbol,
       message: activity.message,

@@ -91,7 +91,7 @@ export class TradingDataManager {
       const totalPnL = trades.reduce((sum, t) => sum + (t.pnl || 0), 0)
 
       const today = new Date().toDateString()
-      const todaysTrades = trades.filter(t => new Date(t.created_at).toDateString() === today)
+      const todaysTrades = trades.filter(t => typeof t.created_at === 'string' && new Date(t.created_at).toDateString() === today)
       const dailyPnL = todaysTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
 
       const metricsData = {

@@ -129,7 +129,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     console.log(`✅ Order created successfully: ${order.id}`)
 
     // Log to Supabase
-    await supabaseService.logBotActivity(userId, {
+    await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
       type: 'trade',
       symbol,
       message: `Manual order placed: ${side} ${qty || notional} ${symbol}`,
@@ -163,7 +165,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     console.error('❌ Failed to create order:', error)
 
     // Log error to Supabase
-    await supabaseService.logBotActivity(userId, {
+    await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
       type: 'error',
       symbol,
       message: `Failed to create order: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -200,7 +204,9 @@ export const DELETE = withErrorHandling(async () => {
     console.log(`✅ All orders cancelled`)
 
     // Log to Supabase
-    await supabaseService.logBotActivity(userId, {
+    await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
       type: 'system',
       message: 'All orders cancelled',
       status: 'completed',

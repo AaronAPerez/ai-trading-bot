@@ -90,7 +90,9 @@ export class TradePersistenceService {
     try {
       const userId = getCurrentUserId()
 
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
         type: activityType,
         symbol: tradeData.symbol,
         message,
@@ -229,7 +231,9 @@ export class TradePersistenceService {
     try {
       const userId = getCurrentUserId()
 
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
         type: 'recommendation',
         symbol,
         message: `Trade rejected: ${reason}`,
@@ -288,7 +292,9 @@ export class TradePersistenceService {
     try {
       const userId = getCurrentUserId()
 
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+      user_id: userId,
+      timestamp: new Date().toISOString(),
         type: 'info',
         symbol,
         message: `Position update: ${quantity} shares @ $${avgPrice.toFixed(2)}`,

@@ -11,7 +11,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { UnifiedAlpacaClient } from '@/lib/alpaca/unified-client'
 import { getTradingMode } from '@/lib/config/trading-mode'
-import { getGlobalStrategyEngine } from '@/lib/strategies/GlobalStrategyEngine'
+import { AdaptiveStrategyEngine } from '@/lib/strategies/AdaptiveStrategyEngine'
+
+// Global singleton instance
+let globalStrategyEngine: AdaptiveStrategyEngine | null = null
+function getGlobalStrategyEngine(): AdaptiveStrategyEngine {
+  if (!globalStrategyEngine) {
+    globalStrategyEngine = new AdaptiveStrategyEngine()
+  }
+  return globalStrategyEngine
+}
 
 // Lazy-load alpacaClient to avoid build-time initialization
 // Using dynamic import to prevent initialization during build
@@ -628,14 +637,11 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
           }
         }
 
-        // Use the strategy ID that generated this signal (from outer scope)
-        // Note: usedStrategyId is captured from the signal generation above
-        const strategyId = typeof usedStrategyId !== 'undefined' ? usedStrategyId : 'normal'
+        // Record the trade with full context for database logging
+        // Note: strategyId is already defined in the outer scope from signal generation
+        engine.recordTrade(usedStrategyId, estimatedPnL, symbol, confidence, undefined)
 
-        // Record the trade
-        engine.recordTrade(strategyId, estimatedPnL, symbol)
-
-        const strategyName = engine.getAllPerformances().find(p => p.strategyId === strategyId)?.strategyName || 'Normal'
+        const strategyName = engine.getAllPerformances().find(p => p.strategyId === usedStrategyId)?.strategyName || 'Normal'
         console.log(`📊 Recorded trade to ${strategyName} strategy: ${symbol} P&L=$${estimatedPnL.toFixed(2)}`)
       } catch (trackError) {
         console.error('⚠️ Failed to record trade to engine:', trackError)

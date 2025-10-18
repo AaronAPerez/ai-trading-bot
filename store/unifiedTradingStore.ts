@@ -31,9 +31,9 @@ export const useUnifiedTradingStore = create<UnifiedTradingStore>()(
     persist(
       subscribeWithSelector(
         immer((...args) => ({
-          ...createPortfolioSlice(...args),
-          ...createAISlice(...args),
-          ...createMarketSlice(...args)
+          ...createPortfolioSlice(...(args as unknown as Parameters<typeof createPortfolioSlice>)),
+          ...createAISlice(...(args as unknown as Parameters<typeof createAISlice>)),
+          ...createMarketSlice(...(args as unknown as Parameters<typeof createMarketSlice>))
         }))
       ),
       {
@@ -51,7 +51,7 @@ export const useUnifiedTradingStore = create<UnifiedTradingStore>()(
       enabled: process.env.NODE_ENV === 'development'
     }
   )
-)
+) as unknown as (<TSelected = UnifiedTradingStore>(selector?: (state: UnifiedTradingStore) => TSelected, equalityFn?: (a: TSelected, b: TSelected) => boolean) => TSelected)
 
 /**
  * Selective hooks for better performance

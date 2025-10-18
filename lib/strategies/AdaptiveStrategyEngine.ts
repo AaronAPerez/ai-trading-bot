@@ -126,6 +126,7 @@ export class AdaptiveStrategyEngine {
     }
 
     this.initializeStrategies()
+    this.loadPerformanceFromDatabase()
   }
 
   /**
@@ -387,7 +388,7 @@ export class AdaptiveStrategyEngine {
   /**
    * Record trade result to update performance
    */
-  recordTrade(strategyId: string, pnl: number, symbol: string): void {
+  recordTrade(strategyId: string, pnl: number, symbol: string, confidence: number = 70, marketData?: any): void {
     const perf = this.performance.get(strategyId)
     if (!perf) return
 
@@ -432,20 +433,27 @@ export class AdaptiveStrategyEngine {
 
     console.log(`📊 Updated ${perf.strategyName}: ${perf.totalTrades} trades, ${perf.winRate.toFixed(1)}% win rate, $${perf.totalPnL.toFixed(2)} P&L`)
 
-    // 💾 SAVE TO SUPABASE for persistence
-    this.savePerformanceToStorage(perf)
+    // 💾 SAVE TO ALL SUPABASE TABLES for complete persistence
+    this.savePerformanceToDatabase(perf, symbol, pnl, confidence, marketData)
   }
 
   /**
-   * Save performance to Supabase (async, non-blocking)
+   * Save performance to all Supabase tables (async, non-blocking)
+   * Saves to: trading_strategies, ai_learning_data, bot_activity_logs, bot_metrics
    */
-  private async savePerformanceToStorage(perf: StrategyPerformance): Promise<void> {
+  private async savePerformanceToDatabase(
+    perf: StrategyPerformance,
+    symbol: string,
+    pnl: number,
+    confidence: number,
+    marketData?: any
+  ): Promise<void> {
     try {
-      const { saveStrategyPerformance } = await import('./StrategyPerformanceStorage')
-      await saveStrategyPerformance(perf)
+      const { recordTradeToDatabase } = await import('./StrategyDatabaseIntegration')
+      await recordTradeToDatabase(perf, symbol, pnl, confidence, marketData)
     } catch (error) {
       // Silent fail - don't break trading if storage fails
-      console.error('⚠️ Failed to save to storage:', error)
+      console.error('⚠️ Failed to save to database:', error)
     }
   }
 
@@ -522,5 +530,34 @@ export class AdaptiveStrategyEngine {
    */
   getInverseMode(): boolean {
     return this.inverseMode
+  }
+
+  /**
+   * Load performance data from database on initialization
+   */
+  private async loadPerformanceFromDatabase(): Promise<void> {
+    try {
+      const { loadStrategiesFromDatabase } = await import('./StrategyDatabaseIntegration')
+      const savedPerformances = await loadStrategiesFromDatabase()
+
+      if (savedPerformances.length > 0) {
+        console.log(`📦 Loaded ${savedPerformances.length} strategies from database, merging with current state...`)
+
+        // Merge saved performance with current strategies
+        for (const savedPerf of savedPerformances) {
+          const currentPerf = this.performance.get(savedPerf.strategyId)
+          if (currentPerf) {
+            // Merge saved data into current performance
+            Object.assign(currentPerf, savedPerf)
+            console.log(`✅ Restored ${savedPerf.strategyName}: ${savedPerf.totalTrades} trades, ${savedPerf.winRate.toFixed(1)}% win rate`)
+          }
+        }
+      } else {
+        console.log('📭 No saved strategy data found in database, starting fresh')
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to load performance from database:', error)
+      // Continue with empty performance - non-critical failure
+    }
   }
 }

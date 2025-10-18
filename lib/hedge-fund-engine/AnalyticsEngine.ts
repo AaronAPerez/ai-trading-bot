@@ -166,7 +166,9 @@ export class AnalyticsEngine {
         ? `${execution.action} ${execution.quantity || 'N/A'} ${execution.symbol} @ $${execution.price?.toFixed(2) || 'N/A'}`
         : `Failed to ${execution.action} ${execution.symbol}: ${execution.error}`
 
-      await supabaseService.logBotActivity(userId, {
+      await supabaseService.logBotActivity({
+        user_id: userId,
+        timestamp: new Date().toISOString(),
         type: 'trade',
         symbol: execution.symbol,
         message,

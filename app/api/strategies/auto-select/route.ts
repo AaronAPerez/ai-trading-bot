@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server'
-import { alpacaClient } from '@/lib/alpaca/unified-client'
-import { getGlobalStrategyEngine } from '@/lib/strategies/GlobalStrategyEngine'
-
 /**
- * Auto-select best performing strategy using Global AdaptiveStrategyEngine
+ * Auto-select best performing strategy
  * GET /api/strategies/auto-select
  *
- * Uses the SAME engine instance as the AI bot for consistent performance tracking
+ * Loads strategy performance data from Supabase database
  */
 
 interface StrategyPerformance {
@@ -39,9 +36,9 @@ export async function GET() {
       { strategyId: 'normal', strategyName: 'Normal (No Inverse)' }
     ]
 
-    // Load from Supabase for persistence across server restarts
-    const { loadAllStrategyPerformances } = await import('@/lib/strategies/StrategyPerformanceStorage')
-    const savedPerformances = await loadAllStrategyPerformances()
+    // Load from Supabase using new database integration
+    const { loadStrategiesFromDatabase } = await import('@/lib/strategies/StrategyDatabaseIntegration')
+    const savedPerformances = await loadStrategiesFromDatabase()
 
     // Merge saved data with all strategy definitions
     // This ensures ALL strategies are shown, even if they have no trades yet
@@ -146,7 +143,7 @@ export async function GET() {
     }
 
     // Generate recommendation
-    let recommendation = {
+    const recommendation = {
       strategyId: bestStrategy.strategyId,
       strategyName: bestStrategy.strategyName,
       confidence: Math.min(100, Math.max(50, bestStrategy.winRate + 10)),

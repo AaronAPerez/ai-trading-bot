@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 /**
  * Standardized API error class
@@ -141,9 +141,9 @@ export function handleAPIError(error: unknown): NextResponse {
  * Wrapper for async API route handlers with error handling
  */
 export function withErrorHandling<T>(
-  handler: (request: Request, context?: T) => Promise<NextResponse>
+  handler: (request: NextRequest, context?: T) => Promise<NextResponse>
 ) {
-  return async (request: Request, context?: T): Promise<NextResponse> => {
+  return async (request: NextRequest, context?: T): Promise<NextResponse> => {
     try {
       return await handler(request, context)
     } catch (error) {

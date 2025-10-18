@@ -1,6 +1,6 @@
 // src/lib/trading/engines/AIRecommendationEngine.ts
 
-import { MLPredictionEngine } from '../ml/MLPredictionEngine'
+import { MLPredictionEngine } from '@/lib/ai/MLPredictionEngine'
 import { TechnicalAnalyzer } from '../analyzers/TechnicalAnalyzer'
 import { SentimentAnalyzer } from '../analyzers/SentimentAnalyzer'
 import { AlpacaClient } from '../../alpaca/AlpacaClient'
