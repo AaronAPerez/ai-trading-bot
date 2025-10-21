@@ -584,59 +584,6 @@ export default function AITradingDashboard() {
         />
       </div>
 
-         {/* 🎯 Strategy Mode Toggle */}
-      <div className="flex justify-center mb-6">
-        <TradingModeToggle
-          currentMode={strategyMode}
-          onModeChange={handleStrategyModeChange}
-          disabled={persistentBotState.isRunning}
-        />
-      </div>
-
-       {/* 🎯 Conditional Strategy Dashboard based on Strategy Mode */}
-      {strategyMode === 'ai-bot' ? (
-        /* AI Bot Mode - Single Best Strategy (AdaptiveStrategyEngine) */
-        <StrategyPerformanceDashboard
-          botIsActive={persistentBotState.isRunning}
-          autoSwitch={true}
-          inverseMode={inverseMode}
-          onStrategyChange={async (strategyId, shouldEnableInverse) => {
-          console.log(`🔄 Auto-switching to strategy: ${strategyId}, Should Enable Inverse: ${shouldEnableInverse}`)
-
-          // Only toggle if the state needs to change
-          if (shouldEnableInverse !== inverseMode) {
-            try {
-              const response = await fetch('/api/ai/bot-control', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'toggle-inverse' })
-              })
-
-              if (response.ok) {
-                const result = await response.json()
-                const newInverseState = result.data.inverseMode
-
-                // Update local state to sync with backend
-                setInverseMode(newInverseState)
-                localStorage.setItem('ai-inverse-mode', newInverseState.toString())
-
-                console.log(`✅ Inverse mode ${newInverseState ? 'ENABLED' : 'DISABLED'} - Synced with Strategy Performance`)
-              }
-            } catch (error) {
-              console.error('Failed to toggle inverse mode:', error)
-            }
-          } else {
-            console.log(`ℹ️ Inverse mode already in correct state: ${inverseMode ? 'ON' : 'OFF'}`)
-          }
-        }}
-        />
-      ) : (
-        /* Hedge Fund Mode - Multi-Strategy Comparison (MultiStrategyEngine) */
-        <MultiStrategyComparisonPanel
-          botIsActive={persistentBotState.isRunning}
-        />
-      )}
-
       {/* Portfolio Positions Table */}
       <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-xl">
         <PortfolioPositionsTable
@@ -644,10 +591,6 @@ export default function AITradingDashboard() {
           initialLimit={10}
         />
       </div>
-
-   
-
-     
 
       {/* Advanced Charts Section */}
       <div className="space-y-6" >
