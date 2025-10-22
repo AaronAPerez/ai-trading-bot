@@ -65,12 +65,12 @@ export async function saveStrategyToDatabase(performance: StrategyPerformance): 
 
     // Prepare data for trading_strategies table
     // Only include fields that exist in the actual Supabase schema
+    // NOTE: Database has 'strategy_name' column (NOT 'name')
     const strategyData: any = {
       user_id: userId,
-      name: performance.strategyName,
+      strategy_name: performance.strategyName, // Database column is 'strategy_name', not 'name'
       strategy_type: performance.strategyId,
-      // Removed: description, enabled - not in schema
-      total_signals: performance.totalTrades,
+      // total_signals: performance.totalTrades, // Column doesn't exist - add it with migration
       successful_signals: performance.winningTrades,
       total_return: performance.totalPnL,
       win_rate: performance.winRate
@@ -79,8 +79,8 @@ export async function saveStrategyToDatabase(performance: StrategyPerformance): 
     console.log(`💾 Saving strategy to database:`, {
       user_id: userId,
       strategy_type: performance.strategyId,
-      name: performance.strategyName,
-      total_signals: performance.totalTrades,
+      strategy_name: performance.strategyName,
+      // total_signals: performance.totalTrades, // Column doesn't exist yet
       successful_signals: performance.winningTrades,
       total_return: performance.totalPnL,
       win_rate: performance.winRate
@@ -297,20 +297,20 @@ export async function loadStrategiesFromDatabase(): Promise<StrategyPerformance[
     }
 
     console.log(`📦 Found ${data.length} strategies in database:`, data.map(d => ({
-      name: d.name,
+      name: (d as any).strategy_name || (d as any).name,
       type: d.strategy_type,
-      trades: d.total_signals,
+      trades: (d as any).total_signals,
       winRate: d.win_rate,
       pnl: d.total_return
     })))
 
     // Convert database rows to StrategyPerformance objects
-    const performances: StrategyPerformance[] = data.map((row) => ({
+    const performances: StrategyPerformance[] = data.map((row: any) => ({
       strategyId: row.strategy_type,
-      strategyName: row.name,
-      totalTrades: row.total_signals || 0,
+      strategyName: row.strategy_name || row.name, // Handle both column names
+      totalTrades: row.total_signals || row.successful_signals || 0,
       winningTrades: row.successful_signals || 0,
-      losingTrades: (row.total_signals || 0) - (row.successful_signals || 0),
+      losingTrades: (row.total_signals || row.successful_signals || 0) - (row.successful_signals || 0),
       totalPnL: row.total_return || 0,
       winRate: row.win_rate || 0,
       avgPnL: row.total_signals ? (row.total_return || 0) / row.total_signals : 0,

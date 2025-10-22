@@ -18,7 +18,7 @@ import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
 import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
 import { useTradeWebSocketListener } from "@/hooks/useTradeWebSocketListener"
 import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import PortfolioPositionsTable from './PortfolioPositionsTable'
 import RecentOrdersTable from './RecentOrdersTable'
 import { useBotStore } from '@/store/slices/botSlice'
@@ -157,6 +157,7 @@ const defaultBotConfig: BotConfig = {
 export default function AITradingDashboard() {
   const tradingBot = useTradingBot()
   const { tradingMode, setTradingMode } = useBotStore()
+  const queryClient = useQueryClient()
 
   // Listen for WebSocket trade events and auto-invalidate React Query cache
   useTradeWebSocketListener()
@@ -489,6 +490,10 @@ export default function AITradingDashboard() {
       if (result.success) {
         setInverseMode(result.data.inverseMode)
         console.log(`🔄 Inverse mode ${result.data.inverseMode ? 'enabled' : 'disabled'}`)
+        console.log(`📊 Current strategy:`, result.data.currentStrategy)
+
+        // Force refresh the active strategy display
+        await queryClient.invalidateQueries({ queryKey: ['activeStrategy'] })
       }
     } catch (error) {
       console.error('Failed to toggle inverse mode:', error)
