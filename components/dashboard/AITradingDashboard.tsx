@@ -1,7 +1,7 @@
 "use client"
 // Dashboard Container (Layout)
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import '../../styles/dashboard.css'
 import { useAutoExecution } from "@/hooks/trading/useAutoExecution"
 import { useTradingBot } from "@/hooks/trading/useTradingBot"
@@ -18,9 +18,6 @@ import { useAILearningManager } from "@/hooks/useAILearningManager"
 import { useRealTimeAIMetrics } from "@/hooks/useRealTimeAIMetrics"
 import { useRealTimeActivity } from "@/hooks/useRealTimeActivity"
 import { useTradeWebSocketListener } from "@/hooks/useTradeWebSocketListener"
-import { PortfolioAllocationChart } from '../charts/PortfolioAllocationChart'
-import { PerformanceChart } from '../charts/PerformanceChart'
-import { RiskMetricsChart } from '../charts/RiskMetricsChart'
 import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
 import { useQuery } from '@tanstack/react-query'
 import PortfolioPositionsTable from './PortfolioPositionsTable'
@@ -29,6 +26,11 @@ import MultiStrategyComparisonPanel from './MultiStrategyComparisonPanel'
 import TradingModeToggle, { TradingMode } from './TradingModeToggle'
 import RecentOrdersTable from './RecentOrdersTable'
 import { useBotStore } from '@/store/slices/botSlice'
+
+// 🚀 PERFORMANCE OPTIMIZATION: Lazy load heavy chart components
+const PortfolioAllocationChart = lazy(() => import('../charts/PortfolioAllocationChart').then(mod => ({ default: mod.PortfolioAllocationChart })))
+const PerformanceChart = lazy(() => import('../charts/PerformanceChart').then(mod => ({ default: mod.PerformanceChart })))
+const RiskMetricsChart = lazy(() => import('../charts/RiskMetricsChart').then(mod => ({ default: mod.RiskMetricsChart })))
 
 // Type definitions
 interface BotConfig {
@@ -127,14 +129,14 @@ export default function AITradingDashboard() {
   })
 
 
-  // Only poll Alpaca data when AI bot is active to reduce unnecessary API calls
-  const account = useAlpacaAccount(persistentBotState.isRunning ? 15000 : undefined)
-  const positions = useAlpacaPositions(persistentBotState.isRunning ? 30000 : undefined)
+  // OPTIMIZED: Slower polling intervals to reduce setTimeout violations
+  const account = useAlpacaAccount(persistentBotState.isRunning ? 30000 : undefined)
+  const positions = useAlpacaPositions(persistentBotState.isRunning ? 45000 : undefined)
 
   useAIBotActivity({
-    refreshInterval: persistentBotState.isRunning ? 5000 : 30000, // Slower when inactive
+    refreshInterval: persistentBotState.isRunning ? 10000 : 60000, // OPTIMIZED: Slower intervals
     maxActivities: 8,
-    autoStart: persistentBotState.isRunning // Start if was running before
+    autoStart: persistentBotState.isRunning
   })
 
   // AI Trading Notifications with real data
@@ -216,24 +218,23 @@ export default function AITradingDashboard() {
           return []
         }
         const json = await res.json()
-        // API returns data in json.data, not json.orders
         return Array.isArray(json.data) ? json.data : []
       } catch (error) {
         console.error('Error fetching orders:', error)
         return []
       }
     },
-    refetchInterval: persistentBotState.isRunning ? 10000 : false, // Faster refresh - 10s instead of 60s
+    refetchInterval: persistentBotState.isRunning ? 15000 : false, // OPTIMIZED: 15s instead of 10s
     retry: 1,
     retryDelay: 5000,
-    staleTime: 5000 // Shorter stale time for more real-time updates
+    staleTime: 10000 // OPTIMIZED: 10s instead of 5s
   })
 
 
   // const totalPnL = positions_data.reduce(...)
   // const dayPnL = account.data ? parseFloat(account.data.dayPnL || account.data.day_pnl || '0') : 0
 
-  // Load persistent state from localStorage on mount
+  // Load persistent state from localStorage on mount - OPTIMIZED
   useEffect(() => {
     try {
       const savedState = localStorage.getItem('ai-trading-bot-state')
@@ -248,29 +249,26 @@ export default function AITradingDashboard() {
         if (parsed.isRunning) {
           console.log('Restoring AI trading bot state from previous session')
           tradingBot.startBot(parsed.config || defaultBotConfig)
-          // REMOVED: aiActivity.startSimulation() - Using real RealTimeAITradingEngine only
           startTradingMonitoring()
         }
+      }
+
+      // Sync inverse mode with backend - OPTIMIZED
+      const savedInverseMode = localStorage.getItem('ai-inverse-mode')
+      if (savedInverseMode !== null) {
+        fetch('/api/ai/bot-control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: savedInverseMode === 'true' ? 'enable-inverse' : 'disable-inverse'
+          })
+        }).catch(err => console.error('Failed to sync inverse mode to backend:', err))
       }
     } catch (error) {
       console.error('Error loading bot state from localStorage:', error)
     }
-
-    // Sync inverse mode with backend (but don't overwrite localStorage on mount)
-    // The localStorage value takes precedence
-    const savedInverseMode = localStorage.getItem('ai-inverse-mode')
-    if (savedInverseMode !== null) {
-      const inverseModeValue = savedInverseMode === 'true'
-      // Sync to backend
-      fetch('/api/ai/bot-control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: inverseMode ? 'enable-inverse' : 'disable-inverse'
-        })
-      }).catch(err => console.error('Failed to sync inverse mode to backend:', err))
-    }
-  }, [])  // Keep empty to only run once on mount to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])  // Only run once on mount
 
   // Handler for strategy mode changes
   const handleStrategyModeChange = useCallback((newMode: TradingMode) => {
@@ -279,22 +277,30 @@ export default function AITradingDashboard() {
     console.log(`🔄 Switched to ${newMode === 'ai-bot' ? 'AI Bot' : 'Hedge Fund'} mode`)
   }, [])
 
-  // Save state to localStorage whenever it changes
+  // Save state to localStorage - DEBOUNCED
   useEffect(() => {
-    try {
-      localStorage.setItem('ai-trading-bot-state', JSON.stringify(persistentBotState))
-    } catch (error) {
-      console.error('Error saving bot state to localStorage:', error)
-    }
+    const timeoutId = setTimeout(() => {
+      try {
+        localStorage.setItem('ai-trading-bot-state', JSON.stringify(persistentBotState))
+      } catch (error) {
+        console.error('Error saving bot state to localStorage:', error)
+      }
+    }, 500) // Debounce 500ms
+
+    return () => clearTimeout(timeoutId)
   }, [persistentBotState])
 
-  // Save inverse mode to localStorage whenever it changes
+  // Save inverse mode to localStorage - DEBOUNCED
   useEffect(() => {
-    try {
-      localStorage.setItem('ai-inverse-mode', inverseMode.toString())
-    } catch (error) {
-      console.error('Error saving inverse mode to localStorage:', error)
-    }
+    const timeoutId = setTimeout(() => {
+      try {
+        localStorage.setItem('ai-inverse-mode', inverseMode.toString())
+      } catch (error) {
+        console.error('Error saving inverse mode to localStorage:', error)
+      }
+    }, 500) // Debounce 500ms
+
+    return () => clearTimeout(timeoutId)
   }, [inverseMode])
 
   // Update persistent state when trading bot state changes
@@ -576,23 +582,23 @@ export default function AITradingDashboard() {
 
       
 
-      {/* Live Portfolio Balance */}
+      {/* Live Portfolio Balance - OPTIMIZED REFRESH */}
       <div className="bg-gradient-to-r from-gray-800/50 to-blue-900/30 rounded-xl p-6 border border-gray-700/50">
         <LiveBalanceDisplay
-          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+          refreshInterval={persistentBotState.isRunning ? 15000 : 60000}
           showChangeIndicators={true}
         />
       </div>
 
-      {/* Portfolio Positions Table */}
+      {/* Portfolio Positions Table - OPTIMIZED REFRESH */}
       <div className="bg-gradient-to-r from-gray-800/50 to-green-900/30 rounded-xl p-6 border-2 border-green-500/30 shadow-xl">
         <PortfolioPositionsTable
-          refreshInterval={persistentBotState.isRunning ? 5000 : 30000}
+          refreshInterval={persistentBotState.isRunning ? 20000 : 60000}
           initialLimit={10}
         />
       </div>
 
-      {/* Advanced Charts Section */}
+      {/* Advanced Charts Section - LAZY LOADED FOR PERFORMANCE */}
       <div className="space-y-6" >
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">Advanced Analytics</h2>
@@ -600,13 +606,30 @@ export default function AITradingDashboard() {
         </div>
 
         {/* Portfolio Performance & Allocation */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <PerformanceChart period="1M" height={350} />
-          <PortfolioAllocationChart height={350} />
-        </div>
+        <Suspense fallback={
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-gray-800/50 rounded-xl p-6 h-[400px] flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            </div>
+            <div className="bg-gray-800/50 rounded-xl p-6 h-[400px] flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            </div>
+          </div>
+        }>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <PerformanceChart period="1M" height={350} />
+            <PortfolioAllocationChart height={350} />
+          </div>
+        </Suspense>
 
         {/* Risk Metrics */}
-        <RiskMetricsChart height={400} showPositionRisks={true} />
+        <Suspense fallback={
+          <div className="bg-gray-800/50 rounded-xl p-6 h-[450px] flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
+        }>
+          <RiskMetricsChart height={400} showPositionRisks={true} />
+        </Suspense>
 
         {/* Price Charts for Top Positions */}
         {/* {positions.data && positions.data.length > 0 && (
@@ -624,13 +647,13 @@ export default function AITradingDashboard() {
       </div>
     )} */}
       </div>
-      {/* 📊 Full Recent Orders Table */}
+      {/* 📊 Full Recent Orders Table - OPTIMIZED REFRESH */}
       <div
         className="bg-gradient-to-r from-gray-800/50 to-purple-900/30 rounded-xl p-6 border-2 border-purple-500/30 shadow-xl"
         aria-label="Recent orders section"
       >
         <RecentOrdersTable
-          refreshInterval={persistentBotState.isRunning ? 5000 : 15000}
+          refreshInterval={persistentBotState.isRunning ? 20000 : 60000}
           initialLimit={20}
         />
       </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, memo } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -34,7 +34,8 @@ const COLORS = [
 const formatCurrency = (value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatPercent = (value: number) => `${value.toFixed(1)}%`
 
-export function PortfolioAllocationChart({ height = 400, showLegend = true }: PortfolioAllocationChartProps) {
+// PERFORMANCE: Memoize component to prevent unnecessary re-renders
+export const PortfolioAllocationChart = memo(function PortfolioAllocationChart({ height = 400, showLegend = true }: PortfolioAllocationChartProps) {
   const [allocationData, setAllocationData] = useState<AllocationData[]>([])
   const [totalValue, setTotalValue] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -101,8 +102,8 @@ export function PortfolioAllocationChart({ height = 400, showLegend = true }: Po
 
     fetchPortfolioData()
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchPortfolioData, 30000)
+    // OPTIMIZED: Refresh every 60 seconds instead of 30s
+    const interval = setInterval(fetchPortfolioData, 60000)
 
     return () => clearInterval(interval)
   }, [])
@@ -277,4 +278,4 @@ export function PortfolioAllocationChart({ height = 400, showLegend = true }: Po
       </CardContent>
     </Card>
   )
-}
+})

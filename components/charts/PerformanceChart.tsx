@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useRealTimeAIMetrics } from '@/hooks/useRealTimeAIMetrics'
@@ -142,8 +142,8 @@ export function PerformanceChart({
 
     fetchPerformanceData()
 
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchPerformanceData, 60000)
+    // OPTIMIZED: Refresh every 120 seconds instead of 60s
+    const interval = setInterval(fetchPerformanceData, 120000)
 
     return () => clearInterval(interval)
   }, [selectedPeriod, metrics.portfolioValue, metrics.equity, metrics.totalPnL])
@@ -175,16 +175,18 @@ export function PerformanceChart({
     return null
   }
 
-  const periodOptions = [
+  // PERFORMANCE: Memoize period options to prevent recreation
+  const periodOptions = useMemo(() => [
     { value: '1D', label: '1D' },
     { value: '1W', label: '1W' },
     { value: '1M', label: '1M' },
     { value: '3M', label: '3M' },
     { value: '1Y', label: '1Y' },
     { value: 'ALL', label: 'ALL' }
-  ]
+  ], [])
 
-  const isPositive = totalReturn >= 0
+  // PERFORMANCE: Memoize computed values
+  const isPositive = useMemo(() => totalReturn >= 0, [totalReturn])
 
   if (isLoading) {
     return (

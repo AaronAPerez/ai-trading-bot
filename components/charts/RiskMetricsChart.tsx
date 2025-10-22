@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useRealTimeAIMetrics } from '@/hooks/useRealTimeAIMetrics'
@@ -39,7 +39,8 @@ const getRiskStatus = (value: number, thresholds: { low: number, medium: number 
   return 'high'
 }
 
-export function RiskMetricsChart({ height = 400, showPositionRisks = true }: RiskMetricsChartProps) {
+// PERFORMANCE: Memoize component to prevent unnecessary re-renders
+export const RiskMetricsChart = memo(function RiskMetricsChart({ height = 400, showPositionRisks = true }: RiskMetricsChartProps) {
   const [riskMetrics, setRiskMetrics] = useState<RiskMetric[]>([])
   const [positionRisks, setPositionRisks] = useState<PositionRisk[]>([])
   const [overallRiskScore, setOverallRiskScore] = useState(0)
@@ -187,8 +188,8 @@ export function RiskMetricsChart({ height = 400, showPositionRisks = true }: Ris
 
     calculateRiskMetrics()
 
-    // Refresh every 30 seconds
-    const interval = setInterval(calculateRiskMetrics, 30000)
+    // OPTIMIZED: Refresh every 60 seconds instead of 30s
+    const interval = setInterval(calculateRiskMetrics, 60000)
 
     return () => clearInterval(interval)
   }, [metrics.dailyPnL])
@@ -340,4 +341,4 @@ export function RiskMetricsChart({ height = 400, showPositionRisks = true }: Ris
       </CardContent>
     </Card>
   )
-}
+})
