@@ -43,16 +43,29 @@ export interface ExecutionResult {
 }
 
 export class ExecutionRouter {
-  private alpacaOrderService: AlpacaOrderService
+  private alpacaOrderService: AlpacaOrderService | null = null
   private mode: 'paper' | 'live'
 
   constructor(mode: 'paper' | 'live' = 'paper') {
     this.mode = mode
-    this.alpacaOrderService = new AlpacaOrderService({
-      key: process.env.APCA_API_KEY_ID!,
-      secret: process.env.APCA_API_SECRET_KEY!,
-      paper: mode === 'paper'
-    })
+  }
+
+  private getAlpacaOrderService(): AlpacaOrderService {
+    if (!this.alpacaOrderService) {
+      const key = process.env.APCA_API_KEY_ID
+      const secret = process.env.APCA_API_SECRET_KEY
+
+      if (!key || !secret) {
+        throw new Error('Alpaca API credentials not configured')
+      }
+
+      this.alpacaOrderService = new AlpacaOrderService({
+        key,
+        secret,
+        paper: this.mode === 'paper'
+      })
+    }
+    return this.alpacaOrderService
   }
 
   async execute(
@@ -127,7 +140,7 @@ export class ExecutionRouter {
       }
 
       // Execute order through Alpaca
-      const orderResponse = await this.alpacaOrderService.placeOrder(orderRequest)
+      const orderResponse = await this.getAlpacaOrderService().placeOrder(orderRequest)
 
       const latencyMs = Date.now() - startTime
 
@@ -231,7 +244,7 @@ export class ExecutionRouter {
    */
   async cancelOrder(orderId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const result = await this.alpacaOrderService.cancelOrder(orderId)
+      const result = await this.getAlpacaOrderService().cancelOrder(orderId)
       return {
         success: result.success,
         error: result.error
@@ -249,7 +262,7 @@ export class ExecutionRouter {
    */
   async getOrderStatus(orderId: string) {
     try {
-      return await this.alpacaOrderService.getOrderStatus(orderId)
+      return await this.getAlpacaOrderService().getOrderStatus(orderId)
     } catch (error: any) {
       console.error('Failed to get order status:', error)
       return null
@@ -261,7 +274,7 @@ export class ExecutionRouter {
    */
   async replaceOrder(orderId: string, newParams: Partial<OrderRequest>) {
     try {
-      return await this.alpacaOrderService.replaceOrder(orderId, newParams)
+      return await this.getAlpacaOrderService().replaceOrder(orderId, newParams)
     } catch (error: any) {
       console.error('Failed to replace order:', error)
       return {
@@ -276,7 +289,7 @@ export class ExecutionRouter {
    */
   async testConnection() {
     try {
-      return await this.alpacaOrderService.testConnection()
+      return await this.getAlpacaOrderService().testConnection()
     } catch (error: any) {
       console.error('Connection test failed:', error)
       return {
