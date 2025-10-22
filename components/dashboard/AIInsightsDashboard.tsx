@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+import React, { memo } from 'react'
 import {
   Target,
   Activity,
@@ -19,7 +19,8 @@ interface AIInsightsDashboardProps {
   learningActive?: boolean
 }
 
-export default function AIInsightsDashboard({
+// PERFORMANCE: Memoize to prevent unnecessary re-renders
+const AIInsightsDashboard = memo(function AIInsightsDashboard({
   botIsActive = false,
   learningActive = false
 }: AIInsightsDashboardProps) {
@@ -196,4 +197,6 @@ export default function AIInsightsDashboard({
       </div>
     </div>
   )
-}
+})
+
+export default AIInsightsDashboard

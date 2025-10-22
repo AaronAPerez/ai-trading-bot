@@ -64,15 +64,12 @@ export async function saveStrategyToDatabase(performance: StrategyPerformance): 
     const userId = await getUserId()
 
     // Prepare data for trading_strategies table
-    const strategyData: Database['public']['Tables']['trading_strategies']['Insert'] = {
+    // Only include fields that exist in the actual Supabase schema
+    const strategyData: any = {
       user_id: userId,
       name: performance.strategyName,
       strategy_type: performance.strategyId,
-      description: `Adaptive strategy: ${performance.strategyName}`,
-      enabled: !performance.testingMode || performance.testPassed === true,
-      confidence_threshold: 60, // From config
-      max_position_size: 200, // From config
-      risk_multiplier: 1.0,
+      // Removed: description, enabled - not in schema
       total_signals: performance.totalTrades,
       successful_signals: performance.winningTrades,
       total_return: performance.totalPnL,
@@ -101,6 +98,14 @@ export async function saveStrategyToDatabase(performance: StrategyPerformance): 
     if (error) {
       console.error('❌ Failed to save strategy to database:', error)
       console.error('   Error details:', JSON.stringify(error, null, 2))
+
+      // Provide helpful error messages
+      if (error.code === '42501') {
+        console.warn('💡 RLS POLICY: Database security is blocking writes. Trading continues normally.')
+        console.warn('💡 Fix: Update Supabase RLS policies or use authenticated user instead of system user.')
+      } else if (error.code === 'PGRST204') {
+        console.warn('💡 SCHEMA MISMATCH: Database column not found. Check Supabase schema matches code.')
+      }
     } else {
       console.log(`✅ Saved ${performance.strategyName} to trading_strategies table`)
       console.log(`   Data saved:`, data)
@@ -130,7 +135,8 @@ export async function logTradeLearningData(
     }
 
     const userId = await getUserId()
-    const outcome = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'neutral'
+    // Outcome must match database constraint: 'WIN', 'LOSS', or 'NEUTRAL' (uppercase)
+    const outcome = pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'NEUTRAL'
 
     // Prepare learning data
     const learningData: Database['public']['Tables']['ai_learning_data']['Insert'] = {
@@ -371,6 +377,36 @@ export async function getRecentLearningData(
 }
 
 /**
+ * Update active strategy display in UI
+ */
+async function updateActiveStrategyDisplay(performance: StrategyPerformance): Promise<void> {
+  try {
+    // Update the active strategy API endpoint so the UI shows current data
+    const response = await fetch('http://localhost:3000/api/strategies/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        strategyId: performance.strategyId,
+        strategyName: performance.strategyName,
+        winRate: performance.winRate,
+        totalTrades: performance.totalTrades,
+        testingMode: performance.testingMode,
+        testTradesCompleted: performance.testTradesCompleted,
+        testTradesRequired: performance.testTradesRequired,
+        totalPnL: performance.totalPnL
+      })
+    })
+
+    if (response.ok) {
+      console.log(`📊 Updated active strategy display: ${performance.strategyName}`)
+    }
+  } catch (error) {
+    // Silently fail - this is just for UI updates
+    console.debug('Could not update active strategy display:', error)
+  }
+}
+
+/**
  * Complete save: Update all tables when a trade is recorded
  */
 export async function recordTradeToDatabase(
@@ -420,6 +456,9 @@ export async function recordTradeToDatabase(
       performance.totalPnL,
       50 // Default risk score
     )
+
+    // 5. Update active strategy display in UI
+    await updateActiveStrategyDisplay(performance)
 
     console.log(`✅ Recorded trade to all database tables: ${symbol} P&L=$${pnl.toFixed(2)}`)
   } catch (error) {

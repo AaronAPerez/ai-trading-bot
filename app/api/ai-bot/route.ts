@@ -379,7 +379,7 @@ async function checkPortfolioRebalancing(): Promise<{ shouldRebalance: boolean; 
 // ENHANCED ORDER EXECUTION FUNCTION
 // ===============================================
 
-async function executeOrder(symbol: string, confidence: number, recommendation: string): Promise<OrderExecutionResult> {
+async function executeOrder(symbol: string, confidence: number, recommendation: string, strategyId: string = 'normal'): Promise<OrderExecutionResult> {
   console.log(`🔍 Order execution check - Symbol: ${symbol}, Confidence: ${confidence}%, Enabled: ${orderExecutionEnabled}`)
 
   // Check 1: Order execution enabled
@@ -638,10 +638,10 @@ async function executeOrder(symbol: string, confidence: number, recommendation: 
         }
 
         // Record the trade with full context for database logging
-        // Note: strategyId is already defined in the outer scope from signal generation
-        engine.recordTrade(usedStrategyId, estimatedPnL, symbol, confidence, undefined)
+        // Use strategyId parameter passed from the outer scope
+        engine.recordTrade(strategyId, estimatedPnL, symbol, confidence, undefined)
 
-        const strategyName = engine.getAllPerformances().find(p => p.strategyId === usedStrategyId)?.strategyName || 'Normal'
+        const strategyName = engine.getAllPerformances().find(p => p.strategyId === strategyId)?.strategyName || 'Normal'
         console.log(`📊 Recorded trade to ${strategyName} strategy: ${symbol} P&L=$${estimatedPnL.toFixed(2)}`)
       } catch (trackError) {
         console.error('⚠️ Failed to record trade to engine:', trackError)
@@ -740,7 +740,7 @@ function startBotActivitySimulation() {
 
           for (const symbolToSell of rebalanceCheck.positionsToSell) {
             try {
-              const sellResult = await executeOrder(symbolToSell, 95, 'SELL') // High confidence for rebalancing
+              const sellResult = await executeOrder(symbolToSell, 95, 'SELL', 'rebalance') // High confidence for rebalancing
               if (sellResult.success) {
                 console.log(`✅ Rebalancing: Sold ${symbolToSell}`)
               }
@@ -819,10 +819,21 @@ function startBotActivitySimulation() {
 
       try {
         // Fetch market data for strategy analysis
-        const marketData = await getAlpacaClient().getBars(symbol, {
-          timeframe: '1Day',
-          limit: 100
-        })
+        let marketData: any[] = []
+
+        try {
+          marketData = await getAlpacaClient().getBars(symbol, {
+            timeframe: '1Day',
+            limit: 100
+          })
+        } catch (barsError: any) {
+          // If crypto bars fail, skip this symbol gracefully
+          if (barsError.message?.includes('endpoint not found') || barsError.statusCode === 404) {
+            console.log(`⏭️ Skipping ${symbol} - crypto bars endpoint not available`)
+            return // Skip this cycle
+          }
+          throw barsError // Re-throw other errors
+        }
 
         if (marketData && marketData.length > 20) {
           // Generate signal using Global AdaptiveStrategyEngine
@@ -838,6 +849,27 @@ function startBotActivitySimulation() {
             console.log(`🤖 AI Strategy: ${signal.strategyName}`)
             console.log(`   Signal: ${signal.action} | Confidence: ${confidence}% | Size: $${positionSize.toFixed(2)}`)
             console.log(`   Testing: ${signal.performance.testingMode ? 'YES' : 'NO'} | Win Rate: ${signal.performance.winRate.toFixed(1)}%`)
+
+            // Update active strategy endpoint
+            try {
+              await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/strategies/active`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  strategyId: signal.strategyId,
+                  strategyName: signal.strategyName,
+                  winRate: signal.performance.winRate,
+                  totalTrades: signal.performance.totalTrades,
+                  testingMode: signal.performance.testingMode,
+                  testTradesCompleted: signal.performance.testTradesCompleted,
+                  testTradesRequired: signal.performance.testTradesRequired
+                })
+              }).catch(() => {
+                // Silently fail if update fails
+              })
+            } catch (error) {
+              // Ignore errors updating active strategy
+            }
           } else {
             // Fallback to random signal
             confidence = 50 + Math.random() * 45
@@ -897,8 +929,8 @@ function startBotActivitySimulation() {
       // Attempt order execution
       if (confidence >= autoExecutionConfig.minConfidenceForOrder) {
         console.log(`✅ Attempting execution for ${symbol} (${confidence.toFixed(1)}% >= ${autoExecutionConfig.minConfidenceForOrder}%)`)
-        
-        const executionResult = await executeOrder(symbol, confidence, recommendation)
+
+        const executionResult = await executeOrder(symbol, confidence, recommendation, usedStrategyId)
         
         if (executionResult.success) {
           botMetrics.tradesExecuted++
@@ -1135,7 +1167,7 @@ export async function POST(request: NextRequest) {
 
       console.log('🧪 Testing manual order execution...')
 
-      const result = await executeOrder(testSymbol, testConfidence, testRecommendation)
+      const result = await executeOrder(testSymbol, testConfidence, testRecommendation, 'test')
 
       return NextResponse.json({
         success: result.success,
@@ -1855,3 +1887,5 @@ export async function POST(request: NextRequest) {
 //     )
 //   }
 // }
+// Export the strategy engine getter for use by other API routes
+export { getGlobalStrategyEngine }

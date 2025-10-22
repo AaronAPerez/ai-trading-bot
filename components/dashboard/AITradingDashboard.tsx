@@ -3,7 +3,6 @@
 
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import '../../styles/dashboard.css'
-import { useAutoExecution } from "@/hooks/trading/useAutoExecution"
 import { useTradingBot } from "@/hooks/trading/useTradingBot"
 import { useAlpacaAccount, useAlpacaPositions } from "@/hooks/api/useAlpacaData"
 import useAIBotActivity from "@/hooks/useAIBotActivity"
@@ -21,19 +20,18 @@ import { useTradeWebSocketListener } from "@/hooks/useTradeWebSocketListener"
 import { CryptoTradingPanel } from '../crypto/CryptoTradingPanel'
 import { useQuery } from '@tanstack/react-query'
 import PortfolioPositionsTable from './PortfolioPositionsTable'
-import StrategyPerformanceDashboard from './StrategyPerformanceDashboard'
-import MultiStrategyComparisonPanel from './MultiStrategyComparisonPanel'
-import TradingModeToggle, { TradingMode } from './TradingModeToggle'
 import RecentOrdersTable from './RecentOrdersTable'
 import { useBotStore } from '@/store/slices/botSlice'
+import { TradingMode } from './TradingModeToggle'
 
 // 🚀 PERFORMANCE OPTIMIZATION: Lazy load heavy chart components
 const PortfolioAllocationChart = lazy(() => import('../charts/PortfolioAllocationChart').then(mod => ({ default: mod.PortfolioAllocationChart })))
 const PerformanceChart = lazy(() => import('../charts/PerformanceChart').then(mod => ({ default: mod.PerformanceChart })))
 const RiskMetricsChart = lazy(() => import('../charts/RiskMetricsChart').then(mod => ({ default: mod.RiskMetricsChart })))
 
-// Type definitions
+// Type definitions - aligned with BotConfiguration from types/trading.ts
 interface BotConfig {
+  enabled: boolean // Required flag to enable/disable bot
   alpaca: {
     baseUrl: string
     apiKey: string
@@ -47,8 +45,18 @@ interface BotConfig {
   strategies: Array<{
     id: string
     name: string
+    type: 'ML_ENHANCED' | 'NEURAL_NETWORK' | 'ENSEMBLE' | 'TECHNICAL' | 'SENTIMENT'
     enabled: boolean
     weight: number
+    parameters: Record<string, any>
+    performance: {
+      totalTrades: number
+      winningTrades: number
+      losingTrades: number
+      winRate: number
+      avgReturn: number
+      sharpeRatio: number
+    }
   }>
   riskManagement: {
     maxPositionSize: number
@@ -61,6 +69,14 @@ interface BotConfig {
   executionSettings: {
     autoExecute: boolean
     minConfidenceForOrder: number
+  }
+  scheduleSettings: {
+    tradingHours: {
+      start: string
+      end: string
+    }
+    excludedDays: string[]
+    cooldownMinutes: number
   }
   maxPositionSize: number
   stopLossPercent: number
@@ -83,9 +99,33 @@ const defaultBotConfig: BotConfig = {
   },
   mode: 'BALANCED',
   strategies: [
-    { id: 'ml_enhanced', name: 'ML Enhanced', enabled: true, weight: 0.4 },
-    { id: 'technical', name: 'Technical Analysis', enabled: true, weight: 0.3 },
-    { id: 'sentiment', name: 'Sentiment Analysis', enabled: true, weight: 0.3 }
+    {
+      id: 'ml_enhanced',
+      name: 'ML Enhanced',
+      type: 'ML_ENHANCED',
+      enabled: true,
+      weight: 0.4,
+      parameters: {},
+      performance: { totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, avgReturn: 0, sharpeRatio: 0 }
+    },
+    {
+      id: 'technical',
+      name: 'Technical Analysis',
+      type: 'TECHNICAL',
+      enabled: true,
+      weight: 0.3,
+      parameters: {},
+      performance: { totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, avgReturn: 0, sharpeRatio: 0 }
+    },
+    {
+      id: 'sentiment',
+      name: 'Sentiment Analysis',
+      type: 'SENTIMENT',
+      enabled: true,
+      weight: 0.3,
+      parameters: {},
+      performance: { totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, avgReturn: 0, sharpeRatio: 0 }
+    }
   ],
   riskManagement: {
     maxPositionSize: 0.05,
@@ -161,6 +201,7 @@ export default function AITradingDashboard() {
   // Store interval reference for cleanup
   const [tradingInterval, setTradingInterval] = useState<NodeJS.Timeout | null>(null)
   const [isStoppingBot, setIsStoppingBot] = useState(false)
+  const [showCharts, setShowCharts] = useState(false) // PERFORMANCE: Only render charts when user wants to see them
   const [inverseMode, setInverseMode] = useState(() => {
     // Load inverse mode from localStorage on initial render
     if (typeof window !== 'undefined') {
@@ -177,6 +218,24 @@ export default function AITradingDashboard() {
       return (saved as TradingMode) || 'ai-bot'
     }
     return 'ai-bot'
+  })
+
+  // Fetch active strategy from API
+  const { data: activeStrategyData } = useQuery({
+    queryKey: ['activeStrategy'],
+    queryFn: async () => {
+      try {
+        const res = await fetch('/api/strategies/active')
+        if (!res.ok) return null
+        const json = await res.json()
+        return json.data
+      } catch (error) {
+        console.error('Error fetching active strategy:', error)
+        return null
+      }
+    },
+    refetchInterval: persistentBotState.isRunning ? 10000 : false,
+    retry: 1
   })
 
   // Real trading monitoring - no simulation
@@ -198,7 +257,7 @@ export default function AITradingDashboard() {
     }, 30000) // Check every 30 seconds for real trades
 
     setTradingInterval(interval)
-  }, [tradingBot.metrics.isRunning, persistentBotState.isRunning, tradingInterval])
+  }, [tradingBot.metrics.isRunning, persistentBotState.isRunning, tradingInterval, realAITrading])
 
   const stopTradingMonitoring = useCallback(() => {
     if (tradingInterval) {
@@ -253,7 +312,7 @@ export default function AITradingDashboard() {
         }
       }
 
-      // Sync inverse mode with backend - OPTIMIZED
+      // Sync inverse mode with backend - OPTIMIZED (silently fail if endpoint has errors)
       const savedInverseMode = localStorage.getItem('ai-inverse-mode')
       if (savedInverseMode !== null) {
         fetch('/api/ai/bot-control', {
@@ -262,7 +321,9 @@ export default function AITradingDashboard() {
           body: JSON.stringify({
             action: savedInverseMode === 'true' ? 'enable-inverse' : 'disable-inverse'
           })
-        }).catch(err => console.error('Failed to sync inverse mode to backend:', err))
+        }).catch(() => {
+          // Silently ignore - bot-control endpoint may have errors
+        })
       }
     } catch (error) {
       console.error('Error loading bot state from localStorage:', error)
@@ -277,26 +338,43 @@ export default function AITradingDashboard() {
     console.log(`🔄 Switched to ${newMode === 'ai-bot' ? 'AI Bot' : 'Hedge Fund'} mode`)
   }, [])
 
-  // Save state to localStorage - DEBOUNCED
+  // Save state to localStorage - OPTIMIZED with requestIdleCallback
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      try {
-        localStorage.setItem('ai-trading-bot-state', JSON.stringify(persistentBotState))
-      } catch (error) {
-        console.error('Error saving bot state to localStorage:', error)
+      // Use requestIdleCallback for non-critical localStorage updates
+      const saveState = () => {
+        try {
+          localStorage.setItem('ai-trading-bot-state', JSON.stringify(persistentBotState))
+        } catch (error) {
+          console.error('Error saving bot state to localStorage:', error)
+        }
+      }
+
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(saveState, { timeout: 2000 })
+      } else {
+        saveState()
       }
     }, 500) // Debounce 500ms
 
     return () => clearTimeout(timeoutId)
   }, [persistentBotState])
 
-  // Save inverse mode to localStorage - DEBOUNCED
+  // Save inverse mode to localStorage - OPTIMIZED with requestIdleCallback
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      try {
-        localStorage.setItem('ai-inverse-mode', inverseMode.toString())
-      } catch (error) {
-        console.error('Error saving inverse mode to localStorage:', error)
+      const saveInverseMode = () => {
+        try {
+          localStorage.setItem('ai-inverse-mode', inverseMode.toString())
+        } catch (error) {
+          console.error('Error saving inverse mode to localStorage:', error)
+        }
+      }
+
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(saveInverseMode, { timeout: 2000 })
+      } else {
+        saveInverseMode()
       }
     }, 500) // Debounce 500ms
 
@@ -427,7 +505,7 @@ export default function AITradingDashboard() {
       {/* AI Trading Control Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-3">
+          {/* <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
               <Brain className="w-6 h-6 text-white" />
             </div>
@@ -435,7 +513,35 @@ export default function AITradingDashboard() {
               <h1 className="text-2xl font-bold text-white">AI Trading Engine</h1>
               <p className="text-gray-400 text-sm">Powered by Advanced Machine Learning</p>
             </div>
-          </div>
+          </div> */}
+
+          {/* Active Strategy Display */}
+          {persistentBotState.isRunning && (
+            <div className="ml-6 px-4 py-3 bg-gradient-to-r from-purple-900/50 to-blue-900/50 rounded-lg border border-purple-500/30 shadow-lg">
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                <div>
+                  <div className="text-xs text-gray-400 mb-0.5">Active Strategy</div>
+                  <div className="text-sm font-semibold text-purple-300">
+                    {activeStrategyData?.strategyName || persistentBotState.config?.strategies?.find(s => s.enabled)?.name || 'Adaptive ML'}
+                  </div>
+                </div>
+                {activeStrategyData && (
+                  <div className="ml-4 pl-4 border-l border-purple-500/30">
+                    <div className="text-xs text-gray-400">Win Rate</div>
+                    <div className={`text-sm font-bold ${activeStrategyData.winRate >= 50 ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {activeStrategyData.winRate?.toFixed(1)}%
+                    </div>
+                  </div>
+                )}
+                {activeStrategyData?.testingMode && (
+                  <div className="ml-2 px-2 py-0.5 bg-yellow-900/50 rounded text-xs text-yellow-400 border border-yellow-500/30">
+                    Testing {activeStrategyData.testTradesCompleted}/{activeStrategyData.testTradesRequired}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
 
@@ -598,38 +704,58 @@ export default function AITradingDashboard() {
         />
       </div>
 
-      {/* Advanced Charts Section - LAZY LOADED FOR PERFORMANCE */}
-      <div className="space-y-6" >
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white">Advanced Analytics</h2>
-          <div className="text-xs text-gray-400">Real-time charts powered by Alpaca API</div>
+      {/* Advanced Charts Section - COLLAPSIBLE FOR PERFORMANCE */}
+      <div className="space-y-6">
+        <div className="bg-gradient-to-r from-gray-800/50 to-indigo-900/30 rounded-xl border border-gray-700/50">
+          <button
+            onClick={() => setShowCharts(!showCharts)}
+            className="w-full p-6 flex items-center justify-between hover:bg-gray-700/20 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <div className={`transition-transform duration-200 ${showCharts ? 'rotate-90' : ''}`}>
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-white">Advanced Analytics</h2>
+              <span className="text-xs bg-blue-600/30 text-blue-400 px-2 py-1 rounded">
+                {showCharts ? 'Hide Charts' : 'Show Charts'}
+              </span>
+            </div>
+            <div className="text-xs text-gray-400">Click to {showCharts ? 'hide' : 'show'} performance charts</div>
+          </button>
+
+          {/* Only render charts when expanded */}
+          {showCharts && (
+            <div className="p-6 pt-0 space-y-6">
+              {/* Portfolio Performance & Allocation */}
+              <Suspense fallback={
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <div className="bg-gray-800/50 rounded-xl p-6 h-[400px] flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-xl p-6 h-[400px] flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                  </div>
+                </div>
+              }>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <PerformanceChart period="1M" height={350} />
+                  <PortfolioAllocationChart height={350} />
+                </div>
+              </Suspense>
+
+              {/* Risk Metrics */}
+              <Suspense fallback={
+                <div className="bg-gray-800/50 rounded-xl p-6 h-[450px] flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                </div>
+              }>
+                <RiskMetricsChart height={400} showPositionRisks={true} />
+              </Suspense>
+            </div>
+          )}
         </div>
-
-        {/* Portfolio Performance & Allocation */}
-        <Suspense fallback={
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div className="bg-gray-800/50 rounded-xl p-6 h-[400px] flex items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-            </div>
-            <div className="bg-gray-800/50 rounded-xl p-6 h-[400px] flex items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-            </div>
-          </div>
-        }>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <PerformanceChart period="1M" height={350} />
-            <PortfolioAllocationChart height={350} />
-          </div>
-        </Suspense>
-
-        {/* Risk Metrics */}
-        <Suspense fallback={
-          <div className="bg-gray-800/50 rounded-xl p-6 h-[450px] flex items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-          </div>
-        }>
-          <RiskMetricsChart height={400} showPositionRisks={true} />
-        </Suspense>
 
         {/* Price Charts for Top Positions */}
         {/* {positions.data && positions.data.length > 0 && (

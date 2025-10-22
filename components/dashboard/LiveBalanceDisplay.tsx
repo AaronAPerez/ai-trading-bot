@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, memo } from 'react'
 import { useAlpacaAccount, useAlpacaPositions } from "@/hooks/api/useAlpacaData"
 import { supabaseService } from '@/lib/database/supabase-utils'
 
@@ -25,7 +25,8 @@ interface BalanceMetrics {
   manualTradesCount: number
 }
 
-export default function LiveBalanceDisplay({
+// PERFORMANCE: Memoize to prevent unnecessary re-renders
+const LiveBalanceDisplay = memo(function LiveBalanceDisplay({
   refreshInterval = 5000,
   showChangeIndicators = true,
   compact = false
@@ -359,4 +360,6 @@ export default function LiveBalanceDisplay({
       </div> */}
     </div>
   )
-}
+})
+
+export default LiveBalanceDisplay

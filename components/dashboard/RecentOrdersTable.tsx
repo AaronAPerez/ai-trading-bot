@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, memo } from 'react'
 import { Search, RefreshCw, AlertCircle, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { AssetLogo } from '@/components/ui/AssetLogo'
@@ -64,7 +64,8 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   expires_at: 'Expires At'
 }
 
-export default function RecentOrdersTable({ refreshInterval = 30000, initialLimit = 20 }: RecentOrdersTableProps) {
+// PERFORMANCE: Memoize to prevent unnecessary re-renders
+const RecentOrdersTable = memo(function RecentOrdersTable({ refreshInterval = 30000, initialLimit = 20 }: RecentOrdersTableProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
@@ -568,4 +569,6 @@ export default function RecentOrdersTable({ refreshInterval = 30000, initialLimi
       )}
     </div>
   )
-}
+})
+
+export default RecentOrdersTable

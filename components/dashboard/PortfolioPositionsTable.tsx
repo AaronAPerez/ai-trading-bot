@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+import React, { memo } from 'react'
 import { useState, useMemo } from 'react'
 import { TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, Search, ChevronLeft, ChevronRight, X, XCircle } from 'lucide-react'
 import { useAlpacaPositions } from '@/hooks/api/useAlpacaData'
@@ -11,7 +11,8 @@ interface PortfolioPositionsTableProps {
   initialLimit?: number
 }
 
-export default function PortfolioPositionsTable({ refreshInterval = 5000, initialLimit = 10 }: PortfolioPositionsTableProps) {
+// PERFORMANCE: Memoize to prevent unnecessary re-renders
+const PortfolioPositionsTable = memo(function PortfolioPositionsTable({ refreshInterval = 5000, initialLimit = 10 }: PortfolioPositionsTableProps) {
   // Filters
   const [assetClassFilter, setAssetClassFilter] = useState<'all' | 'stock' | 'crypto'>('all')
   const [sideFilter, setSideFilter] = useState<'all' | 'long' | 'short'>('all')
@@ -648,4 +649,6 @@ export default function PortfolioPositionsTable({ refreshInterval = 5000, initia
 
     </div>
   )
-}
+})
+
+export default PortfolioPositionsTable
