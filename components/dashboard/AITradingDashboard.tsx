@@ -23,6 +23,7 @@ import PortfolioPositionsTable from './PortfolioPositionsTable'
 import RecentOrdersTable from './RecentOrdersTable'
 import { useBotStore } from '@/store/slices/botSlice'
 import { TradingMode } from './TradingModeToggle'
+import MultiStrategyComparisonPanel from './MultiStrategyComparisonPanel'
 
 // 🚀 PERFORMANCE OPTIMIZATION: Lazy load heavy chart components
 const PortfolioAllocationChart = lazy(() => import('../charts/PortfolioAllocationChart').then(mod => ({ default: mod.PortfolioAllocationChart })))
@@ -793,7 +794,7 @@ export default function AITradingDashboard() {
 
 
       {/* Advanced AI Insights Dashboard */}
-      <div className="bg-gradient-to-r from-gray-800/40 to-purple-900/20 rounded-xl p-6 border border-gray-700/50">
+       {/* <div className="bg-gradient-to-r from-gray-800/40 to-purple-900/20 rounded-xl p-6 border border-gray-700/50">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
             <Brain className="w-6 h-6 text-purple-400" />
@@ -823,9 +824,8 @@ export default function AITradingDashboard() {
         />
       </div>
 
-
-
-
+      {/* Multi-Strategy Comparison Panel */}
+      <MultiStrategyComparisonPanel botIsActive={persistentBotState.isRunning} />
 
       {/* 24/7 Crypto Trading Section */}
       <div className="space-y-6">

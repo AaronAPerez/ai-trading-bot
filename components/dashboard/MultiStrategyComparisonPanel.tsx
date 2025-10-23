@@ -11,7 +11,7 @@ interface MultiStrategyComparisonPanelProps {
 export default function MultiStrategyComparisonPanel({
   botIsActive
 }: MultiStrategyComparisonPanelProps) {
-  const [selectedSymbol, setSelectedSymbol] = useState('AAPL')
+  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSD') // Default to Bitcoin
 
   // Fetch multi-strategy comparison data
   const { data, isLoading, error, refetch } = useQuery({
@@ -29,6 +29,8 @@ export default function MultiStrategyComparisonPanel({
   const consensus = data?.data?.consensus
   const weightedSignal = data?.data?.weightedSignal
   const recommendedSignal = data?.data?.recommendedSignal
+  const marketData = data?.data?.marketData
+  const dataSource = data?.data?.dataSource
 
   // Calculate consensus majority
   const getMajorityAction = () => {
@@ -62,23 +64,47 @@ export default function MultiStrategyComparisonPanel({
           </div>
           <div>
             <h3 className="text-xl font-bold text-white">Multi-Strategy Comparison</h3>
-            <p className="text-sm text-gray-400">Hedge Fund Mode - All Strategies</p>
+            <p className="text-sm text-gray-400">
+              {dataSource === 'alpaca' ? '🟢 Live Alpaca Data - Crypto Only (24/7)' : '💎 Crypto-Only Trading Mode'}
+            </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-4">
-          {/* Symbol Selector */}
+          {/* Symbol Selector - Crypto Only */}
           <select
             value={selectedSymbol}
             onChange={(e) => setSelectedSymbol(e.target.value)}
             className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm"
           >
-            <option value="AAPL">AAPL</option>
-            <option value="MSFT">MSFT</option>
-            <option value="GOOGL">GOOGL</option>
-            <option value="TSLA">TSLA</option>
-            <option value="BTC/USD">BTC/USD</option>
-            <option value="ETH/USD">ETH/USD</option>
+            <optgroup label="Major Crypto">
+              <option value="BTCUSD">BTC/USD</option>
+              <option value="ETHUSD">ETH/USD</option>
+              <option value="LTCUSD">LTC/USD</option>
+              <option value="BCHUSD">BCH/USD</option>
+            </optgroup>
+            <optgroup label="Layer 1s">
+              <option value="SOLUSD">SOL/USD</option>
+              <option value="AVAXUSD">AVAX/USD</option>
+              <option value="ADAUSD">ADA/USD</option>
+              <option value="DOTUSD">DOT/USD</option>
+              <option value="ATOMUSD">ATOM/USD</option>
+              <option value="NEARUSD">NEAR/USD</option>
+            </optgroup>
+            <optgroup label="DeFi">
+              <option value="LINKUSD">LINK/USD</option>
+              <option value="UNIUSD">UNI/USD</option>
+              <option value="AAVEUSD">AAVE/USD</option>
+            </optgroup>
+            <optgroup label="Meme Coins">
+              <option value="DOGEUSDT">DOGE/USDT</option>
+              <option value="SHIBUSDT">SHIB/USDT</option>
+            </optgroup>
+            <optgroup label="Trending">
+              <option value="SUIUSD">SUI/USD</option>
+              <option value="APTUSD">APT/USD</option>
+              <option value="SEIUSD">SEI/USD</option>
+            </optgroup>
           </select>
 
           {/* Refresh Button */}
@@ -91,6 +117,36 @@ export default function MultiStrategyComparisonPanel({
           </button>
         </div>
       </div>
+
+      {/* Market Data Summary */}
+      {marketData && (
+        <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-gray-400 uppercase mb-1">Current Price (Alpaca)</div>
+              <div className="text-2xl font-bold text-white">
+                ${marketData.currentPrice?.toFixed(2) || 'N/A'}
+              </div>
+            </div>
+            {marketData.change !== undefined && (
+              <div className={`text-right ${marketData.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <div className="text-xl font-bold">
+                  {marketData.change >= 0 ? '+' : ''}{marketData.change.toFixed(2)}%
+                </div>
+                <div className="text-xs text-gray-400">24h Change</div>
+              </div>
+            )}
+            {marketData.volume && (
+              <div className="text-right">
+                <div className="text-sm font-semibold text-white">
+                  {(marketData.volume / 1000000).toFixed(2)}M
+                </div>
+                <div className="text-xs text-gray-400">Volume</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Consensus Summary */}
       {consensus && (

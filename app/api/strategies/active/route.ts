@@ -11,9 +11,15 @@ let getGlobalStrategyEngine: any = null
 function getStrategyEngine() {
   if (!getGlobalStrategyEngine) {
     try {
-      // Use require to avoid initialization during build
-      const aiBot = require('../../ai-bot/route')
-      getGlobalStrategyEngine = aiBot.getGlobalStrategyEngine || null
+      // Try bot-control route first (primary)
+      try {
+        const botControl = require('../../ai/bot-control/route')
+        getGlobalStrategyEngine = botControl.getStrategyEngine || null
+      } catch (e) {
+        // Fallback to ai-bot route
+        const aiBot = require('../../ai-bot/route')
+        getGlobalStrategyEngine = aiBot.getGlobalStrategyEngine || null
+      }
     } catch (error) {
       console.warn('Could not access strategy engine:', error)
     }

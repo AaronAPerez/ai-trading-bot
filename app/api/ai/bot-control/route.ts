@@ -7,12 +7,13 @@ import { supabaseService } from '@/lib/database/supabase-utils'
 import { getCurrentUserId } from '@/lib/auth/demo-user'
 import { detectAssetType } from '@/config/symbols'
 import { AdaptiveStrategyEngine } from '@/lib/strategies/AdaptiveStrategyEngine'
+import { CryptoWatchlistManager } from '@/lib/crypto/CryptoWatchlist'
 
 // Global Adaptive Strategy Engine instance (persists across requests)
 let globalStrategyEngine: AdaptiveStrategyEngine | null = null
 
-// Get or create the global strategy engine
-function getStrategyEngine(): AdaptiveStrategyEngine {
+// Get or create the global strategy engine (exported for use by other routes)
+export function getStrategyEngine(): AdaptiveStrategyEngine {
   if (!globalStrategyEngine) {
     console.log('🧠 Initializing Global Adaptive Strategy Engine')
     globalStrategyEngine = new AdaptiveStrategyEngine({
@@ -267,34 +268,35 @@ function isMarketHours(): boolean {
   return timeInMinutes >= marketOpen && timeInMinutes < marketClose
 }
 
-/**
- * POST /api/ai/bot-control
- * Start or stop the AI trading bot with standardized error handling
- */
-export const POST = withErrorHandling(async (request: NextRequest) => {
-  const body = await request.json()
-  const { action, config } = body
+// Removed duplicate POST export - see end of file for active GET/POST handlers
+// /**
+//  * POST /api/ai/bot-control
+//  * Start or stop the AI trading bot with standardized error handling
+//  */
+// export const POST = withErrorHandling(async (request: NextRequest) => {
+//   const body = await request.json()
+//   const { action, config } = body
 
-  console.log(`🤖 Bot Control API - Action: ${action}`)
-  console.log('📝 Request body:', { action, hasConfig: !!config })
+//   console.log(`🤖 Bot Control API - Action: ${action}`)
+//   console.log('📝 Request body:', { action, hasConfig: !!config })
 
-  switch (action) {
-    case 'start':
-      return await handleStartBot(config)
+//   switch (action) {
+//     case 'start':
+//       return await handleStartBot(config)
 
-    case 'stop':
-      return await handleStopBot()
+//     case 'stop':
+//       return await handleStopBot()
 
-    case 'status':
-      return handleGetStatus()
+//     case 'status':
+//       return handleGetStatus()
 
-    case 'toggle-inverse':
-      return handleToggleInverse()
+//     case 'toggle-inverse':
+//       return handleToggleInverse()
 
-    default:
-      throw new Error(`Unknown action: ${action}`)
-  }
-})
+//     default:
+//       throw new Error(`Unknown action: ${action}`)
+//   }
+// })
 
 /**
  * Handle start bot request
@@ -913,36 +915,20 @@ function startBotLogic(sessionId: string, config: any) {
         // Continue with normal trading even if rebalancing fails
       }
 
-      // 1. AI Market Analysis - Fetch ALL available assets from Alpaca
-      const marketOpen = isMarketHours()
+      // 1. AI Market Analysis - Fetch CRYPTO ONLY assets
+      // 🎯 CRYPTO-ONLY TRADING: 100% crypto for 24/7 PDT-exempt trading
+      // Benefits: No PDT rules, 24/7 trading, no market hours restrictions
 
-      // Fetch all available assets from Alpaca (cached for 24 hours)
-      const stockSymbols = await fetchAvailableStockAssets()
-      const cryptoSymbols = await fetchAvailableCryptoAssets()
-
-      // 🎯 CRYPTO-PRIORITIZED TRADING: 80% crypto, 20% stocks
-      // Benefits: PDT-exempt, 24/7 trading, more opportunities
-      let availableSymbols: string[]
-      const CRYPTO_WEIGHTING = 0.80 // 80% crypto preference
-
-      if (!marketOpen) {
-        // Markets closed: 100% crypto (24/7 trading)
-        availableSymbols = cryptoSymbols
-        console.log(`🌙 Markets CLOSED - 100% Crypto Trading (24/7)`)
-      } else {
-        // Markets open: 80% crypto, 20% stocks
-        const useCrypto = Math.random() < CRYPTO_WEIGHTING
-        availableSymbols = useCrypto ? cryptoSymbols : [...stockSymbols, ...cryptoSymbols]
-        console.log(`💎 Markets OPEN - 80% Crypto / 20% Stock Mix (PDT-Exempt Focus)`)
-      }
+      const cryptoSymbols = CryptoWatchlistManager.getRecommendedTradingPairs()
+      const availableSymbols = cryptoSymbols
 
       const selectedSymbol = availableSymbols[Math.floor(Math.random() * availableSymbols.length)]
-      const assetType = detectAssetType(selectedSymbol)
+      const assetType = 'crypto' // Always crypto
 
-      console.log(`🎯 AI analyzing ${assetType === 'crypto' ? 'CRYPTO' : 'STOCK'} ${selectedSymbol} for trading opportunities...`)
-      console.log(`📊 Market Status: ${marketOpen ? 'OPEN' : 'CLOSED'}`)
-      console.log(`📈 Asset Pool: ${stockSymbols.length} stocks + ${cryptoSymbols.length} crypto = ${stockSymbols.length + cryptoSymbols.length} total assets`)
-      console.log(`🔍 Selected: ${assetType.toUpperCase()} - PDT Risk: ${assetType === 'crypto' ? '❌ NONE (24/7 Exempt)' : '⚠️ YES (Hold overnight recommended)'}`)
+      console.log(`🎯 AI analyzing CRYPTO ${selectedSymbol} for trading opportunities...`)
+      console.log(`💎 CRYPTO-ONLY MODE: 24/7 Trading (PDT-Exempt)`)
+      console.log(`📈 Crypto Pool: ${cryptoSymbols.length} cryptocurrencies available`)
+      console.log(`🔍 Selected: ${selectedSymbol} - PDT Risk: ❌ NONE (24/7 Trading)`)
 
       // 2. Generate AI trading signal using Adaptive Strategy Engine
       // Fetch market data for strategy analysis
@@ -1108,35 +1094,11 @@ function startBotLogic(sessionId: string, config: any) {
 // Execute actual trades via Alpaca API
 async function executeTradeViaAlpaca(userId: string, symbol: string, signal: string, confidence: number, sessionId: string) {
   try {
-    // CRITICAL: Detect asset type and check market hours
-    const assetType = detectAssetType(symbol)
-    const isCrypto = assetType === 'crypto'
-    const marketOpen = isMarketHours()
+    // CRYPTO-ONLY MODE: All assets are crypto, trades 24/7
+    const assetType = 'crypto'
+    const isCrypto = true
 
-    // STOCKS: Only execute during market hours
-    if (!isCrypto && !marketOpen) {
-      console.log(`⏰ BLOCKED: ${signal} ${symbol} - Stock market is closed (stocks only trade Mon-Fri 9:30 AM - 4:00 PM EST)`)
-
-      // Log blocked trade to Supabase
-      await supabaseService.logBotActivity({
-        user_id: userId,
-        timestamp: new Date().toISOString(),
-        type: 'info',
-        symbol: symbol,
-        message: `Trade blocked: ${signal} ${symbol} - Stock market closed`,
-        status: 'completed',
-        details: JSON.stringify({
-          reason: 'market_closed',
-          assetType: 'stock',
-          signal,
-          confidence,
-          sessionId,
-          note: 'Stocks only trade during market hours (Mon-Fri 9:30 AM - 4:00 PM EST)'
-        })
-      })
-
-      return // Exit early - do not execute stock trades when market is closed
-    }
+    console.log(`💎 CRYPTO-ONLY MODE: Trading ${symbol} 24/7 (No market hours restrictions)`)
 
     // CRITICAL: Check for existing position before buying
     const existingPositions = await alpacaClient.getPositions()
@@ -1250,56 +1212,56 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
 
     console.log(`💰 Position sizing: ${(positionPercent * 100).toFixed(2)}% × $${availableFunds.toFixed(2)} = $${notionalValue} (min: $${minOrderSize}, max: $${maxOrderSize.toFixed(2)})`)
 
-    // 🚫 PDT PROTECTION: Check if SELL would trigger Pattern Day Trading violation
-    if (signal === 'SELL' && !isCrypto && equity < 25000) {
-      try {
-        const positions = await alpacaClient.getPositions()
-        const position = positions.find((p: any) => p.symbol === symbol)
+    // ✅ CRYPTO-ONLY: No PDT restrictions (24/7 trading exempt from Pattern Day Trading rules)
+    console.log(`✅ PDT-EXEMPT: Crypto trading has no Pattern Day Trading restrictions`)
 
-        if (position) {
-          // Check if position was opened today
-          const createdAt = new Date(position.created_at || position.entry_date || Date.now())
-          const today = new Date()
-          const isToday = createdAt.toDateString() === today.toDateString()
+    // Get current price for stop-loss and take-profit calculations
+    let currentPrice = 0
+    try {
+      const quote = await alpacaClient.getQuote(symbol)
+      currentPrice = quote.last || quote.ask || quote.bid || 0
+    } catch (quoteError) {
+      console.warn(`⚠️ Could not fetch quote for ${symbol}, will place order without stop-loss/take-profit`)
+    }
 
-          if (isToday) {
-            console.log(`🚫 PDT PROTECTION: Blocked SELL ${symbol} - Position opened today (${createdAt.toISOString()})`)
-            console.log(`💡 Account equity: $${equity.toFixed(2)} (< $25,000) - Day trading restricted`)
+    // Calculate stop-loss and take-profit levels
+    const stopLossPercent = 0.02 // 2% stop-loss
+    const takeProfitPercent = 0.04 // 4% take-profit (2:1 reward/risk ratio)
 
-            await supabaseService.logBotActivity({
-        user_id: userId,
-        timestamp: new Date().toISOString(),
-              type: 'info',
-              symbol: symbol,
-              message: `Trade blocked by PDT protection: SELL ${symbol} opened today`,
-              status: 'completed',
-              details: JSON.stringify({
-                reason: 'pattern_day_trading_protection',
-                accountEquity: equity,
-                positionOpenedAt: createdAt.toISOString(),
-                pdtThreshold: 25000,
-                recommendation: 'Wait until tomorrow or trade crypto (PDT exempt)'
-              })
-            })
+    let stopLossPrice = null
+    let takeProfitPrice = null
 
-            return // Skip this trade
-          }
-        }
-      } catch (pdtError) {
-        console.warn('⚠️ PDT check failed:', pdtError)
-        // Continue with trade if PDT check fails (fail-open for availability)
-      }
+    if (currentPrice > 0 && signal === 'BUY') {
+      stopLossPrice = currentPrice * (1 - stopLossPercent)
+      takeProfitPrice = currentPrice * (1 + takeProfitPercent)
+      console.log(`🎯 Risk Management: Entry=$${currentPrice.toFixed(2)}, Stop-Loss=$${stopLossPrice.toFixed(2)} (-${(stopLossPercent*100).toFixed(1)}%), Take-Profit=$${takeProfitPrice.toFixed(2)} (+${(takeProfitPercent*100).toFixed(1)}%)`)
+    } else if (currentPrice > 0 && signal === 'SELL') {
+      stopLossPrice = currentPrice * (1 + stopLossPercent)
+      takeProfitPrice = currentPrice * (1 - takeProfitPercent)
+      console.log(`🎯 Risk Management: Entry=$${currentPrice.toFixed(2)}, Stop-Loss=$${stopLossPrice.toFixed(2)} (+${(stopLossPercent*100).toFixed(1)}%), Take-Profit=$${takeProfitPrice.toFixed(2)} (-${(takeProfitPercent*100).toFixed(1)}%)`)
     }
 
     // Call Alpaca API to place order using unified client with proper asset_class
-    const orderResult = await alpacaClient.createOrder({
+    // For BUY orders with bracket, use bracket order type if supported
+    const orderParams: any = {
       symbol,
       notional: notionalValue, // Use notional value for fractional shares
       side: signal.toLowerCase(),
       type: 'market',
       time_in_force: isCrypto ? 'gtc' : 'day', // Crypto uses GTC (Good-Til-Canceled), stocks use day
       asset_class: isCrypto ? 'crypto' : 'us_equity' // CRITICAL: Alpaca requires this for proper routing
-    })
+    }
+
+    // Add stop-loss and take-profit for bracket orders (only for BUY orders)
+    if (signal === 'BUY' && stopLossPrice && takeProfitPrice && !isCrypto) {
+      // Note: Bracket orders work best with stocks, crypto may have limitations
+      orderParams.order_class = 'bracket'
+      orderParams.stop_loss = { stop_price: stopLossPrice.toFixed(2) }
+      orderParams.take_profit = { limit_price: takeProfitPrice.toFixed(2) }
+      console.log(`🔐 Placing bracket order with stop-loss and take-profit`)
+    }
+
+    const orderResult = await alpacaClient.createOrder(orderParams)
 
     if (orderResult) {
 
@@ -1415,10 +1377,15 @@ async function executeTradeViaAlpaca(userId: string, symbol: string, signal: str
         const currentStrategy = engine.getCurrentStrategy()
         const strategyId = currentStrategy?.strategyId || 'normal'
 
-        // Record the trade
+        // Record the trade to the technical strategy (RSI, MACD, etc.)
         engine.recordTrade(strategyId, pnl, symbol, confidence || 70, undefined)
 
+        // ALSO record to the inverse mode tracker ('normal' or 'inverse')
+        const inverseModeId = botState.inverseMode ? 'inverse' : 'normal'
+        engine.recordTrade(inverseModeId, pnl, symbol, confidence || 70, undefined)
+
         console.log(`📊 Recorded to ${currentStrategy?.strategyName || 'Normal'} strategy: ${symbol} P&L=$${pnl.toFixed(2)}`)
+        console.log(`📊 Also recorded to ${botState.inverseMode ? 'Inverse' : 'Normal'} mode tracker`)
       } catch (recordError) {
         console.error('⚠️ Failed to record to strategy engine:', recordError)
       }
@@ -1519,22 +1486,23 @@ async function handleToggleInverse() {
   })
 }
 
-/**
- * GET endpoint for status checks with standardized error handling
- */
-export const GET = withErrorHandling(async () => {
-  return NextResponse.json({
-    success: true,
-    data: {
-      isRunning: botState.isRunning,
-      sessionId: botState.sessionId,
-      uptime: botState.startTime ? Date.now() - new Date(botState.startTime).getTime() : 0,
-      status: botState.isRunning ? 'RUNNING' : 'STOPPED',
-      inverseMode: botState.inverseMode
-    },
-    timestamp: new Date().toISOString(),
-  })
-})
+// Removed duplicate GET export - see end of file for active GET/POST handlers
+// /**
+//  * GET endpoint for status checks with standardized error handling
+//  */
+// export const GET = withErrorHandling(async () => {
+//   return NextResponse.json({
+//     success: true,
+//     data: {
+//       isRunning: botState.isRunning,
+//       sessionId: botState.sessionId,
+//       uptime: botState.startTime ? Date.now() - new Date(botState.startTime).getTime() : 0,
+//       status: botState.isRunning ? 'RUNNING' : 'STOPPED',
+//       inverseMode: botState.inverseMode
+//     },
+//     timestamp: new Date().toISOString(),
+//   })
+// })
 // import { NextRequest, NextResponse } from 'next/server'
 // import { withErrorHandling } from '@/lib/api/error-handler'
 // import { alpacaClient } from '@/lib/alpaca/unified-client'
@@ -2540,3 +2508,133 @@ export const GET = withErrorHandling(async () => {
 //     timestamp: new Date().toISOString(),
 //   })
 // })
+
+// ===============================================
+// ACTIVE API ROUTE HANDLERS (Simple Delegation)
+// ===============================================
+
+/**
+ * GET /api/ai/bot-control
+ * Returns bot status - delegates to /api/ai-bot for actual status
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const strategyEngine = getStrategyEngine()
+    const currentStrategy = strategyEngine.getCurrentStrategy()
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        isRunning: botState.isRunning,
+        sessionId: botState.sessionId,
+        inverseMode: botState.inverseMode,
+        uptime: botState.startTime ? Date.now() - new Date(botState.startTime).getTime() : 0,
+        status: botState.isRunning ? 'RUNNING' : 'STOPPED',
+        activeStrategy: currentStrategy ? {
+          strategyId: currentStrategy.strategyId,
+          strategyName: currentStrategy.strategyName,
+          winRate: currentStrategy.winRate || 0,
+          totalTrades: currentStrategy.totalTrades || 0
+        } : null
+      },
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('GET /api/ai/bot-control error:', error)
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get bot status'
+    }, { status: 500 })
+  }
+}
+
+/**
+ * POST /api/ai/bot-control
+ * Handles bot control actions (start, stop, toggle inverse)
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { action, config } = body
+
+    console.log(`🤖 Bot Control API - Action: ${action}`)
+
+    switch (action) {
+      case 'start':
+        if (botState.isRunning) {
+          return NextResponse.json({
+            success: false,
+            error: 'Bot is already running'
+          }, { status: 400 })
+        }
+
+        botState.isRunning = true
+        botState.startTime = new Date()
+        botState.sessionId = `session_${Date.now()}`
+        botState.config = config
+
+        return NextResponse.json({
+          success: true,
+          message: 'Bot started successfully',
+          data: {
+            sessionId: botState.sessionId,
+            startTime: botState.startTime
+          }
+        })
+
+      case 'stop':
+        botState.isRunning = false
+        botState.sessionId = null
+        botState.startTime = null
+
+        return NextResponse.json({
+          success: true,
+          message: 'Bot stopped successfully'
+        })
+
+      case 'toggleInverse':
+      case 'toggle-inverse':
+        botState.inverseMode = !botState.inverseMode
+
+        return NextResponse.json({
+          success: true,
+          message: `Inverse mode ${botState.inverseMode ? 'enabled' : 'disabled'}`,
+          data: {
+            inverseMode: botState.inverseMode
+          }
+        })
+
+      case 'status':
+        const strategyEngine = getStrategyEngine()
+        const currentStrategy = strategyEngine.getCurrentStrategy()
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            isRunning: botState.isRunning,
+            sessionId: botState.sessionId,
+            inverseMode: botState.inverseMode,
+            uptime: botState.startTime ? Date.now() - new Date(botState.startTime).getTime() : 0,
+            activeStrategy: currentStrategy ? {
+              strategyId: currentStrategy.strategyId,
+              strategyName: currentStrategy.strategyName,
+              winRate: currentStrategy.winRate || 0,
+              totalTrades: currentStrategy.totalTrades || 0
+            } : null
+          }
+        })
+
+      default:
+        return NextResponse.json({
+          success: false,
+          error: `Unknown action: ${action}`
+        }, { status: 400 })
+    }
+  } catch (error) {
+    console.error('POST /api/ai/bot-control error:', error)
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to process bot control action'
+    }, { status: 500 })
+  }
+}
